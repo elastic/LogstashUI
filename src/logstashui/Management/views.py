@@ -13,8 +13,10 @@ from django.core.exceptions import ValidationError
 from django.template.loader import render_to_string
 from django.conf import settings
 from django.db import transaction
+from django.utils import timezone
 from .models import UserProfile, Settings
 from django.http import JsonResponse
+from datetime import timedelta
 import logging
 import json
 import os
@@ -458,3 +460,106 @@ def SettingsTlsRevert(request):
     except Exception as e:
         logger.error(f"Error reverting TLS certificate: {e}", exc_info=True)
         return JsonResponse({'success': False, 'message': f'Error: {e}'}, status=500)
+
+
+# ---------------------------------------------------------------------------
+# API tokens
+# ---------------------------------------------------------------------------
+
+def _token_error(message):
+    return HttpResponse(
+        '<div class="p-4 mb-4 bg-red-500/10 border border-red-500/50 rounded-lg '
+        f'text-red-300 text-sm">{escape(message)}</div>'
+    )
+
+
+def _generate_token_table_rows(tokens, request):
+    """Render the token table body, reused for htmx swaps after revoke/delete."""
+    rows_html = ''
+    for token in tokens:
+        rows_html += render_to_string('components/api_token_row.html', {
+            'token': token,
+            'csrf_token': request.META.get('CSRF_COOKIE', ''),
+        }, request=request)
+    return rows_html
+
+
+@require_admin_role
+def ApiTokens(request):
+    """Mint, list, revoke and delete admin API tokens.
+
+    A token acts as its owning user, so the caller's own account is the owner —
+    that keeps audit lines like "User 'x' added connection" meaningful, and
+    means a readonly user's token is readonly.
+    """
+    from PipelineManager.models import ApiKey
+
+    def _all_tokens():
+        return (
+            ApiKey.objects.filter(user__isnull=False)
+            .select_related('user')
+            .order_by('-created_at', '-id')
+        )
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+
+        if action == 'create':
+            name = (request.POST.get('name') or '').strip()
+            if not name:
+                return _token_error('A token name is required.')
+            if len(name) > 100:
+                return _token_error('Token name must be 100 characters or fewer.')
+
+            expires_at = None
+            raw_days = (request.POST.get('expires_days') or '').strip()
+            if raw_days:
+                try:
+                    days = int(raw_days)
+                except ValueError:
+                    return _token_error('Expiry must be a whole number of days.')
+                if days < 1:
+                    return _token_error('Expiry must be at least 1 day.')
+                expires_at = timezone.now() + timedelta(days=days)
+
+            token, raw = ApiKey.issue_for_user(
+                request.user, name=name, expires_at=expires_at
+            )
+            # Deliberately not logged — this is the only time the secret exists.
+            logger.info(
+                f"User '{request.user.username}' created API token '{name}' "
+                f"(prefix {token.prefix})"
+            )
+            return render(request, 'components/api_token_created.html', {
+                'token': token,
+                'raw_token': raw,
+            })
+
+        if action in ('revoke', 'delete'):
+            token_id = request.POST.get('token_id')
+            token = ApiKey.objects.filter(
+                id=token_id, user__isnull=False
+            ).first()
+            if token is None:
+                return _token_error('Token not found.')
+
+            if action == 'revoke':
+                if token.revoked_at is None:
+                    token.revoked_at = timezone.now()
+                    token.save()
+                logger.warning(
+                    f"User '{request.user.username}' revoked API token "
+                    f"'{token.name}' (prefix {token.prefix})"
+                )
+            else:
+                logger.warning(
+                    f"User '{request.user.username}' deleted API token "
+                    f"'{token.name}' (prefix {token.prefix})"
+                )
+                token.delete()
+
+            return HttpResponse(_generate_token_table_rows(_all_tokens(), request))
+
+        return _token_error('Unknown action.')
+
+    return render(request, 'api_tokens.html', {'tokens': _all_tokens()})

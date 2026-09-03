@@ -24,6 +24,7 @@ TITLE_OVERRIDES = {
     'logstashagent.yml': 'logstashagent.yml',
     'logstashui.yml': 'logstashui.yml',
     'SNMP': 'SNMP',
+    'api_access': 'API Access',
     'tsds_implementation': 'TSDS Implementation',
     'data_overview': 'Data Overview',
     'pipeline_generation': 'Pipeline Generation',

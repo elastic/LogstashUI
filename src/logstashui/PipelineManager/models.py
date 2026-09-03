@@ -2,11 +2,14 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
+from django.conf import settings
 from django.db import models
 from Common.encryption import encrypt_credential, decrypt_credential
 from django.core.exceptions import ValidationError
-from django.contrib.auth.hashers import make_password, check_password
+from django.contrib.auth.hashers import make_password, check_password, identify_hasher
+from django.utils import timezone
 import hashlib
+import secrets
 from Common import logstash_config_parse
 
 
@@ -701,35 +704,150 @@ class EnrollmentToken(models.Model):
         return f"{self.policy.name} - {self.name}"
 
 
+#: Namespace marker on admin API tokens. Agent keys carry no prefix, so the
+#: token middleware can tell the two apart from the header alone.
+API_TOKEN_SCHEME = 'lsui'
+
+
 class ApiKey(models.Model):
     """
-    Represents an API key used by an enrolled agent for authenticated polling/check-in.
-    Each API key belongs to a specific connection.
+    A hashed bearer credential. Two flavours share this table:
+
+    * **Agent keys** — issued at enrollment, scoped to a ``connection``. The
+      agent sends ``connection_id`` in the request body, so the row is found
+      before the hash is ever checked and no lookup column is needed. These
+      rows have ``prefix=None``.
+    * **Admin API tokens** — issued from Management, scoped to a ``user``, and
+      presented as ``Authorization: ApiKey lsui_<prefix>_<secret>``. Here the
+      header is the *only* identifier, so ``prefix`` is stored unhashed and
+      indexed; without it, resolving a token would mean a PBKDF2 comparison
+      against every row in the table on every request.
+
+    Exactly one of ``connection`` / ``user`` is set.
     """
     connection = models.ForeignKey(
         Connection,
         on_delete=models.CASCADE,
         related_name='api_keys',
-        help_text="Connection this API key belongs to"
+        null=True,
+        blank=True,
+        help_text="Connection this API key belongs to (agent keys only)"
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='api_tokens',
+        null=True,
+        blank=True,
+        help_text="User this API token acts as (admin tokens only)"
+    )
+    name = models.CharField(
+        max_length=100,
+        blank=True,
+        default='',
+        help_text="Human-readable label for this token"
+    )
+    prefix = models.CharField(
+        max_length=12,
+        null=True,
+        blank=True,
+        unique=True,
+        db_index=True,
+        help_text="Unhashed lookup key for admin tokens; null for agent keys"
     )
     api_key = models.CharField(
         max_length=512,
         help_text="Hashed API key for agent authentication"
     )
-    
+    created_at = models.DateTimeField(null=True, blank=True, auto_now_add=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         verbose_name = 'API Key'
         verbose_name_plural = 'API Keys'
-    
+
     def __str__(self):
-        return f"{self.connection.name} - API Key"
-    
+        if self.connection_id:
+            return f"{self.connection.name} - API Key"
+        return f"{self.name or 'unnamed'} - API Token"
+
+    def clean(self):
+        # Not a DB CheckConstraint: constraint enforcement is uneven across the
+        # MySQL 8.0 floor, and this is only ever violated by our own code.
+        if bool(self.connection_id) == bool(self.user_id):
+            raise ValidationError(
+                "An ApiKey must belong to exactly one of connection or user."
+            )
+
     def save(self, *args, **kwargs):
-        # Always hash the API key before saving
-        if self.api_key:
+        # Hash on the way in, but only once. Renaming or revoking a token
+        # re-saves the row, and re-running make_password on a stored hash
+        # would silently invalidate the credential.
+        if self.api_key and not self._is_hashed(self.api_key):
             self.api_key = make_password(self.api_key)
         super().save(*args, **kwargs)
-    
+
+    @staticmethod
+    def _is_hashed(value):
+        try:
+            identify_hasher(value)
+        except ValueError:
+            return False
+        return True
+
     def verify_api_key(self, raw_api_key):
         """Verify a raw API key against the stored hash"""
         return check_password(raw_api_key, self.api_key)
+
+    # -- admin API tokens ---------------------------------------------------
+
+    @classmethod
+    def issue_for_user(cls, user, name='', expires_at=None):
+        """Mint an admin API token. Returns ``(instance, raw_token)``.
+
+        The raw token is the only time the secret exists in plaintext — it is
+        not recoverable afterwards.
+        """
+        # token_hex, not token_urlsafe: the prefix must contain no '_' so that
+        # split('_', 2) on the wire format is unambiguous.
+        prefix = secrets.token_hex(6)
+        secret = secrets.token_urlsafe(32)
+        token = cls(
+            user=user,
+            name=name,
+            prefix=prefix,
+            api_key=secret,
+            expires_at=expires_at,
+        )
+        token.full_clean(exclude=['api_key'], validate_unique=False)
+        token.save()
+        return token, f"{API_TOKEN_SCHEME}_{prefix}_{secret}"
+
+    @staticmethod
+    def parse_token(raw):
+        """Split a wire-format token into ``(prefix, secret)``.
+
+        Returns ``(None, None)`` for anything that is not an admin token,
+        including agent keys, which carry no scheme marker.
+        """
+        parts = (raw or '').split('_', 2)
+        if len(parts) != 3 or parts[0] != API_TOKEN_SCHEME:
+            return None, None
+        if not parts[1] or not parts[2]:
+            return None, None
+        return parts[1], parts[2]
+
+    @property
+    def masked(self):
+        """Display form for the token list — prefix only, never the secret."""
+        return f"{API_TOKEN_SCHEME}_{self.prefix}_…" if self.prefix else ''
+
+    @property
+    def is_expired(self):
+        return self.expires_at is not None and self.expires_at <= timezone.now()
+
+    @property
+    def is_active(self):
+        return self.revoked_at is None and not self.is_expired

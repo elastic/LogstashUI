@@ -1,0 +1,51 @@
+<!--
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License;
+ * you may not use this file except in compliance with the Elastic License.
+ *
+ * Show-once display. The raw token is never stored in plaintext, so this is
+ * the only opportunity to copy it.
+-->
+
+<div class="space-y-4">
+  <div class="p-4 bg-green-500/10 border border-green-500/50 rounded-lg text-green-300 text-sm">
+    Token <strong>{{ token.name }}</strong> created. Copy it now — it cannot be shown again.
+  </div>
+
+  <div class="bg-gray-900 border border-gray-700 rounded-lg p-4">
+    <div class="flex justify-between items-center mb-2">
+      <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Token</span>
+      <button type="button" id="copyTokenBtn"
+              onclick="copyNewToken(this)"
+              class="btn btn-xs btn-primary">
+        Copy
+      </button>
+    </div>
+    <code id="newTokenValue" class="block font-mono text-xs text-gray-200 break-all">{{ raw_token }}</code>
+  </div>
+
+  <div class="bg-gray-900 border border-gray-700 rounded-lg p-4">
+    <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Example</span>
+    <pre class="mt-2 font-mono text-xs text-gray-300 whitespace-pre-wrap break-all">curl -X POST \
+  -H "Authorization: ApiKey {{ raw_token }}" \
+  -d "connection_type=CENTRALIZED&amp;name=my-cluster&amp;host=https://es.example.com&amp;port=443&amp;api_key=&lt;es-api-key&gt;" \
+  https://localhost:8443/ConnectionManager/AddConnection</pre>
+  </div>
+
+  <div class="flex justify-end">
+    <button type="button" onclick="window.location.reload();" class="btn btn-primary">Done</button>
+  </div>
+</div>
+
+<script>
+  function copyNewToken(btn) {
+    const value = document.getElementById('newTokenValue').textContent;
+    navigator.clipboard.writeText(value).then(() => {
+      btn.textContent = 'Copied!';
+      setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
+    }).catch(() => {
+      btn.textContent = 'Failed!';
+      setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
+    });
+  }
+</script>

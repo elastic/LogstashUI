@@ -1,0 +1,153 @@
+<!--
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License;
+ * you may not use this file except in compliance with the Elastic License.
+-->
+
+{% extends "base.html" %}
+
+{% block content %}
+<script>
+  // Configure HTMX to include CSRF token in all requests
+  document.body.addEventListener('htmx:configRequest', (event) => {
+    event.detail.headers['X-CSRFToken'] = '{{ csrf_token }}';
+  });
+</script>
+<div class="p-6">
+  <div class="flex justify-between items-center mb-2">
+    <h1 class="text-2xl font-bold text-white">API Tokens</h1>
+    <button onclick="openCreateTokenModal()"
+            class="btn btn-primary flex items-center gap-2">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+      </svg>
+      Create Token
+    </button>
+  </div>
+  <p class="text-gray-400 mb-6">
+    Authenticate scripted requests with <code class="font-mono text-gray-300">Authorization: ApiKey &lt;token&gt;</code>.
+    A token acts as the user who created it and inherits that user's role.
+  </p>
+
+  <div class="bg-gray-800 rounded-lg shadow-xl overflow-hidden">
+    <table class="table w-full">
+      <thead>
+        <tr class="bg-gray-700 border-b border-gray-600">
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Name</th>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Token</th>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Owner</th>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Status</th>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Last Used</th>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Expires</th>
+          <th class="px-6 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">Actions</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-700" id="tokenTableBody">
+        {% for token in tokens %}
+          {% include 'components/api_token_row.html' %}
+        {% empty %}
+          <tr>
+            <td colspan="7" class="px-6 py-8 text-center text-sm text-gray-400">
+              No API tokens yet.
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Create Token Modal -->
+<div id="createTokenModal" class="hidden fixed inset-0 z-50 overflow-y-auto">
+  <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="closeCreateTokenModal()"></div>
+  <div class="flex items-center justify-center min-h-screen p-4">
+    <div class="relative bg-base-200 rounded-lg shadow-xl w-full max-w-2xl">
+      <div class="flex justify-between items-center p-6 border-b border-base-300">
+        <h2 class="text-xl font-bold">Create API Token</h2>
+        <button onclick="closeCreateTokenModal()" class="btn btn-ghost btn-sm btn-circle">
+          <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      <div class="p-6">
+        <div id="createTokenResult"></div>
+        <form id="createTokenForm"
+              hx-post="{% url 'ApiTokens' %}"
+              hx-vals='{"action": "create"}'
+              hx-target="#createTokenResult"
+              hx-on::after-request="if (event.detail.successful) { document.getElementById('createTokenForm').classList.add('hidden'); }">
+          {% csrf_token %}
+          <div class="mb-4">
+            <label class="block text-gray-300 text-sm font-medium mb-2" for="token-name">
+              Name
+            </label>
+            <input type="text" id="token-name" name="name" required maxlength="100"
+                   placeholder="e.g., provisioning-ci"
+                   class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-primary">
+            <p class="mt-2 text-xs text-gray-400">
+              A label to identify this token later. The secret itself is shown only once.
+            </p>
+          </div>
+          <div class="mb-4">
+            <label class="block text-gray-300 text-sm font-medium mb-2" for="token-expires">
+              Expires after (days, optional)
+            </label>
+            <input type="number" id="token-expires" name="expires_days" min="1"
+                   placeholder="leave empty for no expiry"
+                   class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-primary">
+          </div>
+          <div class="p-3 mb-4 bg-blue-500/10 border border-blue-500/40 rounded-lg text-blue-200 text-xs">
+            This token will act as <strong>{{ request.user.username }}</strong> and carry that
+            account's permissions. Revoking it takes effect immediately.
+          </div>
+          <div class="flex items-center justify-end space-x-3 pt-6 mt-6 border-t border-gray-700">
+            <button type="button" onclick="closeCreateTokenModal()" class="btn btn-secondary">
+              Cancel
+            </button>
+            <button type="submit" class="btn btn-primary">
+              Create Token
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  function openCreateTokenModal() {
+    document.getElementById('createTokenResult').innerHTML = '';
+    const form = document.getElementById('createTokenForm');
+    form.classList.remove('hidden');
+    form.reset();
+    document.getElementById('createTokenModal').classList.remove('hidden');
+  }
+
+  function closeCreateTokenModal() {
+    document.getElementById('createTokenModal').classList.add('hidden');
+    // A token was minted while the modal was open — refresh so the new row shows.
+    if (document.getElementById('newTokenValue')) {
+      window.location.reload();
+    }
+  }
+
+  // Row kebab menus: position at the cursor, close on outside click.
+  document.addEventListener('click', function (event) {
+    const button = event.target.closest('.action-menu-button');
+    document.querySelectorAll('.action-menu-items').forEach(function (menu) {
+      if (!button || menu !== button.parentElement.querySelector('.action-menu-items')) {
+        menu.classList.add('hidden');
+      }
+    });
+    if (button) {
+      const menu = button.parentElement.querySelector('.action-menu-items');
+      const rect = button.getBoundingClientRect();
+      menu.style.top = rect.bottom + 'px';
+      menu.style.left = rect.left + 'px';
+      menu.classList.toggle('hidden');
+      event.stopPropagation();
+    }
+  });
+</script>
+{% endblock %}

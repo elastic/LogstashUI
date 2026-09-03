@@ -110,8 +110,14 @@ MIDDLEWARE = [
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
+    # Must precede CsrfViewMiddleware: it exempts verified API-token requests
+    # from CSRF. Browser and agent traffic pass through untouched.
+    'Common.middleware.ApiTokenCsrfMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    # Must follow AuthenticationMiddleware, which would otherwise overwrite
+    # request.user with the lazy session user.
+    'Common.middleware.ApiTokenUserMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'django_htmx.middleware.HtmxMiddleware',
