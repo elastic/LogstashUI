@@ -1,0 +1,100 @@
+{
+    "input": [
+        {
+            "id": "input_comment_0",
+            "type": "input",
+            "plugin": "comment",
+            "config": {
+                "text": "inline comment on input opener"
+            }
+        },
+        {
+            "id": "input_beats_1",
+            "type": "input",
+            "plugin": "beats",
+            "config": {
+                "port": 5044
+            },
+            "comments": [
+                "inline on beats opener"
+            ]
+        }
+    ],
+    "filter": [
+        {
+            "id": "filter_comment_2",
+            "type": "filter",
+            "plugin": "comment",
+            "config": {
+                "text": "inline comment on filter opener"
+            }
+        },
+        {
+            "id": "filter_mutate_3",
+            "type": "filter",
+            "plugin": "mutate",
+            "config": {
+                "add_field": {
+                    "processed": "true"
+                }
+            },
+            "comments": []
+        },
+        {
+            "id": "filter_comment_4",
+            "type": "filter",
+            "plugin": "comment",
+            "config": {
+                "text": "standalone comment between plugins at section level"
+            }
+        },
+        {
+            "id": "filter_drop_5",
+            "type": "filter",
+            "plugin": "drop",
+            "config": {},
+            "comments": []
+        }
+    ],
+    "output": [
+        {
+            "id": "output_comment_6",
+            "type": "output",
+            "plugin": "comment",
+            "config": {
+                "text": "inline comment on output opener"
+            }
+        },
+        {
+            "id": "output_elasticsearch_7",
+            "type": "output",
+            "plugin": "elasticsearch",
+            "config": {
+                "hosts": [
+                    "localhost:9200"
+                ],
+                "index": "logs-%{+YYYY.MM.dd}"
+            },
+            "comments": []
+        },
+        {
+            "id": "output_comment_8",
+            "type": "output",
+            "plugin": "comment",
+            "config": {
+                "text": "standalone at section level before second output plugin"
+            }
+        },
+        {
+            "id": "output_stdout_9",
+            "type": "output",
+            "plugin": "stdout",
+            "config": {
+                "codec": {
+                    "rubydebug": {}
+                }
+            },
+            "comments": []
+        }
+    ]
+}
