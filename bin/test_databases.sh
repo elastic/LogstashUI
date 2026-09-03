@@ -23,6 +23,6 @@ run_engine () {
 run_engine postgresql LOGSTASHUI_DB_ENGINE=postgresql LOGSTASHUI_DB_HOST=127.0.0.1 LOGSTASHUI_DB_PORT=55432 LOGSTASHUI_DB_NAME=logstashui LOGSTASHUI_DB_USER=logstashui LOGSTASHUI_DB_PASSWORD=logstashui
 run_engine mariadb LOGSTASHUI_DB_ENGINE=mysql LOGSTASHUI_DB_HOST=127.0.0.1 LOGSTASHUI_DB_PORT=53306 LOGSTASHUI_DB_NAME=logstashui LOGSTASHUI_DB_USER=root LOGSTASHUI_DB_PASSWORD=logstashui
 run_engine mysql LOGSTASHUI_DB_ENGINE=mysql LOGSTASHUI_DB_HOST=127.0.0.1 LOGSTASHUI_DB_PORT=53307 LOGSTASHUI_DB_NAME=logstashui LOGSTASHUI_DB_USER=root LOGSTASHUI_DB_PASSWORD=logstashui
-echo "==> Live migrator tests"
-env LOGSTASHUI_LIVE_DB=1 LOGSTASHUI_LIVE_PG_PORT=55432 LOGSTASHUI_LIVE_MARIA_PORT=53306 LOGSTASHUI_LIVE_MYSQL_PORT=53307 LOGSTASHUI_LIVE_DB_USER=root LOGSTASHUI_LIVE_DB_PASSWORD=logstashui LOGSTASHUI_LIVE_PG_USER=logstashui uv run pytest src/logstashui/LogstashUI/tests/test_migrate_live.py -v --no-cov
+echo "==> Integration suite (testcontainers)"
+uv run pytest tests/integration/ -v --no-cov
 if [[ "$KEEP" -eq 0 ]]; then "${COMPOSE[@]}" down -v; fi

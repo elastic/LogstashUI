@@ -41,11 +41,7 @@ if errorlevel 1 (
   goto :down
 )
 
-set LOGSTASHUI_LIVE_DB=1
-set LOGSTASHUI_LIVE_PG_PORT=55432
-set LOGSTASHUI_LIVE_MARIA_PORT=53306
-set LOGSTASHUI_LIVE_MYSQL_PORT=53307
-uv run pytest src\logstashui\LogstashUI\tests\test_migrate_live.py -v --no-cov
+uv run pytest tests\integration\ -v --no-cov
 if errorlevel 1 set FAIL=1
 
 :down

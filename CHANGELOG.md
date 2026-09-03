@@ -33,7 +33,8 @@ SQLite does not scale under gunicorn/gevent. Operators can now run LogstashUI on
 ### Testing
 
 - Default `pytest` stays SQLite (no Docker, no extras).
-- `bin/test_databases.sh` / `bin/test_databases.bat` start local Docker Postgres 16, MariaDB 11, and MySQL 8.0, run the suite on each engine, and run live dump/load tests. CI workflow `.github/workflows/test-databases.yml` calls the same script.
+- `bin/test_databases.sh` / `bin/test_databases.bat` start local Docker Postgres 16, MariaDB 11, and MySQL 8.0 and run the full suite on each engine, then run `tests/integration/` via testcontainers. CI workflow `.github/workflows/test-databases.yml` calls the same script.
+- Self-contained integration suite at `tests/integration/` uses `testcontainers` (postgres:16, mysql:8.0, mariadb:11 — no external Docker Compose). Parametrized over PostgreSQL and MySQL; MariaDB covered for `check_server_version` version-detection. Skips gracefully when Docker is unavailable. Covers DB config, migrations (clean, idempotent, no unapplied), ORM CRUD/JSON/uniqueness, and full SQLite → PG/MySQL/MariaDB `migrate-engine` round-trips. Run with `uv run pytest tests/integration/ -v --no-cov` after `uv sync --group dev --extra databases`.
 - Smoke compose is still SQLite (product CA / PUID unchanged).
 
 ### Kubernetes and database docs

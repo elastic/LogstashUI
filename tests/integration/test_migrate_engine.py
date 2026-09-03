@@ -6,8 +6,7 @@
 Integration tests for cmd_migrate_engine (SQLite → PostgreSQL / MySQL / MariaDB).
 
 Each test uses a unique throwaway database in the session-scoped container
-to prevent cross-test contamination.  The pattern follows test_migrate_live.py
-but testcontainers replaces the external Docker Compose dependency.
+to prevent cross-test contamination.
 """
 
 import json
@@ -31,7 +30,7 @@ from tests.integration.conftest import (
 
 
 # ---------------------------------------------------------------------------
-# Subprocess helper (mirrors test_migrate_live._run_python)
+# Subprocess helper
 # ---------------------------------------------------------------------------
 
 def _run_python(code: str, extra_env: dict[str, str]) -> str:
@@ -55,7 +54,7 @@ def _run_python(code: str, extra_env: dict[str, str]) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Inline scripts (seed and count — identical to test_migrate_live)
+# Inline scripts
 # ---------------------------------------------------------------------------
 
 _SEED = """
