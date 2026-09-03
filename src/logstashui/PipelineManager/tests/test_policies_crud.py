@@ -368,6 +368,25 @@ class TestAddPolicy:
         assert 'Invalid policy_type' in data['error']
         assert not Policy.objects.filter(name='Nope Weird').exists()
 
+    def test_add_policy_version_pin_fills_binary_path(self, authenticated_client):
+        response = authenticated_client.post(
+            '/ConnectionManager/AddPolicy/',
+            data=json.dumps({
+                'name': 'Version Pin Policy',
+                'policy_type': 'SIMULATE',
+                'logstash_source': 'VERSION',
+                'logstash_version': '9.4.3',
+                'binary_path': '/usr/share/logstash/bin',
+            }),
+            content_type='application/json',
+        )
+        assert response.status_code == 200
+        assert response.json()['success'] is True
+        policy = Policy.objects.get(name='Version Pin Policy')
+        assert policy.binary_path == (
+            '/opt/logstash-agent/logstash-versions/logstash-9.4.3/bin'
+        )
+
 
 # ============================================================================
 # UpdatePolicy Tests
@@ -527,6 +546,59 @@ class TestUpdatePolicy:
         data = response.json()
         assert data['success'] is False
         assert 'Invalid JSON data' in data['error']
+
+    def test_update_policy_version_pin_fills_binary_path(self, authenticated_client, test_policy):
+        response = authenticated_client.post(
+            '/ConnectionManager/UpdatePolicy/',
+            data=json.dumps({
+                'policy_name': 'Test Policy',
+                'logstash_source': 'VERSION',
+                'logstash_version': '9.4.3',
+                'logstash_download_dir': '/opt/logstash-agent/logstash-versions',
+                'binary_path': '/usr/share/logstash/bin',
+            }),
+            content_type='application/json',
+        )
+        assert response.status_code == 200
+        test_policy.refresh_from_db()
+        assert test_policy.binary_path == (
+            '/opt/logstash-agent/logstash-versions/logstash-9.4.3/bin'
+        )
+
+    def test_update_policy_version_keeps_custom_binary_path(self, authenticated_client, test_policy):
+        response = authenticated_client.post(
+            '/ConnectionManager/UpdatePolicy/',
+            data=json.dumps({
+                'policy_name': 'Test Policy',
+                'logstash_source': 'VERSION',
+                'logstash_version': '9.4.3',
+                'binary_path': '/opt/my/logstash/bin',
+            }),
+            content_type='application/json',
+        )
+        assert response.status_code == 200
+        test_policy.refresh_from_db()
+        assert test_policy.binary_path == '/opt/my/logstash/bin'
+
+    def test_update_policy_system_restores_derived_binary_path(self, authenticated_client, test_policy):
+        test_policy.logstash_source = 'VERSION'
+        test_policy.logstash_version = '9.4.3'
+        test_policy.binary_path = '/opt/logstash-agent/logstash-versions/logstash-9.4.3/bin'
+        test_policy.save()
+        response = authenticated_client.post(
+            '/ConnectionManager/UpdatePolicy/',
+            data=json.dumps({
+                'policy_name': 'Test Policy',
+                'logstash_source': 'SYSTEM',
+                'logstash_version': '9.4.3',
+                'logstash_download_dir': '/opt/logstash-agent/logstash-versions',
+                'binary_path': '/opt/logstash-agent/logstash-versions/logstash-9.4.3/bin',
+            }),
+            content_type='application/json',
+        )
+        assert response.status_code == 200
+        test_policy.refresh_from_db()
+        assert test_policy.binary_path == '/usr/share/logstash/bin'
 
 
 # ============================================================================

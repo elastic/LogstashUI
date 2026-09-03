@@ -6,6 +6,46 @@
 let originalFileContents = {};
 let changedFiles = new Set();
 const DRAFT_POLICY_VALUE = '__draft__';
+const SYSTEM_BINARY_PATH = '/usr/share/logstash/bin';
+const DEFAULT_LS_DOWNLOAD_DIR = '/opt/logstash-agent/logstash-versions';
+
+function deriveVersionBinaryPath(downloadDir, version) {
+    const ver = (version || '').trim();
+    if (!ver) return null;
+    const root = (downloadDir || DEFAULT_LS_DOWNLOAD_DIR).replace(/\/+$/, '') || DEFAULT_LS_DOWNLOAD_DIR;
+    return `${root}/logstash-${ver}/bin`;
+}
+
+function isDerivedVersionBinaryPath(path, downloadDir) {
+    const p = (path || '').replace(/\/+$/, '');
+    if (!p) return false;
+    const root = (downloadDir || DEFAULT_LS_DOWNLOAD_DIR).replace(/\/+$/, '') || DEFAULT_LS_DOWNLOAD_DIR;
+    const prefix = `${root}/logstash-`;
+    const suffix = '/bin';
+    if (!p.startsWith(prefix) || !p.endsWith(suffix)) return false;
+    const mid = p.slice(prefix.length, p.length - suffix.length);
+    return mid.length > 0 && !mid.includes('/');
+}
+
+function syncVersionBinaryPath() {
+    const sourceEl = document.getElementById('logstashSource');
+    const versionEl = document.getElementById('logstashVersion');
+    const downloadEl = document.getElementById('logstashDownloadDir');
+    const binaryEl = document.getElementById('binaryPath');
+    if (!binaryEl) return;
+    const source = sourceEl?.value || 'SYSTEM';
+    const version = versionEl?.value || '';
+    const downloadDir = downloadEl?.value || DEFAULT_LS_DOWNLOAD_DIR;
+    const current = binaryEl.value.trim();
+    const derived = deriveVersionBinaryPath(downloadDir, version);
+    if (source === 'VERSION') {
+        if (derived && (!current || current === SYSTEM_BINARY_PATH || isDerivedVersionBinaryPath(current, downloadDir))) {
+            binaryEl.value = derived;
+        }
+    } else if (isDerivedVersionBinaryPath(current, downloadDir)) {
+        binaryEl.value = SYSTEM_BINARY_PATH;
+    }
+}
 
 const POLICY_TYPE_INFO = {
     PACKAGED: {
@@ -1599,6 +1639,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (hint) {
             hint.classList.toggle('hidden', !showVersion);
         }
+        syncVersionBinaryPath();
     }
 
     function setPolicyFieldValue(id, value) {
@@ -1791,6 +1832,22 @@ document.addEventListener('DOMContentLoaded', function() {
         toggleVersionFieldsVisibility();
         if (typeof detectChanges === 'function') detectChanges();
     });
+    document.getElementById('logstashVersion')?.addEventListener('input', () => {
+        syncVersionBinaryPath();
+        if (typeof detectChanges === 'function') detectChanges();
+    });
+    document.getElementById('logstashVersion')?.addEventListener('change', () => {
+        syncVersionBinaryPath();
+        if (typeof detectChanges === 'function') detectChanges();
+    });
+    document.getElementById('logstashDownloadDir')?.addEventListener('input', () => {
+        syncVersionBinaryPath();
+        if (typeof detectChanges === 'function') detectChanges();
+    });
+    document.getElementById('logstashDownloadDir')?.addEventListener('change', () => {
+        syncVersionBinaryPath();
+        if (typeof detectChanges === 'function') detectChanges();
+    });
     
     // Load policies on page load, auto-selecting a policy if policy_id is in the URL
     const _urlParams = new URLSearchParams(window.location.search);
@@ -1896,6 +1953,7 @@ async function loadPolicyData(policyValue) {
                 if (versionEl) versionEl.value = policy.logstash_version || '';
                 const downloadEl = document.getElementById('logstashDownloadDir');
                 if (downloadEl) downloadEl.value = policy.logstash_download_dir || '/opt/logstash-agent/logstash-versions';
+                syncVersionBinaryPath();
                 const agentPortEl = document.getElementById('agentApiPort');
                 if (agentPortEl) agentPortEl.value = policy.agent_api_port ?? 9500;
                 const lsPortEl = document.getElementById('logstashApiPort');
@@ -3534,6 +3592,9 @@ function renderPolicyNodes(nodes) {
         const badges = [
             `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-500/15 text-purple-300 border border-purple-500/30">LogstashAgent</span>`
         ];
+        if (node.logstash_version) {
+            badges.push(`<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-cyan-500/15 text-cyan-300 border border-cyan-500/30" title="Logstash ${node.logstash_version}">LS ${node.logstash_version}</span>`);
+        }
         if (node.cpm_enabled) {
             badges.push(`<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-500/15 text-blue-300 border border-blue-500/30">CPM</span>`);
         }

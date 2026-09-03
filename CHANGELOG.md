@@ -43,6 +43,12 @@ SQLite does not scale under gunicorn/gevent. Operators can now run LogstashUI on
 - Example manifests under `docs/docs/logstashui/kubernetes/examples/{sqlite,postgresql,mysql}/`.
 - Database subsection: engines, every `LOGSTASHUI_DB_*` default, offline dump/load, BETA `migrate-engine`, CREATE DATABASE scripts (`utf8mb4_bin` for MySQL/MariaDB), schema snapshots from 0.5.2 `migrate`.
 
+### Agent version display
+
+- ConnectionManager and Policy editor Agents tab show a cyan **LS X.Y.Z** pill for the Logstash version the agent reported (`logstash_version_resolved`, else Logstash API version). Hidden until known.
+- Policy Source **VERSION** live-fills and persists Binary Path as `{download_dir}/logstash-{version}/bin` (default `/opt/logstash-agent/logstash-versions/logstash-X.Y.Z/bin`). Custom paths are kept. Switching back to SYSTEM restores `/usr/share/logstash/bin` when the field still looks derived.
+- Agent newer than preferred (`__PREFERRED_LS_AGENT_VERSION__`, currently 0.5.1) shows **unreleased version** instead of a backwards Upgrade button. Older agents still get Upgrade. Unparseable versions still get Upgrade.
+
 
 ## [0.5.1] - Agent control plane, SNMP NMS, dual HTTPS - 08/31/2026
 

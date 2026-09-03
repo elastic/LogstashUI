@@ -86,6 +86,10 @@ def PipelineManager(request):
         pass
 
     from PipelineManager.agent_modes import is_embedded_connection
+    from PipelineManager.agent_versions import (
+        agent_version_relation,
+        resolve_running_logstash_version,
+    )
 
     connections = [
         conn
@@ -93,6 +97,7 @@ def PipelineManager(request):
             "connection_type", "name", "host", "cloud_id", "cloud_url", "pk",
             "policy__name", "policy_id", "policy__policy_type", "agent_id",
             "last_check_in", "status_blob", "desired_agent_version",
+            "logstash_version_resolved",
         )
         if not is_embedded_connection(conn)
     ]
@@ -109,6 +114,16 @@ def PipelineManager(request):
         # reports "unknown" (keeps the page-load fallback inspect card in sync
         # with the live AgentInspect endpoint).
         _normalize_status_blob_api_status(conn.get('status_blob'))
+
+        blob = conn.get("status_blob") if isinstance(conn.get("status_blob"), dict) else None
+        agent_ver = blob.get("agent_version") if blob else None
+        conn["logstash_version"] = resolve_running_logstash_version(
+            logstash_version_resolved=conn.get("logstash_version_resolved"),
+            status_blob=blob,
+        )
+        conn["agent_version_relation"] = agent_version_relation(
+            agent_ver, settings.__PREFERRED_LS_AGENT_VERSION__
+        )
     
     # Sort connections: centralized first, then by policy name
     # This groups agents with the same policy together

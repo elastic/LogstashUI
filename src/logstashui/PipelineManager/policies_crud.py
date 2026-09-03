@@ -160,6 +160,18 @@ def add_policy(request):
             apply_simulate_path_bundle(policy)
             policy.save()
 
+        from PipelineManager.agent_versions import resolve_persisted_binary_path
+
+        resolved_binary = resolve_persisted_binary_path(
+            source=policy.logstash_source,
+            version=policy.logstash_version,
+            download_dir=policy.logstash_download_dir,
+            binary_path=policy.binary_path,
+        )
+        if resolved_binary != policy.binary_path:
+            policy.binary_path = resolved_binary
+            policy.save(update_fields=["binary_path"])
+
         # Generate enrollment token for the new policy
         enrollment_token = secrets.token_urlsafe(32)
 
@@ -306,6 +318,15 @@ def update_policy(request):
                 policy.jvm_options = data['jvm_options']
             if 'log4j2_properties' in data:
                 policy.log4j2_properties = data['log4j2_properties']
+
+        from PipelineManager.agent_versions import resolve_persisted_binary_path
+
+        policy.binary_path = resolve_persisted_binary_path(
+            source=policy.logstash_source,
+            version=policy.logstash_version,
+            download_dir=policy.logstash_download_dir,
+            binary_path=policy.binary_path,
+        )
 
         policy.save()
 

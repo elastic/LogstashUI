@@ -980,3 +980,25 @@ class TestDeleteKeystoreEntry:
         data = response.json()
         assert data['success'] is False
         assert 'Invalid JSON data' in data['error']
+
+
+@pytest.mark.django_db
+class TestGetPolicyNodes:
+    def test_includes_logstash_version(self, authenticated_client, test_policy, test_agent_connection):
+        test_agent_connection.logstash_version_resolved = '9.4.3'
+        test_agent_connection.status_blob = {'agent_version': '0.5.1'}
+        test_agent_connection.save()
+        response = authenticated_client.get(
+            f'/ConnectionManager/GetPolicyNodes/?policy_id={test_policy.id}'
+        )
+        assert response.status_code == 200
+        node = response.json()['nodes'][0]
+        assert node['logstash_version'] == '9.4.3'
+        assert node['agent_version'] == '0.5.1'
+
+    def test_logstash_version_null_when_unknown(self, authenticated_client, test_policy, test_agent_connection):
+        response = authenticated_client.get(
+            f'/ConnectionManager/GetPolicyNodes/?policy_id={test_policy.id}'
+        )
+        node = response.json()['nodes'][0]
+        assert node.get('logstash_version') in (None, '')

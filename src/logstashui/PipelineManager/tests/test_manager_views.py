@@ -485,6 +485,63 @@ class TestPipelineManagerPage:
         assert 'has_connections' in response.context
         assert response.context['has_connections'] is True
 
+    def test_agent_row_has_ls_pill_and_unreleased(self, authenticated_client, db):
+        from django.conf import settings
+        from PipelineManager.models import Connection, Policy
+
+        policy = Policy.objects.create(
+            name='PM Policy',
+            settings_path='/etc/logstash/',
+            logs_path='/var/log/logstash',
+            binary_path='/usr/share/logstash/bin',
+            logstash_yml='http.host: "0.0.0.0"',
+            jvm_options='-Xms1g',
+            log4j2_properties='',
+        )
+        Connection.objects.create(
+            name='Ahead Agent',
+            connection_type='AGENT',
+            host='agent.example.com',
+            agent_id='ahead-001',
+            is_active=True,
+            policy=policy,
+            logstash_version_resolved='9.4.3',
+            status_blob={'agent_version': '0.5.2', 'logstash_api': {'version': '9.4.3'}},
+        )
+        response = authenticated_client.get('/ConnectionManager/')
+        html = response.content.decode()
+        assert 'LS 9.4.3' in html
+        assert 'unreleased version' in html
+        assert 'upgradeAgent(' not in html
+        assert settings.__PREFERRED_LS_AGENT_VERSION__ == '0.5.1'
+
+    def test_older_agent_shows_upgrade_not_unreleased(self, authenticated_client, db):
+        from PipelineManager.models import Connection, Policy
+
+        policy = Policy.objects.create(
+            name='Old Policy',
+            settings_path='/etc/logstash/',
+            logs_path='/var/log/logstash',
+            binary_path='/usr/share/logstash/bin',
+            logstash_yml='',
+            jvm_options='',
+            log4j2_properties='',
+        )
+        Connection.objects.create(
+            name='Old Agent',
+            connection_type='AGENT',
+            host='agent.example.com',
+            agent_id='old-001',
+            is_active=True,
+            policy=policy,
+            status_blob={'agent_version': '0.4.0'},
+        )
+        html = authenticated_client.get('/ConnectionManager/').content.decode()
+        assert 'upgradeAgent(' in html
+        assert 'unreleased version' not in html
+        after_name = html.split('Old Agent', 1)[1][:800]
+        assert 'LS ' not in after_name
+
 
 # ============================================================================
 # GetPipeline endpoint
