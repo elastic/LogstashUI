@@ -23,6 +23,6 @@ run_engine () {
 run_engine postgresql LOGSTASHUI_DB_ENGINE=postgresql LOGSTASHUI_DB_HOST=127.0.0.1 LOGSTASHUI_DB_PORT=55432 LOGSTASHUI_DB_NAME=logstashui LOGSTASHUI_DB_USER=logstashui LOGSTASHUI_DB_PASSWORD=logstashui
 run_engine mariadb LOGSTASHUI_DB_ENGINE=mysql LOGSTASHUI_DB_HOST=127.0.0.1 LOGSTASHUI_DB_PORT=53306 LOGSTASHUI_DB_NAME=logstashui LOGSTASHUI_DB_USER=root LOGSTASHUI_DB_PASSWORD=logstashui
 run_engine mysql LOGSTASHUI_DB_ENGINE=mysql LOGSTASHUI_DB_HOST=127.0.0.1 LOGSTASHUI_DB_PORT=53307 LOGSTASHUI_DB_NAME=logstashui LOGSTASHUI_DB_USER=root LOGSTASHUI_DB_PASSWORD=logstashui
-echo "==> Integration suite (testcontainers)"
-uv run pytest tests/integration/ -v --no-cov
+echo "==> Database test suite (testcontainers)"
+uv run pytest tests/Database/ -v --no-cov
 if [[ "$KEEP" -eq 0 ]]; then "${COMPOSE[@]}" down -v; fi

@@ -107,7 +107,7 @@ dev = [
 DJANGO_SETTINGS_MODULE = "LogstashUI.settings"
 python_files = ["tests.py", "test_*.py", "*_tests.py"]
 pythonpath = ["src/logstashui"]
-testpaths = ["src/logstashui", "tests"]
+testpaths = ["tests"]
 markers = [
     "integration: marks tests that require running Docker containers",
 ]

@@ -41,7 +41,7 @@ if errorlevel 1 (
   goto :down
 )
 
-uv run pytest tests\integration\ -v --no-cov
+uv run pytest tests\Database\ -v --no-cov
 if errorlevel 1 set FAIL=1
 
 :down
