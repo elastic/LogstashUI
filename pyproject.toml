@@ -99,13 +99,18 @@ dev = [
     "pytest>=9.0.2",
     "pytest-cov>=7.1.0",
     "pytest-django>=4.10.0",
+    "testcontainers[postgres]>=4.8.0",
+    "testcontainers[mysql]>=4.8.0",
 ]
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "LogstashUI.settings"
 python_files = ["tests.py", "test_*.py", "*_tests.py"]
 pythonpath = ["src/logstashui"]
-testpaths = ["src/logstashui"]
+testpaths = ["src/logstashui", "tests"]
+markers = [
+    "integration: marks tests that require running Docker containers",
+]
 addopts = [
   "--import-mode=importlib",
   "--cov",
