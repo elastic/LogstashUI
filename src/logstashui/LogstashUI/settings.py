@@ -277,20 +277,22 @@ else:
 # Security Headers
 # These settings protect against common web vulnerabilities
 # Only enforce in production (when DEBUG=False)
+_tls_env = os.environ.get("LOGSTASHUI_TLS", "true")
+TLS_ENABLED = _tls_env.strip().lower() not in ("0", "false", "no", "off")
+
 if not DEBUG:
     # Ensure cookies are only sent over HTTPS
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
-    
+
     # HTTP Strict Transport Security (HSTS)
     # Tells browsers to only access the site via HTTPS for the next year
     SECURE_HSTS_SECONDS = 31536000  # 1 year
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
-    
-    # Redirect all HTTP requests to HTTPS at Django level
-    # Note: nginx already does this, but this adds defense in depth
-    SECURE_SSL_REDIRECT = True
+
+    # Only redirect when TLS is actually on — LOGSTASHUI_TLS=false must suppress this
+    SECURE_SSL_REDIRECT = TLS_ENABLED
     
     # Prevent the site from being embedded in iframes (clickjacking protection)
     X_FRAME_OPTIONS = 'DENY'

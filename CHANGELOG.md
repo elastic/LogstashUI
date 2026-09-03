@@ -44,6 +44,10 @@ SQLite does not scale under gunicorn/gevent. Operators can now run LogstashUI on
 - Example manifests under `docs/docs/logstashui/kubernetes/examples/{sqlite,postgresql,mysql}/`.
 - Database subsection: engines, every `LOGSTASHUI_DB_*` default, offline dump/load, BETA `migrate-engine`, CREATE DATABASE scripts (`utf8mb4_bin` for MySQL/MariaDB), schema snapshots from 0.5.2 `migrate`.
 
+### Fixes
+
+- `LOGSTASHUI_TLS=false` now suppresses the Django-level HTTP→HTTPS redirect (`SECURE_SSL_REDIRECT`) in addition to disabling the Gunicorn TLS certificate. Previously, running the container with `-e LOGSTASHUI_TLS=false` still returned a `301` because `SECURE_SSL_REDIRECT` was gated on `DEBUG` only. Both knobs are now independent.
+
 ### Agent version display
 
 - ConnectionManager and Policy editor Agents tab show a cyan **LS X.Y.Z** pill for the Logstash version the agent reported (`logstash_version_resolved`, else Logstash API version). Hidden until known.
