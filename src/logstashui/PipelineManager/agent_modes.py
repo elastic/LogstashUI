@@ -430,14 +430,15 @@ def build_policy_config(policy: Policy, *, instance_id: int | None = None) -> di
 
 def embedded_agent_base_url() -> str:
     """URL the UI uses to reach the docker/local embedded agent FastAPI."""
+    from LogstashUI.insecure_http import force_http_url
+
     try:
         from django.conf import settings
 
-        return (getattr(settings, "LOGSTASH_AGENT_URL", None) or "https://127.0.0.1:9500").rstrip(
-            "/"
-        )
+        url = getattr(settings, "LOGSTASH_AGENT_URL", None) or "https://127.0.0.1:9500"
     except Exception:
-        return "https://127.0.0.1:9500"
+        url = "https://127.0.0.1:9500"
+    return force_http_url(url).rstrip("/")
 
 
 def probe_embedded_agent_online(timeout: float = 2.0) -> bool:
@@ -634,6 +635,8 @@ def list_simulation_targets(active_only: bool = True, *, ensure_embedded: bool =
     """
     Return list of dicts describing simulate-capable connections for the editor.
     """
+    from LogstashUI.insecure_http import force_http_url
+
     if ensure_embedded:
         ensure_embedded_connection(probe=False)
 
@@ -679,6 +682,7 @@ def list_simulation_targets(active_only: bool = True, *, ensure_embedded: bool =
             if not base_url:
                 host = conn.host or "127.0.0.1"
                 base_url = f"https://{host}:{agent_port}"
+            base_url = force_http_url(base_url)
             host = conn.host or "127.0.0.1"
             detail = f"embedded · {host} · Logstash {ver_label}"
         else:
@@ -691,7 +695,9 @@ def list_simulation_targets(active_only: bool = True, *, ensure_embedded: bool =
             agent_port = conn.agent_api_port
             if agent_port is None and conn.instance_id:
                 agent_port = SIMULATE_AGENT_API_BASE + conn.instance_id
-            base_url = f"https://{host}:{agent_port}" if agent_port else None
+            base_url = (
+                force_http_url(f"https://{host}:{agent_port}") if agent_port else None
+            )
 
         row = {
             "connection_id": conn.id,

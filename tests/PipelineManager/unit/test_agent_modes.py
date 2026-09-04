@@ -740,3 +740,31 @@ def test_get_connections_excludes_embedded(admin_client, system_policies, monkey
     assert conn.id not in ids
     names = [c['name'] for c in resp.json()]
     assert 'embedded' not in names
+
+
+def test_embedded_agent_base_url_http_when_insecure(settings, monkeypatch):
+    from PipelineManager.agent_modes import embedded_agent_base_url
+
+    monkeypatch.setenv("LOGSTASHUI_INSECURE_HTTP", "true")
+    settings.LOGSTASH_AGENT_URL = "https://logstashagent:9500"
+    assert embedded_agent_base_url() == "http://logstashagent:9500"
+
+
+def test_simulate_target_base_url_http_when_insecure(db, system_policies, monkeypatch):
+    _, _, simulate, _embedded = system_policies
+    monkeypatch.setenv("LOGSTASHUI_INSECURE_HTTP", "true")
+    Connection.objects.create(
+        name="sim-http",
+        connection_type=Connection.ConnectionType.AGENT,
+        host="10.1.2.3",
+        agent_id="sim-http-1",
+        policy=simulate,
+        instance_id=1,
+        agent_api_port=9501,
+        is_active=True,
+    )
+    targets = list_simulation_targets(ensure_embedded=False)
+    http_rows = [t for t in targets if t.get("host") == "10.1.2.3"]
+    assert http_rows
+    assert http_rows[0]["base_url"].startswith("http://")
+    assert "https://" not in http_rows[0]["base_url"]
