@@ -375,9 +375,12 @@ def SettingsView(request):
             cert_note = ""
             if agent_ui_url != previous_url:
                 try:
+                    from LogstashUI.insecure_http import insecure_http
                     from Common.product_ca import ensure_default_ui_server_cert, get_ui_server_mode
 
-                    if get_ui_server_mode() == "product":
+                    if insecure_http():
+                        cert_note = ""
+                    elif get_ui_server_mode() == "product":
                         ensure_default_ui_server_cert()  # re-issues when SANs change
                         cert_note = (
                             " Product UI certificate was re-checked for new callback URL SANs; "

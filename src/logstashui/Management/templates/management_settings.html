@@ -114,9 +114,16 @@
     </div>
 
     <div class="bg-gray-800 rounded-lg shadow-xl p-6 space-y-4">
+      {% if tls_status.insecure_http %}
+      <div class="p-3 rounded border border-amber-700 bg-amber-900/40 text-amber-200 text-sm">
+        LOGSTASHUI_INSECURE_HTTP is on. The UI is serving HTTP and will not generate a product CA or UI certificate. Automatic TLS is the supported path.
+      </div>
+      {% endif %}
       <div class="flex flex-wrap items-center gap-3">
         <span class="text-sm text-gray-400">Current mode:</span>
-        {% if tls_status.mode == 'custom' %}
+        {% if tls_status.insecure_http or tls_status.mode == 'disabled' %}
+        <span class="px-2 py-1 text-xs font-semibold rounded bg-amber-900/40 text-amber-200 border border-amber-700">HTTP (insecure)</span>
+        {% elif tls_status.mode == 'custom' %}
         <span class="px-2 py-1 text-xs font-semibold rounded bg-blue-900/50 text-blue-300 border border-blue-700">Custom certificate</span>
         {% else %}
         <span class="px-2 py-1 text-xs font-semibold rounded bg-amber-900/40 text-amber-200 border border-amber-700">Product CA (default)</span>
