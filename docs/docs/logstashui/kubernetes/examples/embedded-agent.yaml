@@ -1,0 +1,112 @@
+# Optional embedded simulation agent (compose --profile embedded analog).
+# Apply a DB tree first (sqlite/ postgresql/ or mysql/), uncomment
+# LOGSTASH_AGENT_URL in ConfigMap/logstashui and LOGSTASHUI_AGENT_CSR_SECRET
+# in Secret/logstashui, then:
+#   kubectl apply -f docs/docs/logstashui/kubernetes/examples/embedded-agent.yaml
+# ClusterIP only. Lab node. Prefer enrolled Simulate agents for serious work.
+# Missing CSR secret → CreateContainerConfigError (intentional).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: logstashagent
+  namespace: logstashui
+data:
+  LOGSTASH_UI_URL: https://logstashui:8443
+  LOGSTASH_URL: https://logstashui:8443
+  SIMULATION_MODE: "true"
+  # Agent API TLS (default true). Automatic product TLS works out of the box.
+  # Uncomment false only if the UI is also plain HTTP (LOGSTASHUI_INSECURE_HTTP)
+  # and you have rewritten LOGSTASH_UI_URL / LOGSTASH_URL / LOGSTASH_AGENT_URL
+  # to http://. Do not enable without cause.
+  # LOGSTASH_AGENT_TLS: "false"
+  # Skip verifying the UI HTTPS certificate (default false).
+  # Not the same as plain HTTP. Product CA pinning works OOTB; leave commented.
+  # LOGSTASH_UI_TLS_INSECURE: "true"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: logstashagent
+  namespace: logstashui
+  labels:
+    app: logstashagent
+spec:
+  selector:
+    app: logstashagent
+  ports:
+    - name: agent
+      port: 9500
+      targetPort: agent
+    - name: logstash-api
+      port: 9560
+      targetPort: logstash-api
+    - name: http-input
+      port: 9449
+      targetPort: http-input
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: logstashagent
+  namespace: logstashui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: logstashagent
+  template:
+    metadata:
+      labels:
+        app: logstashagent
+    spec:
+      initContainers:
+        - name: wait-ui-ca
+          image: codyjackson032/logstashui:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - python
+            - -c
+            - |
+              import ssl, time, urllib.request
+              ctx = ssl._create_unverified_context()
+              url = "https://logstashui:8443/.well-known/logstashui/ca.crt"
+              while True:
+                  try:
+                      urllib.request.urlopen(url, context=ctx, timeout=5)
+                      break
+                  except Exception:
+                      time.sleep(2)
+      containers:
+        - name: logstashagent
+          image: codyjackson032/logstash-agent:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: agent
+              containerPort: 9500
+            - name: logstash-api
+              containerPort: 9560
+            - name: http-input
+              containerPort: 9449
+          envFrom:
+            - configMapRef:
+                name: logstashagent
+          env:
+            - name: LOGSTASHUI_AGENT_CSR_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: logstashui
+                  key: LOGSTASHUI_AGENT_CSR_SECRET
+          startupProbe:
+            tcpSocket:
+              port: agent
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            tcpSocket:
+              port: agent
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: agent
+            periodSeconds: 30
+            failureThreshold: 6
