@@ -65,7 +65,7 @@ def init_telemetry():
         from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.sdk.trace.export import BatchSpanProcessor
     except ImportError:
-        logger.info(
+        logger.error(
             "LOGSTASHUI_OTEL is set but OpenTelemetry is not installed; "
             "tracing disabled. Install the 'otel' extra to enable it."
         )
