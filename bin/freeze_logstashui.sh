@@ -237,7 +237,7 @@ freeze_standalone() {
     echo "==> throwaway venv + PyInstaller (not a project dependency)"
     rm -rf "$venv" "$work" "$dist"
     uv venv --python 3.12 "$venv"
-    (cd "$ROOT" && uv pip install --python "$venv" ".[databases]")
+    (cd "$ROOT" && uv pip install --python "$venv" ".[databases,otel]")
     uv pip install --python "$venv" pyinstaller
     "$venv/bin/pyinstaller" \
         --noconfirm \

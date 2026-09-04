@@ -47,7 +47,7 @@ VENV="$HERE/.venv"
     --no-index \
     --no-cache-dir \
     --find-links "$WHEELS" \
-    'LogstashUI[databases]'
+    'LogstashUI[databases,otel]'
 
 printf '\nInstalled into %s\n' "$VENV"
 printf 'Start:\n'
