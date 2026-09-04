@@ -25,7 +25,7 @@ Requirements: Linux x86_64 (wheels can also be downloaded from another OS via pi
 ./bin/freeze_logstashui.sh --docker
 ./bin/freeze_logstashui.sh --standalone   # Linux x86_64 only
 ./bin/freeze_logstashui.sh --all          # default if you pass no artifact flags
-./bin/freeze_logstashui.sh --docker --image logstashui:offline-0.5.1
+./bin/freeze_logstashui.sh --docker --image logstashui:offline-0.5.2
 ```
 
 `--image` saves a **local** tag. The script never `docker pull`. `--standalone` on macOS/Windows/ARM **fails** if you passed that flag; `--all` **skips** it with a warning.
@@ -48,7 +48,7 @@ Same env as a normal install: `LOGSTASHUI_DATA_DIR` (default `$(pwd)/logstashui_
 
 **Docker:** UI-only compose (no Agent, no `embedded` profile). Set `ALLOWED_HOSTS` / `LOGSTASHUI_HOST_*` / `LOGSTASHUI_DB_*` as needed.
 
-**Standalone:** experimental PyInstaller onedir. Treat as a trial until `serve` completes migrate, SNMP official sync, collectstatic, and HTTPS :8443 with no network. Gunicorn stays gevent; do not switch workers as a workaround.
+**Standalone:** experimental PyInstaller onedir. Treat as a trial until `serve` completes migrate, SNMP official sync, collectstatic, and HTTPS :8443 with no network. Gunicorn stays gevent; do not switch workers as a workaround. No automated smoke. Run on a Linux x86_64 builder if you ship this zip.
 
 After a wheelhouse install, `logstashui systemd` still writes the unit and `/etc/default/logstashui` and does **not** enable it.
 

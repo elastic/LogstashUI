@@ -66,7 +66,7 @@ For frequent or heavy simulation, enroll one or more **Simulate** policy agents 
 ## Option 3: pip / uv + systemd
 
 ```bash
-pip install logstashui-0.5.1-py3-none-any.whl   # or: uv pip install …
+pip install logstashui-0.5.2-py3-none-any.whl   # or: uv pip install …
 logstashui                                       # HTTPS :8443, data in $(pwd)/logstashui_data
 sudo logstashui systemd                          # writes /etc/default/logstashui + unit; does not enable
 sudo systemctl enable --now logstashui

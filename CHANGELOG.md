@@ -1,6 +1,6 @@
 ## [0.5.2] - Multi-database - 09/01/2026
 
-Package version in `pyproject.toml` remains **0.5.1** until release tagging. This documents the 0.5.2 database work.
+Package version is **0.5.2** (`pyproject.toml`). Preferred LogstashAgent version is **0.5.2** (lockstep).
 
 SQLite does not scale under gunicorn/gevent. Operators can now run LogstashUI on **SQLite** (default), **PostgreSQL 14+**, or **MariaDB 10.6+ / MySQL 8.0+** without changing the Django ORM data model.
 
@@ -68,7 +68,7 @@ SQLite does not scale under gunicorn/gevent. Operators can now run LogstashUI on
 
 - ConnectionManager and Policy editor Agents tab show a cyan **LS X.Y.Z** pill for the Logstash version the agent reported (`logstash_version_resolved`, else Logstash API version). Hidden until known.
 - Policy Source **VERSION** live-fills and persists Binary Path as `{download_dir}/logstash-{version}/bin` (default `/opt/logstash-agent/logstash-versions/logstash-X.Y.Z/bin`). Custom paths are kept. Switching back to SYSTEM restores `/usr/share/logstash/bin` when the field still looks derived.
-- Agent newer than preferred (`__PREFERRED_LS_AGENT_VERSION__`, currently 0.5.1) shows **unreleased version** instead of a backwards Upgrade button. Older agents still get Upgrade. Unparseable versions still get Upgrade.
+- Agent newer than preferred (`__PREFERRED_LS_AGENT_VERSION__`, currently 0.5.2) shows **unreleased version** instead of a backwards Upgrade button. Older agents still get Upgrade. Unparseable versions still get Upgrade.
 - **The LS pill now tracks the Logstash version actually running on the host.** It was frozen at whatever version happened to be recorded first, for two reasons. `resolve_running_logstash_version()` consulted the `Connection.logstash_version_resolved` column *before* the current check-in's `status_blob`, and that column is only ever written on a truthy value and never cleared — so one stored version permanently shadowed every later one. The check-in handler also never read `status_blob.logstash_api.version`, the version the running instance reports through its own API, so on hosts that report it only there the column was never refreshed at all. The blob now leads and the column is the fallback, which keeps the last known version on screen while Logstash is stopped or its API is unreachable.
 - The pill also updates without a page reload. The Connections page adds `logstash_version` to the existing agent-status SSE payload — free, since the stream already selects `status_blob` — and the Policies → Agents table, which had no live channel at all, polls every 10s while that tab is visible and pauses when the browser tab is hidden.
 
