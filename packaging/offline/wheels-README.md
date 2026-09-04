@@ -1,6 +1,6 @@
 # LogstashUI air-gapped wheelhouse (__VERSION__)
 
-Linux **x86_64**, CPython **3.12** only. No PyPI. `[databases]` extras (psycopg + PyMySQL) are in `wheels/`. SQLite is still the runtime default.
+Linux **x86_64**, CPython **3.12** only. No PyPI. `[databases]` (psycopg + PyMySQL) and `[otel]` extras are in `wheels/`. SQLite is still the runtime default. Tracing stays off until `LOGSTASHUI_OTEL=true`.
 
 This zip is **not** the recommended install when the host can reach GitHub or a container registry. Prefer Docker Compose (connected) or `pip install` of the normal wheel.
 

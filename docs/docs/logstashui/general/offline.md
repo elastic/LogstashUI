@@ -14,7 +14,7 @@ This is **not** the default packaging path and **not** the recommended install w
 | `logstashui-*-offline-docker-linux-x86_64.zip` | Docker Engine | `./load.sh` then `docker compose -f compose.offline.yml up -d` |
 | `logstashui-*-offline-standalone-linux-x86_64.zip` | glibc Linux x86_64 | `./run.sh` (**experimental**) |
 
-All three include `LogstashUI[databases]` (psycopg + PyMySQL). SQLite remains the runtime default. **LogstashAgent is not bundled.** arm64 and Windows are later freeze invocations, not this zip.
+All three include `LogstashUI[databases]` (psycopg + PyMySQL) and `LogstashUI[otel]` (inert until `LOGSTASHUI_OTEL=true`). SQLite remains the runtime default. **LogstashAgent is not bundled.** arm64 and Windows are later freeze invocations, not this zip.
 
 ## Builder (connected)
 
@@ -44,7 +44,7 @@ Optional CI: `.github/workflows/offline-freeze.yml` is `workflow_dispatch` only 
 
 Same env as a normal install: `LOGSTASHUI_DATA_DIR` (default `$(pwd)/logstashui_data`), `LOGSTASHUI_*`, `LOGSTASHUI_DB_*`. HTTPS on **:8443**. Product CA is created on first start under the data dir — do not expect CA files inside the zip.
 
-**Wheels:** Debian/Ubuntu need `python3.12` and `python3.12-venv`. `install.sh` uses `pip install --no-index --find-links ./wheels 'LogstashUI[databases]'`. It does **not** upgrade pip (that would hit PyPI). uv is not required.
+**Wheels:** Debian/Ubuntu need `python3.12` and `python3.12-venv`. `install.sh` uses `pip install --no-index --find-links ./wheels 'LogstashUI[databases,otel]'`. It does **not** upgrade pip (that would hit PyPI). uv is not required.
 
 **Docker:** UI-only compose (no Agent, no `embedded` profile). Set `ALLOWED_HOSTS` / `LOGSTASHUI_HOST_*` / `LOGSTASHUI_DB_*` as needed.
 

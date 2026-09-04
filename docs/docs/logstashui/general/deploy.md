@@ -102,7 +102,7 @@ One-replica StatefulSet, PVC at `/var/lib/logstashui`, image `codyjackson032/log
 
 ## Option 6: Air-gapped freeze (optional)
 
-Not the default packaging path. When the install host has **no PyPI and no registry**, a connected maintainer runs `bin/freeze_logstashui.sh` and copies a zip. Isolated host: CPython **3.12** x86_64 (wheels), Docker (image zip), or experimental PyInstaller (Linux x86_64). `[databases]` is included; LogstashAgent is not.
+Not the default packaging path. When the install host has **no PyPI and no registry**, a connected maintainer runs `bin/freeze_logstashui.sh` and copies a zip. Isolated host: CPython **3.12** x86_64 (wheels), Docker (image zip), or experimental PyInstaller (Linux x86_64). `[databases]` and `[otel]` are included; LogstashAgent is not. Tracing stays off until `LOGSTASHUI_OTEL=true`.
 
 **📖 Full instructions: [Air-gapped freeze](/docs/docs/logstashui/general/offline.md)**
 

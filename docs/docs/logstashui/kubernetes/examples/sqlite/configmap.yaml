@@ -16,3 +16,10 @@ data:
   LOGSTASHUI_AGENT_UI_URL: https://logstashui.example.com
   LOGSTASHUI_DB_ENGINE: sqlite
   # db.sqlite3 is created at $LOGSTASHUI_DATA_DIR/db.sqlite3 on the PVC.
+  # OpenTelemetry (optional). The image already installs LogstashUI[otel].
+  # Uncomment to export traces/metrics over OTLP/HTTP (not gRPC — gevent
+  # cannot patch grpcio). Point at a collector that accepts HTTP/protobuf
+  # on 4318. Leave commented to keep tracing off.
+  # LOGSTASHUI_OTEL: "true"
+  # OTEL_SERVICE_NAME: logstashui
+  # OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector.observability.svc:4318

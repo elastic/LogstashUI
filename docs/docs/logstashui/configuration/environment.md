@@ -43,6 +43,20 @@ Keep `LOGSTASHUI_TLS=true` (the default) in Kubernetes. Ingress/HTTPRoute should
 
 ---
 
+## Observability
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `LOGSTASHUI_OTEL` | `false` | Enable OTLP/HTTP traces + metrics. Native: install `LogstashUI[otel]`. |
+| `OTEL_SERVICE_NAME` | `logstashui` | Resource `service.name` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | SDK default | Collector base URL (HTTP/protobuf) |
+
+The Docker/K8s image and freeze artifacts already install `[otel]`. Set `LOGSTASHUI_OTEL=true` to turn tracing on. Native pip/uv still needs `pip install 'LogstashUI[otel]'` (or `uv pip install 'LogstashUI[otel]'`). If the extra is missing, LogstashUI logs **ERROR** and continues without tracing.
+
+Only the HTTP/protobuf OTLP exporter is supported. The gRPC exporter is incompatible with the gevent worker (native threads cannot be monkey-patched). Use collector port **4318**, not 4317.
+
+---
+
 ## Auth and agent URL
 
 | Variable | Default | Purpose |
@@ -76,7 +90,7 @@ Booleans accept `true`/`false`, `1`/`0`, `yes`/`no`, `on`/`off`.
 
 Floors: PostgreSQL 14+, MariaDB 10.6+, MySQL 8.0+. Create MySQL/MariaDB as `utf8mb4` / `utf8mb4_bin` so unique names match SQLite/Postgres case-sensitivity. Full engine docs, env defaults, and SQL examples: [Database](/docs/docs/logstashui/database/index.md). Migration (offline + BETA CLI): [Migration](/docs/docs/logstashui/database/migration.md).
 
-**Install extras (native pip/uv):** `uv pip install 'LogstashUI[postgres]'`, `'LogstashUI[mysql]'`, or `'LogstashUI[databases]'`. The Docker/K8s image already installs `[databases]`. Missing driver fails at startup with that extra name.
+**Install extras (native pip/uv):** `uv pip install 'LogstashUI[postgres]'`, `'LogstashUI[mysql]'`, or `'LogstashUI[databases]'`. The Docker/K8s image already installs `[databases]` and `[otel]`. Missing driver fails at startup with that extra name. Tracing stays off until `LOGSTASHUI_OTEL=true`.
 
 `LOGSTASHUI_DATA_DIR` is still required when the database is remote (TLS, `.django_secret_key`, logs, staticfiles).
 

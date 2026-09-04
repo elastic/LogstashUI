@@ -22,7 +22,7 @@ All the ways to deploy LogstashUI.
 
 ## **[Air-gapped freeze](/docs/docs/logstashui/general/offline.md)**
 
-Optional connected-builder script that freezes LogstashUI plus `[databases]` into zips for hosts with no PyPI or registry. Default `uv build` is unchanged.
+Optional connected-builder script that freezes LogstashUI plus `[databases]` and `[otel]` into zips for hosts with no PyPI or registry. Default `uv build` is unchanged.
 
 **📖 [View air-gapped freeze →](/docs/docs/logstashui/general/offline.md)**
 

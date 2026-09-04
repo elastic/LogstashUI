@@ -105,9 +105,10 @@ exactly the load the cache exists to prevent.
 
 ## Measuring it
 
-Set `LOGSTASHUI_OTEL=true` and install the `otel` extra (`pip install 'LogstashUI[otel]'`; already
-bundled in the offline wheel archive) to export traces and metrics over OTLP/HTTP to
-`OTEL_EXPORTER_OTLP_ENDPOINT`.
+Set `LOGSTASHUI_OTEL=true` to export traces and metrics over OTLP/HTTP to
+`OTEL_EXPORTER_OTLP_ENDPOINT`. The Docker/K8s image and freeze artifacts already
+install `LogstashUI[otel]`. Native pip/uv: `pip install 'LogstashUI[otel]'`.
+If the extra is missing, LogstashUI logs ERROR and continues without tracing.
 
 Four instruments answer the capacity question that request traces cannot:
 

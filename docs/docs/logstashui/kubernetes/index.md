@@ -14,7 +14,7 @@ Envoy Gateway users: [skip backend TLS verify](envoy-gateway.md) (`Backend` CR).
 
 ## Image and command
 
-The image already installs `LogstashUI[databases]`. `CMD` is `logstashui serve`. Do not override the command unless you are debugging.
+The image already installs `LogstashUI[databases]` and `LogstashUI[otel]`. Tracing stays off until `LOGSTASHUI_OTEL=true`. `CMD` is `logstashui serve`. Do not override the command unless you are debugging.
 
 ```bash
 docker build -f docker/Dockerfile -t logstashui:0.5.2-dev .

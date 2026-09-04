@@ -10,7 +10,7 @@ LogstashUI stores operator data (policies, connections, pipelines, SNMP, users) 
 
 `logstashui serve` logs a **warning** when the engine is SQLite and `LOGSTASHUI_WORKERS` > 1. It still starts. SQLite does not scale under gunicorn/gevent with concurrent agents.
 
-The container image already installs `LogstashUI[databases]` (both drivers). Native pip/uv:
+The container image already installs `LogstashUI[databases]` (both drivers) and `LogstashUI[otel]`. Tracing stays off until `LOGSTASHUI_OTEL=true`. Native pip/uv:
 
 ```bash
 uv pip install 'LogstashUI[postgres]'
