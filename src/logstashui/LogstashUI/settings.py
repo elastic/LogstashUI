@@ -1,6 +1,6 @@
-#Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
-#or more contributor license agreements. Licensed under the Elastic License;
-#you may not use this file except in compliance with the Elastic License.
+# Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+# or more contributor license agreements. Licensed under the Elastic License;
+# you may not use this file except in compliance with the Elastic License.
 
 """
 Django settings for logstashui project.
@@ -53,11 +53,12 @@ SECRET_KEY = get_django_secret_key()
 
 # SECURITY WARNING: don't run with debug turned on in production!
 # Set DEBUG=False in production via environment variable
-DEBUG = os.environ.get('DEBUG', 'True').lower() in ('true', '1', 'yes')
+DEBUG = os.environ.get("DEBUG", "True").lower() in ("true", "1", "yes")
 
 # SECURITY WARNING: Set ALLOWED_HOSTS to your domain(s) in production
 # Example: ALLOWED_HOSTS=yourdomain.com,www.yourdomain.com
 ALLOWED_HOSTS = merge_allowed_hosts()
+
 
 def _get_version():
     """Get version from installed package metadata or pyproject.toml"""
@@ -66,93 +67,91 @@ def _get_version():
     except PackageNotFoundError:
         try:
             import tomllib
+
             pyproject_path = PROJECT_ROOT / "pyproject.toml"
             if pyproject_path.exists():
                 with open(pyproject_path, "rb") as f:
                     pyproject_data = tomllib.load(f)
-                    return pyproject_data.get("project", {}).get("version", "0.0.0+unknown")
+                    return pyproject_data.get("project", {}).get(
+                        "version", "0.0.0+unknown"
+                    )
         except Exception:
             pass
         return "0.0.0+unknown"
 
+
 __VERSION__ = _get_version()
-__PREFERRED_LS_AGENT_VERSION__ = "0.5.1"
+__PREFERRED_LS_AGENT_VERSION__ = "0.5.2"
 
 # Application definition
 
 INSTALLED_APPS = [
     # Shipped with Django
-    'django.contrib.admin',
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-    'django.contrib.staticfiles',
-
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
     # Apps of logstashui
-    'PipelineManager',
-    'Management',
-    'Utilities',
-    'SNMP',
-    'Monitoring',
-    'Site',
-    'Documentation',
-    'AI',
-
+    "PipelineManager",
+    "Management",
+    "Utilities",
+    "SNMP",
+    "Monitoring",
+    "Site",
+    "Documentation",
+    "AI",
     # Frameworks
-    'django_htmx',
-    'tailwind',
-    'theme' # Belongs to tailwind
+    "django_htmx",
+    "tailwind",
+    "theme",  # Belongs to tailwind
 ]
 
 TAILWIND_APP_NAME = "theme"
 
 
-
-
 MIDDLEWARE = [
-    'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.common.CommonMiddleware',
+    "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
     # Must precede CsrfViewMiddleware: it exempts verified API-token requests
     # from CSRF. Browser and agent traffic pass through untouched.
-    'Common.middleware.ApiTokenCsrfMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
+    "Common.middleware.ApiTokenCsrfMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
     # Must follow AuthenticationMiddleware, which would otherwise overwrite
     # request.user with the lazy session user.
-    'Common.middleware.ApiTokenUserMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'django_htmx.middleware.HtmxMiddleware',
-    'login_required.middleware.LoginRequiredMiddleware',
-    'Common.middleware.SecurityHeadersMiddleware',
-
+    "Common.middleware.ApiTokenUserMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "django_htmx.middleware.HtmxMiddleware",
+    "login_required.middleware.LoginRequiredMiddleware",
+    "Common.middleware.SecurityHeadersMiddleware",
 ]
 
-ROOT_URLCONF = 'LogstashUI.urls'
+ROOT_URLCONF = "LogstashUI.urls"
 
 TEMPLATES = [
     {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [
-        ],
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
-                'Common.context_processors.version_update_info',
-                'Common.context_processors.navigation_highlight',
-                'Common.context_processors.experimental_mode',
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
+                "Common.context_processors.version_update_info",
+                "Common.context_processors.navigation_highlight",
+                "Common.context_processors.experimental_mode",
             ],
         },
     },
 ]
 
-WSGI_APPLICATION = 'LogstashUI.wsgi.application'
+WSGI_APPLICATION = "LogstashUI.wsgi.application"
 
 
 # Database
@@ -166,16 +165,16 @@ DATABASES = build_databases(DATA_DIR)
 
 AUTH_PASSWORD_VALIDATORS = [
     {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
+        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
+        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
     },
 ]
 
@@ -183,9 +182,9 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = "en-us"
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = "UTC"
 
 USE_I18N = True
 
@@ -195,12 +194,12 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = '/static/'
+STATIC_URL = "/static/"
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 STATIC_ROOT = DATA_DIR / "staticfiles"
 
@@ -220,22 +219,25 @@ else:
 
 if DEBUG:
     # Add django_browser_reload only in DEBUG mode
-    INSTALLED_APPS += ['django_browser_reload']
+    INSTALLED_APPS += ["django_browser_reload"]
     MIDDLEWARE += [
         "django_browser_reload.middleware.BrowserReloadMiddleware",
     ]
 
 
-NO_AUTH_MODE = LOGSTASHUI_CONFIG.get('no_auth', {}).get('enabled', False)
+NO_AUTH_MODE = LOGSTASHUI_CONFIG.get("no_auth", {}).get("enabled", False)
 
 if NO_AUTH_MODE:
     import logging
+
     logging.getLogger(__name__).warning(
         "*** NO_AUTH MODE IS ENABLED — All authentication is bypassed. "
         "Do not use in production! ***"
     )
-    _auth_idx = MIDDLEWARE.index('django.contrib.auth.middleware.AuthenticationMiddleware')
-    MIDDLEWARE.insert(_auth_idx + 1, 'Common.middleware.NoAuthMiddleware')
+    _auth_idx = MIDDLEWARE.index(
+        "django.contrib.auth.middleware.AuthenticationMiddleware"
+    )
+    MIDDLEWARE.insert(_auth_idx + 1, "Common.middleware.NoAuthMiddleware")
 
 LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/Management/Login/"
@@ -269,23 +271,23 @@ SESSION_SAVE_EVERY_REQUEST = True  # Reset timeout on every request (sliding win
 SESSION_EXPIRE_AT_BROWSER_CLOSE = False  # Allow persistent sessions
 
 # Proxy/HTTPS settings for nginx reverse proxy
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 USE_X_FORWARDED_HOST = True
 USE_X_FORWARDED_PORT = True
 
 # CSRF Trusted Origins - configurable via environment variable
 # For self-hosted deployments, users should set CSRF_TRUSTED_ORIGINS env var
 # Example: CSRF_TRUSTED_ORIGINS=https://myserver.com,https://192.168.1.100
-csrf_origins_env = os.environ.get('CSRF_TRUSTED_ORIGINS', '')
+csrf_origins_env = os.environ.get("CSRF_TRUSTED_ORIGINS", "")
 if csrf_origins_env:
-    CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in csrf_origins_env.split(',')]
+    CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in csrf_origins_env.split(",")]
 else:
     # Default for local development
     CSRF_TRUSTED_ORIGINS = [
-        'http://localhost:8080',
-        'http://127.0.0.1:8080',
-        'https://localhost',
-        'https://127.0.0.1',
+        "http://localhost:8080",
+        "http://127.0.0.1:8080",
+        "https://localhost",
+        "https://127.0.0.1",
     ]
 
 # Security Headers
@@ -307,13 +309,13 @@ if not DEBUG:
 
     # Only redirect when TLS is actually on — LOGSTASHUI_TLS=false must suppress this
     SECURE_SSL_REDIRECT = TLS_ENABLED
-    
+
     # Prevent the site from being embedded in iframes (clickjacking protection)
-    X_FRAME_OPTIONS = 'DENY'
-    
+    X_FRAME_OPTIONS = "DENY"
+
     # Prevent browsers from guessing content types
     SECURE_CONTENT_TYPE_NOSNIFF = True
-    
+
     # Enable browser's XSS filtering
     SECURE_BROWSER_XSS_FILTER = True
 else:
@@ -321,16 +323,16 @@ else:
     SESSION_COOKIE_SECURE = False
     CSRF_COOKIE_SECURE = False
     SECURE_SSL_REDIRECT = False
-    X_FRAME_OPTIONS = 'SAMEORIGIN'
+    X_FRAME_OPTIONS = "SAMEORIGIN"
 
 # logstashagent Configuration
 # URL for the logstashagent API (HTTPS direct; no nginx).
 # Override with LOGSTASH_AGENT_URL. Compose sets https://logstashagent:9500.
 if DEBUG:
-    LOGSTASH_AGENT_URL = os.environ.get('LOGSTASH_AGENT_URL', 'http://127.0.0.1:9500')
+    LOGSTASH_AGENT_URL = os.environ.get("LOGSTASH_AGENT_URL", "http://127.0.0.1:9500")
 else:
     LOGSTASH_AGENT_URL = os.environ.get(
-        'LOGSTASH_AGENT_URL', 'https://logstashagent:9500'
+        "LOGSTASH_AGENT_URL", "https://logstashagent:9500"
     )
 
 # Logstash tarball proxy
@@ -342,15 +344,15 @@ LOGSTASH_DIR.mkdir(parents=True, exist_ok=True)
 # Upstream fetches in flight cluster-wide, counted in the DB (the only state
 # shared between gunicorn workers -- there is no CACHES backend configured).
 LOGSTASH_ARTIFACT_MAX_UPSTREAM = int(
-    os.environ.get('LOGSTASHUI_ARTIFACT_MAX_UPSTREAM', '2')
+    os.environ.get("LOGSTASHUI_ARTIFACT_MAX_UPSTREAM", "2")
 )
 # Concurrent agent downloads *per worker*. Effective total is this value times
 # LOGSTASHUI_WORKERS. Deliberately not a global divided by worker count: that
 # truncates to zero and makes the knob lie.
 LOGSTASH_ARTIFACT_MAX_SERVE_PER_WORKER = int(
-    os.environ.get('LOGSTASHUI_ARTIFACT_MAX_SERVE_PER_WORKER', '4')
+    os.environ.get("LOGSTASHUI_ARTIFACT_MAX_SERVE_PER_WORKER", "4")
 )
-LOGSTASH_ARTIFACT_DEFAULT_BASE_URL = 'https://artifacts.elastic.co/downloads/logstash'
+LOGSTASH_ARTIFACT_DEFAULT_BASE_URL = "https://artifacts.elastic.co/downloads/logstash"
 
 # Logging Configuration
 # https://docs.djangoproject.com/en/5.2/topics/logging/
@@ -366,44 +368,44 @@ LOGSTASHUI_LOG_LEVEL = resolve_log_level(
 DJANGO_LOGGER_LEVEL, DJANGO_REQUEST_LOG_LEVEL = resolve_django_log_levels()
 
 LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'formatters': {
-        'verbose': {
-            'format': '[{levelname}] {asctime} {name} {module}.{funcName}: {message}',
-            'style': '{',
-            'datefmt': '%Y-%m-%d %H:%M:%S',
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "[{levelname}] {asctime} {name} {module}.{funcName}: {message}",
+            "style": "{",
+            "datefmt": "%Y-%m-%d %H:%M:%S",
         },
     },
-    'handlers': {
-        'console': {
-            'level': LOGSTASHUI_LOG_LEVEL,
-            'class': 'logging.StreamHandler',
-            'formatter': 'verbose',
+    "handlers": {
+        "console": {
+            "level": LOGSTASHUI_LOG_LEVEL,
+            "class": "logging.StreamHandler",
+            "formatter": "verbose",
         },
-        'file': {
-            'level': LOGSTASHUI_LOG_LEVEL,
-            'class': 'logging.handlers.RotatingFileHandler',
-            'filename': LOGS_DIR / 'logstashui.log',
-            'maxBytes': 1024 * 1024 * 10,  # 10 MB
-            'backupCount': 5,
-            'formatter': 'verbose',
-        }
-    },
-    'loggers': {
-        'django': {
-            'handlers': ['console', 'file'],
-            'level': DJANGO_LOGGER_LEVEL,
-            'propagate': False,
-        },
-        'django.request': {
-            'handlers': ['console', 'file'],
-            'level': DJANGO_REQUEST_LOG_LEVEL,
-            'propagate': False,
+        "file": {
+            "level": LOGSTASHUI_LOG_LEVEL,
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": LOGS_DIR / "logstashui.log",
+            "maxBytes": 1024 * 1024 * 10,  # 10 MB
+            "backupCount": 5,
+            "formatter": "verbose",
         },
     },
-    'root': {
-        'handlers': ['console', 'file'],
-        'level': LOGSTASHUI_LOG_LEVEL,
+    "loggers": {
+        "django": {
+            "handlers": ["console", "file"],
+            "level": DJANGO_LOGGER_LEVEL,
+            "propagate": False,
+        },
+        "django.request": {
+            "handlers": ["console", "file"],
+            "level": DJANGO_REQUEST_LOG_LEVEL,
+            "propagate": False,
+        },
+    },
+    "root": {
+        "handlers": ["console", "file"],
+        "level": LOGSTASHUI_LOG_LEVEL,
     },
 }
