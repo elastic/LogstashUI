@@ -672,6 +672,7 @@ def save_custom_ui_certificate(
 
     Does not replace the product CA. Validates that key matches leaf cert.
     """
+    _raise_if_insecure_http()
     if not cert_pem or not key_pem:
         raise ValueError("Certificate and private key are required")
 
@@ -750,6 +751,7 @@ def save_custom_ui_certificate(
 
 def revert_ui_certificate_to_product_default() -> dict:
     """Remove custom cert and regenerate product-CA-signed leaf."""
+    _raise_if_insecure_http()
     for p in (ui_server_cert_path(), ui_server_key_path(), ui_server_chain_path(), ui_server_mode_path()):
         try:
             if p.is_file():

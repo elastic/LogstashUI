@@ -445,3 +445,47 @@ def test_product_ca_endpoint_404_when_insecure(client, tmp_path, settings, monke
     assert resp.status_code == 404
     tls_dir = settings.DATA_DIR / "tls"
     assert not tls_dir.exists() or not any(tls_dir.iterdir())
+
+
+def _seed_custom_leaf(settings, tmp_path):
+    from Common import product_ca
+
+    product_ca._cached_cert_pem = None
+    product_ca._cached_fingerprint = None
+    settings.BASE_DIR = tmp_path
+    settings.DATA_DIR = tmp_path / "data"
+    settings.DATA_DIR.mkdir(exist_ok=True)
+    tls = settings.DATA_DIR / "tls"
+    tls.mkdir(exist_ok=True)
+    cert_bytes = b"KEEP-CUSTOM-CERT"
+    key_bytes = b"KEEP-CUSTOM-KEY"
+    (tls / "ui-server.crt").write_bytes(cert_bytes)
+    (tls / "ui-server.key").write_bytes(key_bytes)
+    (tls / "ui-server.mode").write_text("custom")
+    return tls, cert_bytes, key_bytes
+
+
+def test_save_custom_raises_and_preserves_files_when_insecure(tmp_path, settings, monkeypatch):
+    from Common import product_ca
+    from Common.product_ca import ProductCADisabled
+
+    tls, cert_bytes, key_bytes = _seed_custom_leaf(settings, tmp_path)
+    monkeypatch.setenv("LOGSTASHUI_INSECURE_HTTP", "true")
+    with pytest.raises(ProductCADisabled):
+        product_ca.save_custom_ui_certificate(b"NEW-CERT", b"NEW-KEY")
+    assert (tls / "ui-server.crt").read_bytes() == cert_bytes
+    assert (tls / "ui-server.key").read_bytes() == key_bytes
+    assert (tls / "ui-server.mode").read_text() == "custom"
+
+
+def test_revert_raises_and_preserves_files_when_insecure(tmp_path, settings, monkeypatch):
+    from Common import product_ca
+    from Common.product_ca import ProductCADisabled
+
+    tls, cert_bytes, key_bytes = _seed_custom_leaf(settings, tmp_path)
+    monkeypatch.setenv("LOGSTASHUI_INSECURE_HTTP", "true")
+    with pytest.raises(ProductCADisabled):
+        product_ca.revert_ui_certificate_to_product_default()
+    assert (tls / "ui-server.crt").read_bytes() == cert_bytes
+    assert (tls / "ui-server.key").read_bytes() == key_bytes
+    assert (tls / "ui-server.mode").read_text() == "custom"
