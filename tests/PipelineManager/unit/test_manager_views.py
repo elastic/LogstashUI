@@ -505,14 +505,14 @@ class TestPipelineManagerPage:
             is_active=True,
             policy=policy,
             logstash_version_resolved='9.4.3',
-            status_blob={'agent_version': '0.5.2', 'logstash_api': {'version': '9.4.3'}},
+            status_blob={'agent_version': '0.5.3', 'logstash_api': {'version': '9.4.3'}},
         )
         response = authenticated_client.get('/ConnectionManager/')
         html = response.content.decode()
         assert 'LS 9.4.3' in html
         assert 'unreleased version' in html
         assert 'upgradeAgent(' not in html
-        assert settings.__PREFERRED_LS_AGENT_VERSION__ == '0.5.1'
+        assert settings.__PREFERRED_LS_AGENT_VERSION__ == '0.5.2'
 
     def test_older_agent_shows_upgrade_not_unreleased(self, authenticated_client, db):
         from PipelineManager.models import Connection, Policy

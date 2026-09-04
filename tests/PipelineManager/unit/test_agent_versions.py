@@ -94,17 +94,17 @@ class TestResolveRunningLogstashVersion:
 
 class TestAgentVersionRelation:
     def test_older_equal_newer(self):
-        assert agent_version_relation("0.5.0", "0.5.1") == "older"
-        assert agent_version_relation("0.5.1", "0.5.1") == "equal"
-        assert agent_version_relation("0.5.2", "0.5.1") == "newer"
+        assert agent_version_relation("0.5.1", "0.5.2") == "older"
+        assert agent_version_relation("0.5.2", "0.5.2") == "equal"
+        assert agent_version_relation("0.5.3", "0.5.2") == "newer"
 
     def test_prerelease_newer_than_preferred(self):
-        assert agent_version_relation("0.5.2.dev0", "0.5.1") == "newer"
+        assert agent_version_relation("0.5.3.dev0", "0.5.2") == "newer"
 
     def test_garbage_unknown(self):
-        assert agent_version_relation("not-a-version", "0.5.1") == "unknown"
-        assert agent_version_relation("", "0.5.1") == "unknown"
-        assert agent_version_relation(None, "0.5.1") == "unknown"
+        assert agent_version_relation("not-a-version", "0.5.2") == "unknown"
+        assert agent_version_relation("", "0.5.2") == "unknown"
+        assert agent_version_relation(None, "0.5.2") == "unknown"
 
 
 class TestResolvePersistedBinaryPath:
