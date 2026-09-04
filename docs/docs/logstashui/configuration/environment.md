@@ -92,10 +92,12 @@ Only the HTTP/protobuf OTLP exporter is supported. The gRPC exporter is incompat
 | `LOGSTASHUI_NO_AUTH` | `false` | Bypass login (**sandbox only**) |
 | `LOGSTASHUI_AGENT_UI_URL` | empty | Prefill `--logstash-ui-url` (DB Settings wins if set) |
 | `LOGSTASHUI_INCLUDE_CA_FINGERPRINT` | `true` | Embed product CA fingerprint in enrollment tokens |
-| `LOGSTASH_AGENT_URL` | debug: `http://127.0.0.1:9500`; else `https://logstashagent:9500` | Embedded/compose agent API |
+| `LOGSTASH_AGENT_URL` | debug: `http://127.0.0.1:9500`; else `https://logstashagent:9500` | Embedded/compose agent API. Kubernetes examples comment this; apply [embedded-agent.yaml](/docs/docs/logstashui/kubernetes/examples/embedded-agent.yaml) after uncommenting. |
 | `LOGSTASHUI_HOST_HOSTNAME` / `LOGSTASHUI_HOST_IPS` / `LOGSTASHUI_TLS_SANS` | empty | Extra SANs on the product UI cert. Kubernetes: set `LOGSTASHUI_HOST_IPS` from `status.podIP` (Downward API). IPs are also appended to `ALLOWED_HOSTS` unless that list is `*`. |
-| `LOGSTASHUI_AGENT_CSR_SECRET` | empty | Compose/embedded agent CSR without enroll |
+| `LOGSTASHUI_AGENT_CSR_SECRET` | empty | Compose/embedded agent CSR without enroll. Kubernetes examples comment this on Secret `logstashui`; the overlay `secretKeyRef` requires it uncommented. |
 | `LOGSTASHUI_DOCS_DIR` | checkout `docs/` or packaged copy | In-app documentation root |
+
+Agent-side (not UI ConfigMap): `LOGSTASH_AGENT_TLS` (default `true`) and `LOGSTASH_UI_TLS_INSECURE` (default `false`) are LogstashAgent env vars. The Kubernetes overlay comments both on ConfigMap `logstashagent`. See the LogstashAgent README TLS table. Do not enable without cause.
 
 Booleans accept `true`/`false`, `1`/`0`, `yes`/`no`, `on`/`off`.
 
