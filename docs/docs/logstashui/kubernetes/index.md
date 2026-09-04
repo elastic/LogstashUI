@@ -103,11 +103,19 @@ Default engine is SQLite on the PVC. For Postgres or MySQL/MariaDB, set the disc
 
 ---
 
+## Embedded agent (optional)
+
+Compose `--profile embedded` analog: [embedded-agent.yaml](examples/embedded-agent.yaml). Apply a DB tree, uncomment `LOGSTASH_AGENT_URL` and `LOGSTASHUI_AGENT_CSR_SECRET`, then apply the overlay. ClusterIP only (`9500` / `9560` / `9449`). Details: [examples README](examples/README.md#embedded-agent-optional).
+
+---
+
 ## Apply (generic)
 
 ```bash
 kubectl apply -f docs/docs/logstashui/kubernetes/examples/sqlite/
 # or postgresql/ or mysql/
+# optional embedded sim node:
+# kubectl apply -f docs/docs/logstashui/kubernetes/examples/embedded-agent.yaml
 ```
 
 Replace `logstashui.example.com` in ConfigMap, Secret, and Ingress. Replace `SECRET_KEY`. For Postgres/MySQL, create the empty database first ([SQL examples](/docs/docs/logstashui/database/examples/)), then apply the StatefulSet. First start runs `migrate`.
