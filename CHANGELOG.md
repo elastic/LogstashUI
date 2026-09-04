@@ -46,6 +46,7 @@ SQLite does not scale under gunicorn/gevent. Operators can now run LogstashUI on
 - Kubernetes subsection: StatefulSet + one PVC at `/var/lib/logstashui`, TLS kept on `:8443`, Ingress-nginx skip backend verify, Envoy Gateway `Backend` `insecureSkipVerify` (enable Backend API), CloudNativePG Cluster in the app namespace.
 - K8s probes send `Host: logstashui` (kubelet otherwise uses the pod IP and Django returns 400). Downward API `status.podIP` → `LOGSTASHUI_HOST_IPS` for the product leaf; those IPs are appended to `ALLOWED_HOSTS` unless the list is `*`.
 - Example manifests under `docs/docs/logstashui/kubernetes/examples/{sqlite,postgresql,mysql}/`.
+- Optional embedded simulation agent overlay: `docs/docs/logstashui/kubernetes/examples/embedded-agent.yaml` (compose `--profile embedded` analog). ClusterIP 9500 / 9560 / 9449. Uncomment `LOGSTASH_AGENT_URL` and `LOGSTASHUI_AGENT_CSR_SECRET` on the UI examples before apply. Agent ConfigMap comments `LOGSTASH_AGENT_TLS` (default true) and `LOGSTASH_UI_TLS_INSECURE` (default false).
 - Database subsection: engines, every `LOGSTASHUI_DB_*` default, offline dump/load, BETA `migrate-engine`, CREATE DATABASE scripts (`utf8mb4_bin` for MySQL/MariaDB), schema snapshots from 0.5.2 `migrate`.
 
 ### Insecure HTTP (escape hatch)
