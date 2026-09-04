@@ -136,6 +136,26 @@ class TestEnrollEndpoint:
         # Verify API key was created
         assert connection.api_keys.exists()
 
+    def test_enroll_skips_csr_when_insecure_http(self, client, test_enrollment_token, monkeypatch):
+        monkeypatch.setenv("LOGSTASHUI_INSECURE_HTTP", "true")
+        token_payload = {"enrollment_token": test_enrollment_token.token}
+        encoded_token = base64.b64encode(json.dumps(token_payload).encode()).decode()
+        response = client.post(
+            "/ConnectionManager/Enroll/",
+            data=json.dumps({
+                "enrollment_token": encoded_token,
+                "host": "agent.example",
+                "agent_id": "agent-insecure-1",
+                "csr_pem": "-----BEGIN CERTIFICATE REQUEST-----\nMIIB\n-----END CERTIFICATE REQUEST-----\n",
+            }),
+            content_type="application/json",
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert "server_certificate" not in data
+        assert "ca_certificate" not in data
+
     def test_enroll_reenrollment_deletes_old_connection(self, client, test_enrollment_token, test_agent_connection):
         """Test that re-enrolling an agent deletes the old connection"""
         old_connection_id = test_agent_connection.id
@@ -1171,3 +1191,10 @@ class TestEncryptForAgent:
         encrypted2 = _encrypt_for_agent('key2', plaintext)
 
         assert encrypted1 != encrypted2
+
+
+def test_sign_csr_if_present_noop_when_insecure(monkeypatch):
+    from PipelineManager.agent_api import _sign_csr_if_present
+
+    monkeypatch.setenv("LOGSTASHUI_INSECURE_HTTP", "true")
+    assert _sign_csr_if_present({"csr_pem": "anything"}) is None

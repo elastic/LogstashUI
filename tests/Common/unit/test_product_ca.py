@@ -431,3 +431,17 @@ def test_get_agent_ui_url_default_rewrites_https(settings, monkeypatch):
     url = product_ca.get_agent_ui_url_default()
     assert url.startswith("http://")
     assert "https://" not in url
+
+
+def test_product_ca_endpoint_404_when_insecure(client, tmp_path, settings, monkeypatch):
+    from Common import product_ca
+
+    product_ca._cached_cert_pem = None
+    product_ca._cached_fingerprint = None
+    settings.DATA_DIR = tmp_path / "data"
+    settings.DATA_DIR.mkdir(exist_ok=True)
+    monkeypatch.setenv("LOGSTASHUI_INSECURE_HTTP", "true")
+    resp = client.get("/.well-known/logstashui/ca.crt")
+    assert resp.status_code == 404
+    tls_dir = settings.DATA_DIR / "tls"
+    assert not tls_dir.exists() or not any(tls_dir.iterdir())

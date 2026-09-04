@@ -125,6 +125,10 @@ def expand_instance_path(path: str | None, instance_id) -> str | None:
 
 def _sign_csr_if_present(data: dict) -> dict | None:
     """If request includes csr_pem, sign with product CA and return payload fragment."""
+    from LogstashUI.insecure_http import insecure_http
+
+    if insecure_http():
+        return None
     csr_pem = data.get("csr_pem") or data.get("certificate_signing_request")
     if not csr_pem:
         return None
@@ -502,6 +506,11 @@ def issue_server_cert(request):
 
         if not authorized:
             return JsonResponse({"success": False, "error": "Unauthorized"}, status=401)
+
+        from LogstashUI.insecure_http import insecure_http
+
+        if insecure_http():
+            return JsonResponse({"success": True})
 
         from Common.product_ca import sign_agent_csr
 
