@@ -398,11 +398,18 @@ def _exec_gunicorn(gunicorn_cmd: list[str]) -> int:
 
 def cmd_serve(args: argparse.Namespace) -> int:
     from LogstashUI.database import canonical_engine
+    from LogstashUI.insecure_http import insecure_http, warn_if_enabled
     from LogstashUI.paths import resolve_data_dir
 
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "LogstashUI.settings")
     tls_env = os.environ.get("LOGSTASHUI_TLS", "true")
-    tls_on = not args.no_tls and tls_env.strip().lower() not in ("0", "false", "no", "off")
+    tls_on = (
+        not args.no_tls
+        and not insecure_http()
+        and tls_env.strip().lower() not in ("0", "false", "no", "off")
+    )
+    if insecure_http():
+        warn_if_enabled()
 
     engine = canonical_engine(os.environ.get("LOGSTASHUI_DB_ENGINE"))
     if engine == "sqlite" and args.workers > 1:

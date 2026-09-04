@@ -228,3 +228,31 @@ def test_exec_gunicorn_frozen_runs_in_process(monkeypatch):
     assert seen["argv"][0] == "gunicorn"
     assert "LogstashUI.wsgi:application" in seen["argv"]
 
+
+def test_serve_insecure_http_skips_certs_even_when_tls_true(monkeypatch, tmp_path):
+    from LogstashUI import cli
+
+    monkeypatch.setattr(cli, "_manage", lambda argv: None)
+    monkeypatch.setattr(cli, "_check_db_floor", lambda: None)
+    monkeypatch.setenv("LOGSTASHUI_INSECURE_HTTP", "true")
+    monkeypatch.setenv("LOGSTASHUI_TLS", "true")
+    monkeypatch.setenv("LOGSTASHUI_DATA_DIR", str(tmp_path))
+
+    captured = {}
+
+    def fake_execvp(file, args):
+        captured["args"] = list(args)
+        raise SystemExit(0)
+
+    monkeypatch.setattr(cli.os, "execvp", fake_execvp)
+    ns = Namespace(skip_migrate=True, no_tls=False, bind="127.0.0.1:8443", workers=1)
+    try:
+        cmd_serve(ns)
+    except SystemExit:
+        pass
+    assert captured.get("args")
+    assert "--certfile" not in captured["args"]
+    assert "--keyfile" not in captured["args"]
+    tls_dir = tmp_path / "tls"
+    assert not tls_dir.exists() or not any(tls_dir.iterdir())
+
