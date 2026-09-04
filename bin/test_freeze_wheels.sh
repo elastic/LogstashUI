@@ -53,6 +53,7 @@ docker run --rm \
         PYTHON=python3 sh install.sh
         .venv/bin/logstashui --help
         .venv/bin/logstashui manage check
+        .venv/bin/python -c "import opentelemetry.sdk; import opentelemetry.instrumentation.django"
     '
 
 echo "Wheels freeze smoke passed: $ZIP"

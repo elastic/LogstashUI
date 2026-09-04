@@ -46,7 +46,7 @@ Same env as a normal install: `LOGSTASHUI_DATA_DIR` (default `$(pwd)/logstashui_
 
 **Wheels:** Debian/Ubuntu need `python3.12` and `python3.12-venv`. `install.sh` uses `pip install --no-index --find-links ./wheels 'LogstashUI[databases,otel]'`. It does **not** upgrade pip (that would hit PyPI). uv is not required.
 
-**Docker:** UI-only compose (no Agent, no `embedded` profile). Set `ALLOWED_HOSTS` / `LOGSTASHUI_HOST_*` / `LOGSTASHUI_DB_*` as needed.
+**Docker:** UI-only compose (no Agent, no `embedded` profile). Set `ALLOWED_HOSTS` / `LOGSTASHUI_HOST_*` / `LOGSTASHUI_DB_*` as needed. After a local image build, optional extra check: `IMAGE=<tag> bin/test_docker_otel.sh` (imports the OTEL packages; does not start serve). Standalone has no automated smoke.
 
 **Standalone:** experimental PyInstaller onedir. Treat as a trial until `serve` completes migrate, SNMP official sync, collectstatic, and HTTPS :8443 with no network. Gunicorn stays gevent; do not switch workers as a workaround. No automated smoke. Run on a Linux x86_64 builder if you ship this zip.
 
