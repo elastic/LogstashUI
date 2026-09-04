@@ -16,6 +16,11 @@ DEBUG=false
 LOGSTASHUI_BIND=0.0.0.0:8443
 LOGSTASHUI_WORKERS=2
 LOGSTASHUI_TLS=true
+# NOT recommended. Automatic product TLS works out of the box.
+# If you must run the UI and all agent connections over plain HTTP
+# (no CA, no certs), set true. Overrides LOGSTASHUI_TLS. Do not enable
+# without cause. Agents need their own TLS-off flag.
+# LOGSTASHUI_INSECURE_HTTP=false
 ALLOWED_HOSTS=*
 # CSRF_TRUSTED_ORIGINS=https://logstashui.example.com:8443
 

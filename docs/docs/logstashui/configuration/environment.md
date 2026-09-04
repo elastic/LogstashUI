@@ -35,11 +35,37 @@ Relative values resolve from the process working directory.
 | `LOGSTASHUI_BIND` | `0.0.0.0:8443` | gunicorn bind |
 | `LOGSTASHUI_WORKERS` | `2` | gunicorn workers |
 | `LOGSTASHUI_TLS` | `true` | HTTPS with product CA under `$LOGSTASHUI_DATA_DIR/tls/` |
+| `LOGSTASHUI_INSECURE_HTTP` | `false` | **Not recommended.** Plain HTTP for the UI and every agent connection. Overrides `LOGSTASHUI_TLS`. No product CA. See below. |
 | `ALLOWED_HOSTS` | `*` | Django allowed hosts |
 | `CSRF_TRUSTED_ORIGINS` | (dev localhost defaults) | comma-separated origins |
 | `SECRET_KEY` | auto in data dir | Django secret |
 
 Keep `LOGSTASHUI_TLS=true` (the default) in Kubernetes. Ingress/HTTPRoute should originate HTTPS to `:8443` and skip backend cert verify. See [Kubernetes](/docs/docs/logstashui/kubernetes/index.md).
+
+### Plain HTTP (not recommended)
+
+This is **not best practice.** Do not use it in production.
+
+LogstashUI already provisions TLS automatically: a product CA under `$LOGSTASHUI_DATA_DIR/tls/`, a UI leaf for gunicorn, and signed agent certificates at enroll/check-in. That path is supported and works out of the box.
+
+If you **absolutely must** run the UI and all agent connections over plain HTTP (no certificates at all), set:
+
+```bash
+export LOGSTASHUI_INSECURE_HTTP=true
+```
+
+Effects:
+
+- gunicorn serves HTTP (no `--certfile`). Default bind is still `:8443` — the port is not a protocol.
+- `LOGSTASHUI_TLS` is overridden (default or explicit `true`). Startup logs a WARNING and continues.
+- Product CA and UI certificates are **not** generated or refreshed. Leftover files in `$DATA_DIR/tls/` are left on disk.
+- The UI rewrites every agent URL and every `--logstash-ui-url` / callback it emits from `https://` to `http://`.
+- Enrollment tokens omit the CA fingerprint. A CSR in enroll/check-in is ignored; the request still succeeds.
+- `GET /.well-known/logstashui/ca.crt` returns 404.
+
+LogstashAgent needs a matching TLS-off flag on its side. That flag is not configured here.
+
+**This is not `LOGSTASHUI_TLS=false`.** That setting is only for a TLS-terminating ingress: gunicorn speaks HTTP, agents still use HTTPS, and the product CA is still issued. Kubernetes should keep `LOGSTASHUI_TLS=true` and skip-verify at the Gateway/Ingress. See [Kubernetes](/docs/docs/logstashui/kubernetes/index.md).
 
 ---
 

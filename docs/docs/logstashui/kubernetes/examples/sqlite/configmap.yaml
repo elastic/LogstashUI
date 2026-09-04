@@ -16,6 +16,10 @@ data:
   LOGSTASHUI_AGENT_UI_URL: https://logstashui.example.com
   LOGSTASHUI_DB_ENGINE: sqlite
   # db.sqlite3 is created at $LOGSTASHUI_DATA_DIR/db.sqlite3 on the PVC.
+  # NOT recommended. Automatic product TLS works out of the box.
+  # If you must run the UI and all agent connections over plain HTTP
+  # (no CA, no certs), uncomment. Do not enable without cause.
+  # LOGSTASHUI_INSECURE_HTTP: "true"
   # OpenTelemetry (optional). The image already installs LogstashUI[otel].
   # Uncomment to export traces/metrics over OTLP/HTTP (not gRPC — gevent
   # cannot patch grpcio). Point at a collector that accepts HTTP/protobuf

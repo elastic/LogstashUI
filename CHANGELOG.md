@@ -48,6 +48,10 @@ SQLite does not scale under gunicorn/gevent. Operators can now run LogstashUI on
 - Example manifests under `docs/docs/logstashui/kubernetes/examples/{sqlite,postgresql,mysql}/`.
 - Database subsection: engines, every `LOGSTASHUI_DB_*` default, offline dump/load, BETA `migrate-engine`, CREATE DATABASE scripts (`utf8mb4_bin` for MySQL/MariaDB), schema snapshots from 0.5.2 `migrate`.
 
+### Insecure HTTP (escape hatch)
+
+- `LOGSTASHUI_INSECURE_HTTP=true` forces plain HTTP for the UI and every UI→agent URL, skips product CA and certificate generation, and overrides `LOGSTASHUI_TLS`. This is **not** best practice; automatic TLS remains the supported default. It is **not** the same as `LOGSTASHUI_TLS=false` (TLS-terminating ingress). See [Environment](docs/docs/logstashui/configuration/environment.md).
+
 ### Fixes
 
 - `LOGSTASHUI_OTEL=true` without the `[otel]` extra now logs **ERROR** (was INFO) and continues. Docker/K8s and freeze artifacts install `[otel]`; uncomment the OTEL keys in the Kubernetes ConfigMap examples to enable OTLP/HTTP (port 4318, not gRPC 4317).
