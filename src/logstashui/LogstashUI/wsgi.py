@@ -15,24 +15,29 @@ import os
 import ssl
 import sys
 
-from django.core.wsgi import get_wsgi_application
-
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'LogstashUI.settings')
 
 from LogstashUI.database import ensure_psycopg_gevent
 
-# gunicorn --worker-class gevent monkey-patches select before this module loads.
-application = get_wsgi_application()
+
+def build_application():
+    """Init OTEL (mutates MIDDLEWARE) then build the Django WSGI handler.
+
+    gunicorn --worker-class gevent monkey-patches before this module loads.
+    """
+    try:
+        from LogstashUI.telemetry import init_telemetry
+
+        init_telemetry()
+    except Exception:
+        pass
+    from django.core.wsgi import get_wsgi_application
+
+    return get_wsgi_application()
+
+
+application = build_application()
 ensure_psycopg_gevent()
-
-# Runs once per worker, post-fork and post-monkey-patch. No-op unless
-# LOGSTASHUI_OTEL is set and the optional 'otel' extra is installed.
-try:
-    from LogstashUI.telemetry import init_telemetry
-
-    init_telemetry()
-except Exception:
-    pass
 
 # A tarball download dies with its worker, so a restart can leave a .part behind.
 # Clear them here rather than at import of settings, which also runs for every
