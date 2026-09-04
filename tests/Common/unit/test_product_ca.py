@@ -332,3 +332,102 @@ def test_settings_saves_agent_ui_url(admin_client):
     s = Settings.get_settings()
     assert s.agent_ui_url == "https://10.0.0.5:8443"
     assert s.experimental_mode is True
+
+
+def test_ensure_product_ca_disabled_writes_nothing(tmp_path, settings, monkeypatch):
+    from Common import product_ca
+    from Common.product_ca import ProductCADisabled
+
+    product_ca._cached_cert_pem = None
+    product_ca._cached_fingerprint = None
+    settings.BASE_DIR = tmp_path
+    settings.DATA_DIR = tmp_path / "data"
+    settings.DATA_DIR.mkdir(exist_ok=True)
+    monkeypatch.setenv("LOGSTASHUI_INSECURE_HTTP", "true")
+
+    with pytest.raises(ProductCADisabled):
+        product_ca.ensure_product_ca()
+    tls_dir = settings.DATA_DIR / "tls"
+    assert not tls_dir.exists() or not any(tls_dir.iterdir())
+
+
+def test_ensure_default_ui_server_cert_disabled_writes_nothing(tmp_path, settings, monkeypatch):
+    from Common import product_ca
+    from Common.product_ca import ProductCADisabled
+
+    product_ca._cached_cert_pem = None
+    product_ca._cached_fingerprint = None
+    settings.BASE_DIR = tmp_path
+    settings.DATA_DIR = tmp_path / "data"
+    settings.DATA_DIR.mkdir(exist_ok=True)
+    monkeypatch.setenv("LOGSTASHUI_INSECURE_HTTP", "true")
+
+    with pytest.raises(ProductCADisabled):
+        product_ca.ensure_default_ui_server_cert()
+    tls_dir = settings.DATA_DIR / "tls"
+    assert not tls_dir.exists() or not any(tls_dir.iterdir())
+
+
+def test_enrollment_token_omits_fingerprint_when_insecure(tmp_path, settings, monkeypatch):
+    from Common import product_ca
+
+    product_ca._cached_cert_pem = None
+    product_ca._cached_fingerprint = None
+    settings.BASE_DIR = tmp_path
+    settings.DATA_DIR = tmp_path / "data"
+    settings.DATA_DIR.mkdir(exist_ok=True)
+    settings.LOGSTASHUI_CONFIG = {"agent": {"include_ca_fingerprint": True}}
+    monkeypatch.setenv("LOGSTASHUI_INSECURE_HTTP", "true")
+
+    payload = product_ca.build_enrollment_token_payload("secret-token")
+    assert "fingerprint" not in payload
+    tls_dir = settings.DATA_DIR / "tls"
+    assert not tls_dir.exists() or not any(tls_dir.iterdir())
+
+
+def test_agent_requests_verify_false_when_insecure(tmp_path, settings, monkeypatch):
+    from Common import product_ca
+
+    product_ca._cached_cert_pem = None
+    product_ca._cached_fingerprint = None
+    settings.DATA_DIR = tmp_path / "data"
+    settings.DATA_DIR.mkdir(exist_ok=True)
+    monkeypatch.setenv("LOGSTASHUI_INSECURE_HTTP", "true")
+    assert product_ca.agent_requests_verify() is False
+    tls_dir = settings.DATA_DIR / "tls"
+    assert not tls_dir.exists() or not any(tls_dir.iterdir())
+
+
+def test_get_ui_tls_status_insecure_does_not_ensure(tmp_path, settings, monkeypatch):
+    from Common import product_ca
+
+    product_ca._cached_cert_pem = None
+    product_ca._cached_fingerprint = None
+    settings.DATA_DIR = tmp_path / "data"
+    settings.DATA_DIR.mkdir(exist_ok=True)
+    monkeypatch.setenv("LOGSTASHUI_INSECURE_HTTP", "true")
+    status = product_ca.get_ui_tls_status()
+    assert status["insecure_http"] is True
+    assert status["mode"] == "disabled"
+    assert not status.get("product_ca_fingerprint")
+    tls_dir = settings.DATA_DIR / "tls"
+    assert not tls_dir.exists() or not any(tls_dir.iterdir())
+
+
+def test_get_agent_ui_url_default_rewrites_https(settings, monkeypatch):
+    from Common import product_ca
+
+    monkeypatch.setenv("LOGSTASHUI_INSECURE_HTTP", "true")
+    settings.LOGSTASHUI_CONFIG = {
+        "agent": {"ui_url": "https://ui.example:8443", "include_ca_fingerprint": True}
+    }
+
+    class _Fake:
+        agent_ui_url = "https://from-db.example:8443"
+
+    monkeypatch.setattr(
+        "Management.models.Settings.get_settings", lambda: _Fake()
+    )
+    url = product_ca.get_agent_ui_url_default()
+    assert url.startswith("http://")
+    assert "https://" not in url

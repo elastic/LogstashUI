@@ -31,6 +31,19 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
+
+class ProductCADisabled(RuntimeError):
+    """ensure_* called while LOGSTASHUI_INSECURE_HTTP=true."""
+
+
+def _raise_if_insecure_http() -> None:
+    from LogstashUI.insecure_http import insecure_http
+
+    if insecure_http():
+        raise ProductCADisabled(
+            "LOGSTASHUI_INSECURE_HTTP=true: product CA is not generated"
+        )
+
 _lock = threading.Lock()
 _cached_cert_pem: Optional[bytes] = None
 _cached_fingerprint: Optional[str] = None
@@ -108,6 +121,7 @@ def ensure_product_ca() -> Tuple[bytes, str]:
     """
     Ensure product CA exists on disk; return (cert_pem_bytes, fingerprint_hex).
     """
+    _raise_if_insecure_http()
     global _cached_cert_pem, _cached_fingerprint
     with _lock:
         if _cached_cert_pem and _cached_fingerprint:
@@ -158,10 +172,14 @@ def build_enrollment_token_payload(raw_token: str) -> dict:
     Includes fingerprint when agent.include_ca_fingerprint is true (default).
     Does not include ui_url (CLI --logstash-ui-url).
     """
+    from LogstashUI.insecure_http import insecure_http
+
     payload = {
         "enrollment_token": raw_token,
         "token_version": 2,
     }
+    if insecure_http():
+        return payload
     cfg = getattr(settings, "LOGSTASHUI_CONFIG", {}) or {}
     agent_cfg = cfg.get("agent") or {}
     include_fp = agent_cfg.get("include_ca_fingerprint", True)
@@ -186,13 +204,17 @@ def get_agent_ui_url_default() -> str:
 
         db_url = (AppSettings.get_settings().agent_ui_url or "").strip()
         if db_url:
-            return db_url.rstrip("/")
+            from LogstashUI.insecure_http import force_http_url
+
+            return force_http_url(db_url.rstrip("/")) or ""
     except Exception:
         pass
     cfg = getattr(settings, "LOGSTASHUI_CONFIG", {}) or {}
     agent_cfg = cfg.get("agent") or {}
     url = (agent_cfg.get("ui_url") or "").strip()
-    return url.rstrip("/") if url else ""
+    from LogstashUI.insecure_http import force_http_url
+
+    return force_http_url(url.rstrip("/") if url else "") or ""
 
 
 # ---------------------------------------------------------------------------
@@ -555,6 +577,7 @@ def ensure_default_ui_server_cert(
     Re-issues when force=True or when desired SANs (host hostname/IPs, callback URL,
     LOGSTASHUI_TLS_SANS, etc.) are not all present on the current leaf.
     """
+    _raise_if_insecure_http()
     if get_ui_server_mode() == "custom" and ui_server_cert_path().is_file():
         return ui_server_cert_path(), ui_server_key_path()
 
@@ -749,6 +772,19 @@ def ui_tls_paths_for_display() -> dict:
 
 def get_ui_tls_status() -> dict:
     """Status blob for Management → Settings."""
+    from LogstashUI.insecure_http import INSECURE_HTTP_WARNING, insecure_http
+
+    if insecure_http():
+        return {
+            "mode": "disabled",
+            "insecure_http": True,
+            "paths": {},
+            "product_ca_fingerprint": None,
+            "certificate": None,
+            "has_custom": False,
+            "tls_hint": INSECURE_HTTP_WARNING,
+            "nginx_hint": INSECURE_HTTP_WARNING,
+        }
     ensure_product_ca()
     mode = get_ui_server_mode()
     # Ensure product leaf exists when in product mode
@@ -760,6 +796,7 @@ def get_ui_tls_status() -> dict:
 
     status = {
         "mode": mode,
+        "insecure_http": False,
         "paths": ui_tls_paths_for_display(),
         "product_ca_fingerprint": get_ca_fingerprint(),
         "certificate": None,
@@ -931,6 +968,10 @@ def agent_requests_verify() -> Union[bool, str]:
     truncated PEMs and intermittent ``[X509] PEM lib`` SSL failures mid-sim.
     """
     global _agent_verify_bundle_path, _agent_verify_bundle_mtime
+    from LogstashUI.insecure_http import insecure_http
+
+    if insecure_http():
+        return False
     try:
         ensure_product_ca()
         product_path = ca_cert_path()
