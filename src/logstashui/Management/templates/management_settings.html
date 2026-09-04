@@ -156,6 +156,7 @@
         <code class="text-gray-400">{{ tls_status.product_ca_fingerprint }}</code>
       </p>
 
+      {% if not tls_status.insecure_http %}
       <form id="tls-upload-form" class="space-y-4 border-t border-gray-700 pt-4" enctype="multipart/form-data">
         {% csrf_token %}
         <h3 class="text-md font-semibold text-white">Use custom certificate</h3>
@@ -194,6 +195,7 @@
           (use <code class="text-gray-400">bin/start_logstashui.sh</code> so host TLS SANs stay on the leaf).
         </p>
       </div>
+      {% endif %}
     </div>
   </div>
 </div>
@@ -259,54 +261,60 @@
         });
     });
 
-    document.getElementById('tls-upload-form').addEventListener('submit', function(e) {
-        e.preventDefault();
-        const formData = new FormData(this);
-        fetch('/Management/Settings/Tls/', {
-            method: 'POST',
-            body: formData,
-            headers: { 'X-CSRFToken': '{{ csrf_token }}' }
-        })
-        .then(r => r.json())
-        .then(data => {
-            if (data.success) {
-                showToast(data.message, 'success');
-                setTimeout(() => window.location.reload(), 1000);
-            } else {
-                showToast(data.message || 'Upload failed', 'error');
-            }
-        })
-        .catch(err => {
-            console.error(err);
-            showToast('Upload failed', 'error');
+    const tlsUploadForm = document.getElementById('tls-upload-form');
+    if (tlsUploadForm) {
+        tlsUploadForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            fetch('/Management/Settings/Tls/', {
+                method: 'POST',
+                body: formData,
+                headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    showToast(data.message, 'success');
+                    setTimeout(() => window.location.reload(), 1000);
+                } else {
+                    showToast(data.message || 'Upload failed', 'error');
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                showToast('Upload failed', 'error');
+            });
         });
-    });
+    }
 
-    document.getElementById('tls-revert-btn').addEventListener('click', function() {
-        if (!confirm('Revert to the product default certificate? Custom cert files will be replaced.')) {
-            return;
-        }
-        fetch('/Management/Settings/Tls/Revert/', {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': '{{ csrf_token }}',
-                'Content-Type': 'application/json'
-            },
-            body: '{}'
-        })
-        .then(r => r.json())
-        .then(data => {
-            if (data.success) {
-                showToast(data.message, 'success');
-                setTimeout(() => window.location.reload(), 1000);
-            } else {
-                showToast(data.message || 'Revert failed', 'error');
+    const tlsRevertBtn = document.getElementById('tls-revert-btn');
+    if (tlsRevertBtn) {
+        tlsRevertBtn.addEventListener('click', function() {
+            if (!confirm('Revert to the product default certificate? Custom cert files will be replaced.')) {
+                return;
             }
-        })
-        .catch(err => {
-            console.error(err);
-            showToast('Revert failed', 'error');
+            fetch('/Management/Settings/Tls/Revert/', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}',
+                    'Content-Type': 'application/json'
+                },
+                body: '{}'
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    showToast(data.message, 'success');
+                    setTimeout(() => window.location.reload(), 1000);
+                } else {
+                    showToast(data.message || 'Revert failed', 'error');
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                showToast('Revert failed', 'error');
+            });
         });
-    });
+    }
 </script>
 {% endblock %}
