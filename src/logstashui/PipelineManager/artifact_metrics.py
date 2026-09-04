@@ -52,8 +52,8 @@ def init(meter_provider=None):
     global _otel_context
 
     try:
-        from opentelemetry import context as otel_context
-        from opentelemetry import metrics
+        from opentelemetry import context as otel_context  # type: ignore[import-not-found]
+        from opentelemetry import metrics  # type: ignore[import-not-found]
     except ImportError:
         return False
 

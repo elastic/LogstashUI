@@ -20,10 +20,12 @@ easy to get wrong:
   patched ``Condition.wait`` — so it is safe. ``SimpleSpanProcessor`` would put a
   synchronous OTLP round-trip inside every request, including agent check-ins.
 
-Initialization belongs in ``wsgi.py``: it runs once per worker, after the fork
-and after monkey-patching. ``settings.py`` is imported by ``manage.py``, every
-migration, and every ``cli.py`` management command, so initializing there would
-spin up a tracer provider for ``collectstatic``.
+Initialization belongs in ``wsgi.build_application()``: once per worker, after
+the fork and after monkey-patching, and **before** ``get_wsgi_application()``
+so ``DjangoInstrumentor`` can mutate ``MIDDLEWARE`` before the handler
+snapshots it. ``settings.py`` is imported by ``manage.py``, every migration,
+and every ``cli.py`` management command, so initializing there would spin up a
+tracer provider for ``collectstatic``.
 """
 
 import logging
@@ -50,20 +52,20 @@ def init_telemetry():
         return False
 
     try:
-        from opentelemetry import metrics, trace
-        from opentelemetry.exporter.otlp.proto.http.metric_exporter import (
+        from opentelemetry import metrics, trace  # type: ignore[import-not-found]
+        from opentelemetry.exporter.otlp.proto.http.metric_exporter import (  # type: ignore[import-not-found]
             OTLPMetricExporter,
         )
-        from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
+        from opentelemetry.exporter.otlp.proto.http.trace_exporter import (  # type: ignore[import-not-found]
             OTLPSpanExporter,
         )
-        from opentelemetry.instrumentation.django import DjangoInstrumentor
-        from opentelemetry.instrumentation.requests import RequestsInstrumentor
-        from opentelemetry.sdk.metrics import MeterProvider
-        from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
-        from opentelemetry.sdk.resources import Resource
-        from opentelemetry.sdk.trace import TracerProvider
-        from opentelemetry.sdk.trace.export import BatchSpanProcessor
+        from opentelemetry.instrumentation.django import DjangoInstrumentor  # type: ignore[import-not-found]
+        from opentelemetry.instrumentation.requests import RequestsInstrumentor  # type: ignore[import-not-found]
+        from opentelemetry.sdk.metrics import MeterProvider  # type: ignore[import-not-found]
+        from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader  # type: ignore[import-not-found]
+        from opentelemetry.sdk.resources import Resource  # type: ignore[import-not-found]
+        from opentelemetry.sdk.trace import TracerProvider  # type: ignore[import-not-found]
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor  # type: ignore[import-not-found]
     except ImportError:
         logger.error(
             "LOGSTASHUI_OTEL is set but OpenTelemetry is not installed; "
@@ -72,6 +74,11 @@ def init_telemetry():
         return False
 
     try:
+        import django
+
+        if not django.apps.apps.ready:
+            django.setup()
+
         resource = Resource.create({
             'service.name': os.environ.get('OTEL_SERVICE_NAME', 'logstashui'),
         })
@@ -121,7 +128,7 @@ def _start_hub_lag_probe(meter_provider):
     state = {'lag': 0.0}
 
     def _observe(_options):
-        from opentelemetry.metrics import Observation
+        from opentelemetry.metrics import Observation  # type: ignore[import-not-found]
 
         return [Observation(state['lag'])]
 
