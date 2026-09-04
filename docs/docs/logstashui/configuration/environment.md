@@ -67,6 +67,8 @@ LogstashAgent needs a matching TLS-off flag on its side. That flag is not config
 
 **This is not `LOGSTASHUI_TLS=false`.** That setting is only for a TLS-terminating ingress: gunicorn speaks HTTP, agents still use HTTPS, and the product CA is still issued. Kubernetes should keep `LOGSTASHUI_TLS=true` and skip-verify at the Gateway/Ingress. See [Kubernetes](/docs/docs/logstashui/kubernetes/index.md).
 
+**Standard Compose and Kubernetes examples stay HTTPS.** Setting `LOGSTASHUI_INSECURE_HTTP` in the host shell does not enter the UI container. Injecting it without changing the Compose healthcheck (today `https://127.0.0.1:8443/.well-known/logstashui/ca.crt`) leaves the service unhealthy — that endpoint is 404 in this mode. Kubernetes example probes use `scheme: HTTPS`; uncommenting the ConfigMap key without changing probe (and Ingress/HTTPRoute backend) scheme fails the pod. Use this hatch with native `logstashui serve` or a hand-edited systemd EnvironmentFile.
+
 ---
 
 ## Observability

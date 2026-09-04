@@ -51,6 +51,8 @@ SQLite does not scale under gunicorn/gevent. Operators can now run LogstashUI on
 ### Insecure HTTP (escape hatch)
 
 - `LOGSTASHUI_INSECURE_HTTP=true` forces plain HTTP for the UI and every UI→agent URL, skips product CA and certificate generation, and overrides `LOGSTASHUI_TLS`. This is **not** best practice; automatic TLS remains the supported default. It is **not** the same as `LOGSTASHUI_TLS=false` (TLS-terminating ingress). See [Environment](docs/docs/logstashui/configuration/environment.md).
+- Settings TLS **Upload** and **Revert** are hidden in this mode and return **409** before any filesystem change. Leftover `$DATA_DIR/tls/` custom leaves are left intact (`save_custom_ui_certificate` / `revert_ui_certificate_to_product_default` raise `ProductCADisabled` first).
+- Default Compose and Kubernetes examples remain HTTPS. The hatch is native/`logstashui serve` (or a hand-edited EnvironmentFile). StatefulSet examples comment that probes stay `scheme: HTTPS`.
 
 ### Fixes
 

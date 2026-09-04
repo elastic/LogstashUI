@@ -59,6 +59,10 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /var/lib/logstashui
+          # Probes are HTTPS. If you uncomment LOGSTASHUI_INSECURE_HTTP in the
+          # ConfigMap, gunicorn speaks HTTP and these probes will fail until
+          # scheme is HTTP (and Ingress/HTTPRoute backend protocol too).
+          # Do not enable that flag without cause. Automatic TLS is supported.
           startupProbe:
             httpGet:
               path: /
