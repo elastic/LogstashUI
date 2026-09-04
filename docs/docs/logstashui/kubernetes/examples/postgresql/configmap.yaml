@@ -34,3 +34,7 @@ data:
   # LOGSTASHUI_OTEL: "true"
   # OTEL_SERVICE_NAME: logstashui
   # OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector.observability.svc:4318
+  # Embedded simulation agent (optional). Apply examples/embedded-agent.yaml
+  # after uncommenting this key and LOGSTASHUI_AGENT_CSR_SECRET in the Secret.
+  # Leave commented if you are not running the in-cluster embedded node.
+  # LOGSTASH_AGENT_URL: https://logstashagent:9500
