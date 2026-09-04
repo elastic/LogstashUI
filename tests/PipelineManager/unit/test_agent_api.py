@@ -601,6 +601,71 @@ class TestCheckInEndpoint:
         assert data['success'] is False
         assert 'Invalid JSON data' in data['error']
 
+    def _checkin_blob(self, client, connection, api_key, blob):
+        return client.post(
+            '/ConnectionManager/CheckIn/',
+            data=json.dumps({'connection_id': connection.id, 'status_blob': blob}),
+            content_type='application/json',
+            HTTP_AUTHORIZATION=f'ApiKey {api_key}'
+        )
+
+    def test_checkin_records_running_version_from_logstash_api(
+        self, client, test_agent_connection, test_api_key
+    ):
+        """logstash_api.version is the running instance's own report."""
+        response = self._checkin_blob(
+            client, test_agent_connection, test_api_key,
+            {'logstash_api': {'accessible': True, 'version': '9.4.3'}},
+        )
+
+        assert response.status_code == 200
+        test_agent_connection.refresh_from_db()
+        assert test_agent_connection.logstash_version_resolved == '9.4.3'
+
+    def test_checkin_overwrites_a_changed_running_version(
+        self, client, test_agent_connection, test_api_key
+    ):
+        """Upgrading Logstash on the host must move the stored version."""
+        self._checkin_blob(
+            client, test_agent_connection, test_api_key,
+            {'logstash_api': {'version': '8.15.0'}},
+        )
+        self._checkin_blob(
+            client, test_agent_connection, test_api_key,
+            {'logstash_api': {'version': '9.4.3'}},
+        )
+
+        test_agent_connection.refresh_from_db()
+        assert test_agent_connection.logstash_version_resolved == '9.4.3'
+
+    def test_checkin_without_a_version_keeps_the_last_known_one(
+        self, client, test_agent_connection, test_api_key
+    ):
+        """Logstash stopped: report nothing rather than blanking the pill."""
+        self._checkin_blob(
+            client, test_agent_connection, test_api_key,
+            {'logstash_api': {'version': '9.4.3'}},
+        )
+        self._checkin_blob(
+            client, test_agent_connection, test_api_key,
+            {'logstash_api': {'accessible': False}},
+        )
+
+        test_agent_connection.refresh_from_db()
+        assert test_agent_connection.logstash_version_resolved == '9.4.3'
+
+    def test_checkin_prefers_running_version_over_desired(
+        self, client, test_agent_connection, test_api_key
+    ):
+        """`logstash_version` is the policy-desired version, so it loses."""
+        self._checkin_blob(
+            client, test_agent_connection, test_api_key,
+            {'logstash_api': {'version': '9.4.3'}, 'logstash_version': '8.15.0'},
+        )
+
+        test_agent_connection.refresh_from_db()
+        assert test_agent_connection.logstash_version_resolved == '9.4.3'
+
 
 # ============================================================================
 # GetConfigChanges Endpoint Tests

@@ -38,20 +38,33 @@ def resolve_running_logstash_version(
     logstash_version_resolved: str | None = None,
     status_blob: dict | None = None,
 ) -> str | None:
-    resolved = (logstash_version_resolved or "").strip()
-    if resolved:
-        return resolved
-    if not isinstance(status_blob, dict):
-        return None
-    api = status_blob.get("logstash_api")
+    """Best available answer to "which Logstash is running on that host?".
+
+    The status blob is the current check-in and the column is history, so the
+    blob leads. Preferring the column stranded the display: it is only ever
+    written on a truthy value and never cleared, so one recorded version
+    shadowed every later one and the pill froze for the life of the row.
+
+    The column still backs the blob up, which is what keeps the last known
+    version on screen while Logstash is stopped or its API is unreachable.
+    ``logstash_version`` is last because elsewhere it means the policy-*desired*
+    version rather than the running one.
+    """
+    blob = status_blob if isinstance(status_blob, dict) else {}
+    api = blob.get("logstash_api")
     if isinstance(api, dict):
         ver = str(api.get("version") or "").strip()
         if ver:
             return ver
-    for key in ("logstash_version_resolved", "logstash_version"):
-        ver = str(status_blob.get(key) or "").strip()
-        if ver:
-            return ver
+    ver = str(blob.get("logstash_version_resolved") or "").strip()
+    if ver:
+        return ver
+    resolved = (logstash_version_resolved or "").strip()
+    if resolved:
+        return resolved
+    ver = str(blob.get("logstash_version") or "").strip()
+    if ver:
+        return ver
     return None
 
 

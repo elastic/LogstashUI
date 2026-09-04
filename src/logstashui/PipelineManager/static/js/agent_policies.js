@@ -1032,7 +1032,11 @@ document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('.file-tab').forEach(tab => {
         tab.addEventListener('click', function() {
             const file = this.dataset.file;
-            
+
+            // Every branch below either returns or falls through to a different
+            // view, so stop here and let the nodes branch restart it.
+            stopPolicyNodesPolling();
+
             // Update active tab
             document.querySelectorAll('.file-tab').forEach(t => {
                 t.classList.remove('active');
@@ -1191,8 +1195,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (keystoreView) keystoreView.classList.add('hidden');
                 if (nodesView) {
                     nodesView.classList.remove('hidden');
-                    // Load nodes for current policy
+                    // Load nodes for current policy, then keep them current
                     loadPolicyNodes();
+                    startPolicyNodesPolling();
                 }
                 return;
             }
@@ -1552,6 +1557,7 @@ document.addEventListener('DOMContentLoaded', function() {
         setFieldDisabled(document.getElementById('logstashSource'), isEmbedded);
         setFieldDisabled(document.getElementById('logstashVersion'), isEmbedded);
         setFieldDisabled(document.getElementById('logstashDownloadDir'), isEmbedded);
+        setFieldDisabled(document.getElementById('logstashViaUi'), isEmbedded);
         // Port defaults informational for system multi-instance (enroll formula wins)
         setFieldDisabled(document.getElementById('agentApiPort'), isEmbedded || isSystemPathLocked);
         setFieldDisabled(document.getElementById('logstashApiPort'), isEmbedded || isSystemPathLocked);
@@ -1639,6 +1645,11 @@ document.addEventListener('DOMContentLoaded', function() {
         if (hint) {
             hint.classList.toggle('hidden', !showVersion);
         }
+        // Only Managed and Simulate ever download a tarball. Packaged uses the OS
+        // package and Embedded runs in-process, so the proxy is meaningless there.
+        const ptype = document.getElementById('policyTypeSelect')?.value || '';
+        const viaUiApplies = showVersion && (ptype === 'MANAGED' || ptype === 'SIMULATE');
+        document.getElementById('logstashViaUiWrap')?.classList.toggle('hidden', !viaUiApplies);
         syncVersionBinaryPath();
     }
 
@@ -1953,6 +1964,8 @@ async function loadPolicyData(policyValue) {
                 if (versionEl) versionEl.value = policy.logstash_version || '';
                 const downloadEl = document.getElementById('logstashDownloadDir');
                 if (downloadEl) downloadEl.value = policy.logstash_download_dir || '/opt/logstash-agent/logstash-versions';
+                const viaUiEl = document.getElementById('logstashViaUi');
+                if (viaUiEl) viaUiEl.checked = !!policy.logstash_via_ui;
                 syncVersionBinaryPath();
                 const agentPortEl = document.getElementById('agentApiPort');
                 if (agentPortEl) agentPortEl.value = policy.agent_api_port ?? 9500;
@@ -2245,6 +2258,7 @@ async function savePolicyChanges() {
     const logstashSource = document.getElementById('logstashSource')?.value || 'SYSTEM';
     const logstashVersion = document.getElementById('logstashVersion')?.value || '';
     const logstashDownloadDir = document.getElementById('logstashDownloadDir')?.value || '';
+    const logstashViaUi = !!document.getElementById('logstashViaUi')?.checked;
     const agentApiPort = parseInt(document.getElementById('agentApiPort')?.value, 10);
     const logstashApiPort = parseInt(document.getElementById('logstashApiPort')?.value, 10);
     
@@ -2290,6 +2304,7 @@ async function savePolicyChanges() {
         logstash_source: logstashSource,
         logstash_version: logstashVersion,
         logstash_download_dir: logstashDownloadDir,
+        logstash_via_ui: logstashViaUi,
         agent_api_port: Number.isFinite(agentApiPort) ? agentApiPort : undefined,
         logstash_api_port: Number.isFinite(logstashApiPort) ? logstashApiPort : undefined,
         logstash_yml: window.policyFileContents ? window.policyFileContents['logstash.yml'] : '',
@@ -3269,9 +3284,17 @@ const POLICY_CONFIG_FIELD_IDS = [
     'logstashSource',
     'logstashVersion',
     'logstashDownloadDir',
+    'logstashViaUi',
     'agentApiPort',
     'logstashApiPort',
 ];
+
+// A checkbox reports value "on" whether or not it is checked, so reading .value
+// would make logstashViaUi permanently invisible to the change tracker.
+function policyFieldValue(el) {
+    if (!el) return '';
+    return el.type === 'checkbox' ? String(el.checked) : (el.value ?? '');
+}
 
 // Store original content when policy loads
 function storeOriginalContent() {
@@ -3285,7 +3308,7 @@ function storeOriginalContent() {
     
     // Store original Policy Config form fields (paths, simulate source, etc.)
     POLICY_CONFIG_FIELD_IDS.forEach((id) => {
-        originalFileContents[id] = document.getElementById(id)?.value ?? '';
+        originalFileContents[id] = policyFieldValue(document.getElementById(id));
     });
     
     // Reset all visual indicators
@@ -3351,7 +3374,7 @@ function detectChanges() {
     let configChanged = false;
     POLICY_CONFIG_FIELD_IDS.forEach((id) => {
         const el = document.getElementById(id);
-        const current = el?.value ?? '';
+        const current = policyFieldValue(el);
         const original = originalFileContents[id] ?? '';
         const fieldChanged = current !== original;
         if (el) {
@@ -3537,12 +3560,14 @@ function validateJvmHeapSettings() {
 
 // Note: All guide-related functions have been moved to logstashyml_guides.js
 
-// Load nodes for the current policy
-function loadPolicyNodes() {
+// Load nodes for the current policy.
+// `quiet` suppresses toasts, for the background poll below — a flaky network
+// would otherwise stack a new error toast every 10 seconds.
+function loadPolicyNodes({ quiet = false } = {}) {
     const policySelect = document.getElementById('policySelect');
     const selectedOption = policySelect.options[policySelect.selectedIndex];
     const policyId = selectedOption.dataset.policyId;
-    
+
     if (!policyId) {
         console.error('No policy ID available');
         return;
@@ -3555,13 +3580,44 @@ function loadPolicyNodes() {
                 renderPolicyNodes(data.nodes);
             } else {
                 console.error('Error loading nodes:', data.error);
-                showToast(data.error || 'Failed to load nodes', 'error');
+                if (!quiet) showToast(data.error || 'Failed to load nodes', 'error');
             }
         })
         .catch(error => {
             console.error('Error loading nodes:', error);
-            showToast('Failed to load nodes', 'error');
+            if (!quiet) showToast('Failed to load nodes', 'error');
         });
+}
+
+// The Agents table has no live channel of its own — unlike the Connections
+// page, which has an SSE stream — so poll while it is on screen. That is what
+// keeps the LS version pill current after Logstash is upgraded on a host.
+// 10s rather than the stream's 5s: GetPolicyNodes does per-node SNMP and CPM
+// lookups, and this is a fetch per client rather than work the server is
+// already doing.
+const NODES_POLL_MS = 10000;
+let _nodesPollTimer = null;
+
+function startPolicyNodesPolling() {
+    stopPolicyNodesPolling();
+    _nodesPollTimer = setInterval(() => {
+        // A hidden tab still fires intervals. Skip the fetch rather than the
+        // timer, so polling resumes the moment the tab is focused again.
+        if (document.hidden) return;
+        const nodesView = document.getElementById('nodesView');
+        if (!nodesView || nodesView.classList.contains('hidden')) {
+            stopPolicyNodesPolling();
+            return;
+        }
+        loadPolicyNodes({ quiet: true });
+    }, NODES_POLL_MS);
+}
+
+function stopPolicyNodesPolling() {
+    if (_nodesPollTimer !== null) {
+        clearInterval(_nodesPollTimer);
+        _nodesPollTimer = null;
+    }
 }
 
 // Render nodes in the table

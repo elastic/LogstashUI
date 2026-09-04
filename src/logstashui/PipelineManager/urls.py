@@ -3,8 +3,8 @@
 #you may not use this file except in compliance with the Elastic License.
 
 from django.urls import path
-from . import agent_api, simulation, manager_views, editor_views, policies_crud, agent_policies, connections_crud, \
-    pipelines_crud
+from . import agent_api, artifacts, simulation, manager_views, editor_views, policies_crud, agent_policies, \
+    connections_crud, pipelines_crud
 
 urlpatterns = [
 
@@ -54,7 +54,11 @@ urlpatterns = [
     path("CheckIn/", agent_api.check_in, name="CheckIn"),
     path("IssueServerCert/", agent_api.issue_server_cert, name="IssueServerCert"),
     path("GetConfigChanges/", agent_api.get_config_changes, name="GetConfigChanges"),
-    
+    # connection_id is in the path because a GET has no body to carry it, and an
+    # agent key cannot be resolved from the Authorization header alone.
+    path("LogstashArtifact/<int:connection_id>/<str:filename>",
+         artifacts.serve_artifact, name="LogstashArtifact"),
+
     path("GetKeystoreEntries/", agent_policies.get_keystore_entries, name="GetKeystoreEntries"),
     path("CreateKeystoreEntry/", agent_policies.create_keystore_entry, name="CreateKeystoreEntry"),
     path("UpdateKeystoreEntry/", agent_policies.update_keystore_entry, name="UpdateKeystoreEntry"),

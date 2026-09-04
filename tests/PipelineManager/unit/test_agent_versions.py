@@ -39,22 +39,53 @@ class TestDeriveVersionBinaryPath:
 
 
 class TestResolveRunningLogstashVersion:
-    def test_prefers_column(self):
+    def test_live_api_version_beats_stale_column(self):
+        """The blob is this check-in; the column is history.
+
+        Preferring the column froze the LS pill: the column is only written on
+        a truthy value and never cleared, so the first version ever recorded
+        shadowed every later one.
+        """
         assert resolve_running_logstash_version(
-            logstash_version_resolved="9.4.3",
-            status_blob={"logstash_api": {"version": "8.0.0"}},
+            logstash_version_resolved="8.0.0",
+            status_blob={"logstash_api": {"version": "9.4.3"}},
         ) == "9.4.3"
 
-    def test_falls_back_to_api_version(self):
+    def test_blob_resolved_beats_column(self):
         assert resolve_running_logstash_version(
-            logstash_version_resolved="",
-            status_blob={"logstash_api": {"version": "9.1.0"}},
-        ) == "9.1.0"
+            logstash_version_resolved="8.0.0",
+            status_blob={"logstash_version_resolved": "9.4.3"},
+        ) == "9.4.3"
 
-    def test_falls_back_to_blob_keys(self):
+    def test_api_version_beats_blob_resolved(self):
+        assert resolve_running_logstash_version(
+            status_blob={
+                "logstash_api": {"version": "9.4.3"},
+                "logstash_version_resolved": "9.1.0",
+            }
+        ) == "9.4.3"
+
+    def test_column_used_when_blob_reports_no_version(self):
+        """Logstash stopped or its API unreachable: keep the last known version."""
+        assert resolve_running_logstash_version(
+            logstash_version_resolved="9.4.3",
+            status_blob={"logstash_api": {"accessible": False}},
+        ) == "9.4.3"
+
+    def test_column_used_when_blob_absent(self):
+        assert resolve_running_logstash_version(
+            logstash_version_resolved="9.4.3"
+        ) == "9.4.3"
+
+    def test_desired_version_is_last_resort(self):
+        """`logstash_version` is the policy-desired version, not the running one."""
         assert resolve_running_logstash_version(
             status_blob={"logstash_version": "8.15.0"}
         ) == "8.15.0"
+        assert resolve_running_logstash_version(
+            logstash_version_resolved="9.4.3",
+            status_blob={"logstash_version": "8.15.0"},
+        ) == "9.4.3"
 
     def test_missing_returns_none(self):
         assert resolve_running_logstash_version() is None

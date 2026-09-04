@@ -283,6 +283,25 @@ def materialize_simulate_logstash_yml(
     return "\n".join(lines) + ("\n" if lines else "")
 
 
+def logstash_via_ui(policy: Policy) -> bool:
+    """Effective value of the "download Logstash from LogstashUI" flag.
+
+    The stored field is only meaningful for a MANAGED or SIMULATE policy that
+    pins a version; PACKAGED uses the OS package and EMBEDDED runs in-process,
+    so neither ever downloads a tarball. Normalizing here rather than at each
+    call site means a stale True left behind by a policy-type change cannot leak
+    out to an agent.
+    """
+    if not getattr(policy, "logstash_via_ui", False):
+        return False
+    if policy.logstash_source != Policy.LogstashSource.VERSION:
+        return False
+    return normalize_policy_type(policy.policy_type) in (
+        Policy.PolicyType.MANAGED,
+        Policy.PolicyType.SIMULATE,
+    )
+
+
 def build_policy_config(policy: Policy, *, instance_id: int | None = None) -> dict:
     """
     Build enrollment / apply policy_config payload.
@@ -307,6 +326,7 @@ def build_policy_config(policy: Policy, *, instance_id: int | None = None) -> di
             "logstash_download_dir": normalize_agent_opt_path(
                 policy.logstash_download_dir or f"{AGENT_OPT_ROOT}/logstash-versions"
             ),
+            "logstash_via_ui": False,
             "logstash_yml": materialize_simulate_logstash_yml(
                 policy.logstash_yml, EMBEDDED_LOGSTASH_API_PORT, instance_id=None
             ),
@@ -342,6 +362,7 @@ def build_policy_config(policy: Policy, *, instance_id: int | None = None) -> di
             "logstash_source": policy.logstash_source,
             "logstash_version": policy.logstash_version or "",
             "logstash_download_dir": download_dir,
+            "logstash_via_ui": logstash_via_ui(policy),
             "logstash_unit": f"ls-simulate@{instance_id}",
             "agent_unit": f"lsagent-simulate@{instance_id}",
             "logstash_yml": yml,
@@ -375,6 +396,7 @@ def build_policy_config(policy: Policy, *, instance_id: int | None = None) -> di
             "logstash_source": policy.logstash_source,
             "logstash_version": policy.logstash_version or "",
             "logstash_download_dir": download_dir or f"{AGENT_OPT_ROOT}/logstash-versions",
+            "logstash_via_ui": logstash_via_ui(policy),
             "logstash_unit": f"logstash-managed@{instance_id}",
             "agent_unit": f"logstash-agent@{instance_id}",
             "path_root": paths["path_root"],
@@ -397,6 +419,7 @@ def build_policy_config(policy: Policy, *, instance_id: int | None = None) -> di
         "logstash_source": policy.logstash_source or "SYSTEM",
         "logstash_version": policy.logstash_version or "",
         "logstash_download_dir": normalize_agent_opt_path(policy.logstash_download_dir or ""),
+        "logstash_via_ui": False,
         "logstash_unit": "logstash",
         "agent_unit": "logstash-agent",
         "logstash_yml": policy.logstash_yml,

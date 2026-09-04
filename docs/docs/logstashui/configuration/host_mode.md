@@ -22,7 +22,9 @@
 - Root for `logstash-agent install --enroll …` (or non-root enroll + `sudo logstash-agent setup-simulate`)
 - Logstash binary available either:
   - **SYSTEM** — package or tarball already on the host, or
-  - **VERSION** — agent downloads from Elastic artifacts into `/opt/logstash-agent/logstash-versions/`
+  - **VERSION** — agent downloads into `/opt/logstash-agent/logstash-versions/`, from Elastic
+    artifacts or, with [the tarball proxy](/docs/docs/logstashui/configuration/logstash_proxy.md)
+    enabled, from LogstashUI
 - Reachable LogstashUI URL from the agent host
 
 ## Install a simulate agent

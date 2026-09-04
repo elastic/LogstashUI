@@ -1,0 +1,172 @@
+<!--
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License;
+ * you may not use this file except in compliance with the Elastic License.
+-->
+
+{% extends "base.html" %}
+
+{% block content %}
+<script>
+  // Configure HTMX to include CSRF token in all requests
+  document.body.addEventListener('htmx:configRequest', (event) => {
+    event.detail.headers['X-CSRFToken'] = '{{ csrf_token }}';
+  });
+</script>
+<div class="p-6">
+  <div class="flex justify-between items-center mb-2">
+    <h1 class="text-2xl font-bold text-white">Logstash Tarballs</h1>
+    <div class="flex items-center gap-2">
+      <!-- 204 means "work started"; anything else is an error div to display. -->
+      <button hx-post="{% url 'LogstashArtifacts' %}"
+              hx-vals='{"action": "import"}'
+              hx-target="#artifactResult"
+              hx-on::after-request="if (event.detail.xhr.status === 204) { window.location.reload(); }"
+              class="btn btn-secondary flex items-center gap-2"
+              type="button">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+        </svg>
+        Import from disk
+      </button>
+      <button onclick="openDownloadModal()"
+              class="btn btn-primary flex items-center gap-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+        </svg>
+        Download Tarball
+      </button>
+    </div>
+  </div>
+  <p class="text-gray-400 mb-2">
+    LogstashUI fetches each release once and serves it to every agent whose policy has
+    <strong class="text-gray-300">Download the tarball from LogstashUI</strong> enabled,
+    instead of each agent pulling ~450&nbsp;MB from Elastic.
+  </p>
+  <p class="text-xs text-gray-500 mb-6">
+    Cache: <code class="font-mono text-gray-400">{{ artifact_dir }}</code>
+    &middot; Source: <code class="font-mono text-gray-400">{{ base_url }}</code>
+    (change under <a href="/Management/Settings/" class="text-primary hover:underline">Settings</a>)
+  </p>
+
+  <div id="artifactResult"></div>
+
+  <div class="bg-gray-800 rounded-lg shadow-xl overflow-hidden">
+    <table class="table w-full">
+      <thead>
+        <tr class="bg-gray-700 border-b border-gray-600">
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Tarball</th>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Version</th>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Status</th>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Size</th>
+          <th class="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Served</th>
+          <th class="px-6 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">Actions</th>
+        </tr>
+      </thead>
+      {% include 'components/logstash_artifact_tbody.html' %}
+    </table>
+  </div>
+</div>
+
+<!-- Download Tarball Modal -->
+<div id="downloadModal" class="hidden fixed inset-0 z-50 overflow-y-auto">
+  <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="closeDownloadModal()"></div>
+  <div class="flex items-center justify-center min-h-screen p-4">
+    <div class="relative bg-base-200 rounded-lg shadow-xl w-full max-w-2xl">
+      <div class="flex justify-between items-center p-6 border-b border-base-300">
+        <h2 class="text-xl font-bold">Download Logstash Tarball</h2>
+        <button onclick="closeDownloadModal()" class="btn btn-ghost btn-sm btn-circle">
+          <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      <div class="p-6">
+        <div id="downloadResult"></div>
+        <form id="downloadForm"
+              hx-post="{% url 'LogstashArtifacts' %}"
+              hx-vals='{"action": "download"}'
+              hx-target="#downloadResult"
+              hx-on::after-request="if (event.detail.xhr.status === 204) { window.location.reload(); }">
+          {% csrf_token %}
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div>
+              <label class="block text-gray-300 text-sm font-medium mb-2" for="artifact-version">
+                Version
+              </label>
+              <input type="text" id="artifact-version" name="version"
+                     placeholder="e.g., 9.4.3"
+                     class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-primary">
+            </div>
+            <div>
+              <label class="block text-gray-300 text-sm font-medium mb-2" for="artifact-arch">
+                Architecture
+              </label>
+              <select id="artifact-arch" name="arch"
+                      class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-primary">
+                <option value="linux-x86_64">linux-x86_64</option>
+                <option value="linux-aarch64">linux-aarch64</option>
+              </select>
+            </div>
+          </div>
+          <div class="mb-4">
+            <label class="block text-gray-300 text-sm font-medium mb-2" for="artifact-url">
+              Or a full URL (optional)
+            </label>
+            <input type="text" id="artifact-url" name="source_url"
+                   placeholder="https://mirror.internal/logstash-9.4.3-linux-x86_64.tar.gz"
+                   class="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-primary">
+            <p class="mt-2 text-xs text-gray-400">
+              Overrides version and architecture. The filename at the end of the URL must
+              still look like a Logstash release tarball.
+            </p>
+          </div>
+          <div class="p-3 mb-4 bg-blue-500/10 border border-blue-500/40 rounded-lg text-blue-200 text-xs">
+            The download runs in the background and its SHA-512 is verified before the
+            tarball is published. Agents asking for it in the meantime get a retry
+            response, not a partial file.
+          </div>
+          <div class="flex items-center justify-end space-x-3 pt-6 mt-6 border-t border-gray-700">
+            <button type="button" onclick="closeDownloadModal()" class="btn btn-secondary">
+              Cancel
+            </button>
+            <button type="submit" class="btn btn-primary">
+              Start Download
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  function openDownloadModal() {
+    document.getElementById('downloadResult').innerHTML = '';
+    document.getElementById('downloadForm').reset();
+    document.getElementById('downloadModal').classList.remove('hidden');
+  }
+
+  function closeDownloadModal() {
+    document.getElementById('downloadModal').classList.add('hidden');
+  }
+
+  // Row kebab menus: position at the cursor, close on outside click.
+  document.addEventListener('click', function (event) {
+    const button = event.target.closest('.action-menu-button');
+    document.querySelectorAll('.action-menu-items').forEach(function (menu) {
+      if (!button || menu !== button.parentElement.querySelector('.action-menu-items')) {
+        menu.classList.add('hidden');
+      }
+    });
+    if (button) {
+      const menu = button.parentElement.querySelector('.action-menu-items');
+      const rect = button.getBoundingClientRect();
+      menu.style.top = rect.bottom + 'px';
+      menu.style.left = rect.left + 'px';
+      menu.classList.toggle('hidden');
+      event.stopPropagation();
+    }
+  });
+</script>
+{% endblock %}

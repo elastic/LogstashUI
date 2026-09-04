@@ -789,3 +789,74 @@ class TestCreatePipelineAdditional:
             pipeline_config='input {} filter {} output {}'
         )
         assert response.status_code == 500
+
+
+# ============================================================================
+# AgentStatusStream (SSE) Tests
+# ============================================================================
+
+@pytest.mark.django_db
+class TestAgentStatusStream:
+    """The SSE payload feeding the live badges on the Connections page."""
+
+    def _first_event(self, authenticated_client):
+        """Read one event and abandon the stream.
+
+        The generator yields before its five-second sleep, so taking the first
+        chunk and dropping the iterator never blocks.
+        """
+        response = authenticated_client.get('/ConnectionManager/AgentStatusStream/')
+        chunk = next(iter(response.streaming_content)).decode()
+        assert chunk.startswith('data: ')
+        return json.loads(chunk[len('data: '):].strip())
+
+    def _agent(self, **kwargs):
+        from PipelineManager.models import Policy
+
+        policy = Policy.objects.create(
+            name='SSE Policy',
+            settings_path='/etc/logstash/',
+            logs_path='/var/log/logstash',
+            binary_path='/usr/share/logstash/bin',
+            logstash_yml='',
+            jvm_options='',
+            log4j2_properties='',
+        )
+        return Connection.objects.create(
+            name='sse-agent',
+            connection_type='AGENT',
+            host='agent.example.com',
+            agent_id='sse-001',
+            is_active=True,
+            policy=policy,
+            **kwargs,
+        )
+
+    def test_payload_carries_the_running_logstash_version(self, authenticated_client, db):
+        """Without this the LS pill only changed on a full page reload."""
+        self._agent(status_blob={'logstash_api': {'version': '9.4.3'}})
+
+        events = self._first_event(authenticated_client)
+
+        assert len(events) == 1
+        assert events[0]['logstash_version'] == '9.4.3'
+        assert {'id', 'name', 'status'} <= set(events[0])
+
+    def test_payload_prefers_the_live_version_over_the_stored_one(
+        self, authenticated_client, db
+    ):
+        self._agent(
+            logstash_version_resolved='8.15.0',
+            status_blob={'logstash_api': {'version': '9.4.3'}},
+        )
+
+        events = self._first_event(authenticated_client)
+
+        assert events[0]['logstash_version'] == '9.4.3'
+
+    def test_payload_version_is_null_when_never_reported(self, authenticated_client, db):
+        self._agent(status_blob={})
+
+        events = self._first_event(authenticated_client)
+
+        assert events[0]['logstash_version'] is None

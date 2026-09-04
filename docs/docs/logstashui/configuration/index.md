@@ -16,6 +16,13 @@ Database engines and `LOGSTASHUI_DB_*`: **[Database](/docs/docs/logstashui/datab
 
 `logstashui.yml` is [removed](/docs/docs/logstashui/configuration/logstashui.yml.md).
 
+### **[Logstash tarball proxy](/docs/docs/logstashui/configuration/logstash_proxy.md)**
+
+Cache each Logstash release once and serve it to every agent, instead of each agent pulling ~450 MB
+from Elastic. Required for air-gapped sites.
+
+**📖 [View the tarball proxy guide →](/docs/docs/logstashui/configuration/logstash_proxy.md)**
+
 ---
 
 ## Simulation Configuration

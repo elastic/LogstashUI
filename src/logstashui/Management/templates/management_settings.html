@@ -70,6 +70,26 @@
             <code class="text-gray-400">{% if app_settings.agent_ui_url %}{{ app_settings.agent_ui_url }}{% else %}&lt;ui_url&gt;{% endif %}/.well-known/logstashui/ca.crt</code>
           </p>
         </div>
+
+        <!-- Logstash tarball source -->
+        <div class="p-6">
+          <h3 class="text-lg font-semibold text-white mb-2">Logstash tarball source</h3>
+          <p class="text-sm text-gray-400 mb-3">
+            Where LogstashUI fetches Logstash release tarballs for the
+            <a href="/Management/LogstashArtifacts/" class="text-blue-400 hover:underline">tarball proxy</a>.
+            Leave blank to use Elastic's artifact host. Point it at an internal mirror to
+            keep fetches inside your network.
+          </p>
+          <input type="url" name="logstash_artifact_base_url" id="logstash_artifact_base_url"
+                 value="{{ app_settings.logstash_artifact_base_url|default:'' }}"
+                 placeholder="https://artifacts.elastic.co/downloads/logstash"
+                 oninput="markAsModified()"
+                 class="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded-md text-gray-200 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <p class="text-xs text-gray-500 mt-2">
+            Tarballs are read as <code class="text-gray-400">&lt;base&gt;/logstash-&lt;version&gt;-linux-x86_64.tar.gz</code>,
+            with the matching <code class="text-gray-400">.sha512</code> alongside.
+          </p>
+        </div>
       </div>
     </div>
 
@@ -174,13 +194,16 @@
 <script>
     let originalExperimentalMode = {{ app_settings.experimental_mode|yesno:"true,false" }};
     let originalAgentUiUrl = "{{ app_settings.agent_ui_url|default:''|escapejs }}";
+    let originalArtifactBaseUrl = "{{ app_settings.logstash_artifact_base_url|default:''|escapejs }}";
 
     function markAsModified() {
         const currentExperimentalMode = document.getElementById('experimental_mode').checked;
         const currentAgentUiUrl = document.getElementById('agent_ui_url').value.trim();
+        const currentArtifactBaseUrl = document.getElementById('logstash_artifact_base_url').value.trim();
         const isModified =
             originalExperimentalMode !== currentExperimentalMode ||
-            originalAgentUiUrl !== currentAgentUiUrl;
+            originalAgentUiUrl !== currentAgentUiUrl ||
+            originalArtifactBaseUrl !== currentArtifactBaseUrl;
 
         const saveButton = document.getElementById('save-button');
         const unsavedChanges = document.getElementById('unsaved-changes');
@@ -212,6 +235,7 @@
                 showToast(data.message || 'Settings saved successfully', 'success');
                 originalExperimentalMode = document.getElementById('experimental_mode').checked;
                 originalAgentUiUrl = document.getElementById('agent_ui_url').value.trim();
+                originalArtifactBaseUrl = document.getElementById('logstash_artifact_base_url').value.trim();
                 markAsModified();
                 setTimeout(() => window.location.reload(), 800);
             } else {

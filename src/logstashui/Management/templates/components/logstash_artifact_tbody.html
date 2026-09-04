@@ -1,0 +1,26 @@
+<!--
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License;
+ * you may not use this file except in compliance with the Elastic License.
+ *
+ * The polling attributes live on the tbody itself and are swapped with it
+ * (outerHTML), so once every row has settled the replacement carries no
+ * hx-trigger and the page stops polling on its own.
+-->
+<tbody class="divide-y divide-gray-700" id="artifactTableBody"
+       {% if in_flight %}hx-get="{% url 'LogstashArtifacts' %}?rows=1"
+       hx-trigger="every 3s"
+       hx-target="#artifactTableBody"
+       hx-swap="outerHTML"{% endif %}>
+  {% for artifact in artifacts %}
+    {% include 'components/logstash_artifact_row.html' %}
+  {% empty %}
+    <tr>
+      <td colspan="6" class="px-6 py-8 text-center text-sm text-gray-400">
+        No tarballs cached yet. Use <strong class="text-gray-300">Download Tarball</strong>,
+        or copy one into the cache directory and click
+        <strong class="text-gray-300">Import from disk</strong>.
+      </td>
+    </tr>
+  {% endfor %}
+</tbody>

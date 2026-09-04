@@ -140,7 +140,9 @@ Policies can set **Logstash binary source**:
 
 1. Save the policy in LogstashUI (Source = VERSION, pin e.g. `9.4.3`).
 2. **No separate Deploy is required for binary-only changes** — the next agent check-in detects runtime drift.
-3. Agent downloads (if needed) into `/opt/logstash-agent/logstash-versions/<version>/`.
+3. Agent downloads (if needed) into `/opt/logstash-agent/logstash-versions/<version>/` — from Elastic
+   artifacts, or from LogstashUI when the policy enables
+   [the tarball proxy](/docs/docs/logstashui/configuration/logstash_proxy.md).
 4. Writes `LOGSTASH_BINARY=` into the instance `env` file.
 5. Restarts the Logstash unit when the binary path or pin changes.
 6. Reports resolved version on check-in (`status_blob.logstash_version_resolved`).

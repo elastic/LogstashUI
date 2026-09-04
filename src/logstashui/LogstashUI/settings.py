@@ -21,7 +21,12 @@ from Common.encryption import get_django_secret_key
 from .config import CONFIG, merge_allowed_hosts
 from .database import build_databases
 from .logging_config import resolve_django_log_levels, resolve_log_level
-from .paths import resolve_data_dir, resolve_docs_dir, resolve_logs_dir
+from .paths import (
+    resolve_data_dir,
+    resolve_docs_dir,
+    resolve_logs_dir,
+    resolve_logstash_dir,
+)
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -252,6 +257,9 @@ LOGIN_REQUIRED_IGNORE_PATHS = [
     "/ConnectionManager/GetConfigChanges",
     "/ConnectionManager/IssueServerCert/",
     "/ConnectionManager/IssueServerCert",
+    # Prefix match: covers /LogstashArtifact/<connection_id>/<filename>.
+    # The view authenticates the agent key itself.
+    "/ConnectionManager/LogstashArtifact/",
 ]
 
 # Session Configuration
@@ -324,6 +332,25 @@ else:
     LOGSTASH_AGENT_URL = os.environ.get(
         'LOGSTASH_AGENT_URL', 'https://logstashagent:9500'
     )
+
+# Logstash tarball proxy
+# Cache of Logstash release tarballs served to agents whose policy sets
+# logstash_via_ui. See PipelineManager/artifacts.py.
+LOGSTASH_DIR = resolve_logstash_dir(DATA_DIR)
+LOGSTASH_DIR.mkdir(parents=True, exist_ok=True)
+
+# Upstream fetches in flight cluster-wide, counted in the DB (the only state
+# shared between gunicorn workers -- there is no CACHES backend configured).
+LOGSTASH_ARTIFACT_MAX_UPSTREAM = int(
+    os.environ.get('LOGSTASHUI_ARTIFACT_MAX_UPSTREAM', '2')
+)
+# Concurrent agent downloads *per worker*. Effective total is this value times
+# LOGSTASHUI_WORKERS. Deliberately not a global divided by worker count: that
+# truncates to zero and makes the knob lie.
+LOGSTASH_ARTIFACT_MAX_SERVE_PER_WORKER = int(
+    os.environ.get('LOGSTASHUI_ARTIFACT_MAX_SERVE_PER_WORKER', '4')
+)
+LOGSTASH_ARTIFACT_DEFAULT_BASE_URL = 'https://artifacts.elastic.co/downloads/logstash'
 
 # Logging Configuration
 # https://docs.djangoproject.com/en/5.2/topics/logging/

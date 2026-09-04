@@ -16,6 +16,7 @@ urlpatterns = [
     path("Logs/filter", views.LogsFilter, name="LogsFilter"),
     path("Logs/download", views.LogsDownload, name="LogsDownload"),
     path("ApiTokens/", views.ApiTokens, name="ApiTokens"),
+    path("LogstashArtifacts/", views.LogstashArtifacts, name="LogstashArtifacts"),
     path("Settings/", views.SettingsView, name="Settings"),
     path("Settings/Tls/", views.SettingsTlsUpload, name="SettingsTlsUpload"),
     path("Settings/Tls/Revert/", views.SettingsTlsRevert, name="SettingsTlsRevert"),

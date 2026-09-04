@@ -35,6 +35,7 @@ def get_policies(request):
             'settings_path', 'logs_path', 'binary_path', 'data_path',
             'agent_api_port', 'logstash_api_port', 'keystore_env_file',
             'logstash_source', 'logstash_version', 'logstash_download_dir',
+            'logstash_via_ui',
             'logstash_yml', 'jvm_options', 'log4j2_properties',
             'current_revision_number', 'last_deployed_at',
             'connection_count', 'created_at', 'updated_at'
@@ -146,6 +147,7 @@ def add_policy(request):
             logstash_download_dir=normalize_agent_opt_path(
                 data.get('logstash_download_dir') or '/opt/logstash-agent/logstash-versions'
             ) or '/opt/logstash-agent/logstash-versions',
+            logstash_via_ui=bool(data.get('logstash_via_ui', False)),
             agent_api_port=_optional_int('agent_api_port', agent_port_default),
             logstash_api_port=_optional_int('logstash_api_port', ls_port_default),
             logstash_yml=logstash_yml,
@@ -265,6 +267,8 @@ def update_policy(request):
                 policy.logstash_download_dir = normalize_agent_opt_path(
                     data['logstash_download_dir']
                 ) or data['logstash_download_dir']
+            if 'logstash_via_ui' in data:
+                policy.logstash_via_ui = bool(data['logstash_via_ui'])
             if 'binary_path' in data:
                 policy.binary_path = normalize_agent_opt_path(data['binary_path']) or data[
                     'binary_path'
@@ -302,6 +306,8 @@ def update_policy(request):
                 policy.logstash_download_dir = normalize_agent_opt_path(
                     data['logstash_download_dir']
                 ) or data['logstash_download_dir']
+            if 'logstash_via_ui' in data:
+                policy.logstash_via_ui = bool(data['logstash_via_ui'])
             if 'agent_api_port' in data and data['agent_api_port'] is not None:
                 try:
                     policy.agent_api_port = int(data['agent_api_port'])
@@ -472,6 +478,7 @@ def clone_policy(request):
             logstash_version=source_policy.logstash_version,
             logstash_download_dir=normalize_agent_opt_path(source_policy.logstash_download_dir)
             or source_policy.logstash_download_dir,
+            logstash_via_ui=source_policy.logstash_via_ui,
             logstash_yml=source_policy.logstash_yml,
             jvm_options=source_policy.jvm_options,
             log4j2_properties=source_policy.log4j2_properties,

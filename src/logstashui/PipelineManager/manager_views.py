@@ -374,8 +374,10 @@ def agent_status_stream(request):
     """
     SSE endpoint — streams agent status for all agent connections every 5 seconds.
 
-    Each event is a JSON array of objects: {id, name, status}
+    Each event is a JSON array of objects: {id, name, status, logstash_version}
     where status is one of: 'restarting' | 'unhealthy' | 'healthy' | 'offline'
+    and logstash_version is the running Logstash version, or null if the agent
+    has never reported one.
 
     This mirrors the priority logic in the pipeline_manager.html template so the
     JS can update badges without a full page reload.
@@ -424,12 +426,16 @@ def agent_status_stream(request):
 
                 now = datetime.now(timezone.utc)
                 from PipelineManager.agent_modes import is_embedded_connection
+                from PipelineManager.agent_versions import (
+                    resolve_running_logstash_version,
+                )
 
                 connections = [
                     conn
                     for conn in ConnectionTable.objects
                     .filter(connection_type=ConnectionTable.ConnectionType.AGENT)
-                    .values('pk', 'name', 'last_check_in', 'status_blob', 'agent_id', 'policy__policy_type')
+                    .values('pk', 'name', 'last_check_in', 'status_blob', 'agent_id',
+                            'policy__policy_type', 'logstash_version_resolved')
                     if not is_embedded_connection(conn)
                 ]
 
@@ -439,8 +445,20 @@ def agent_status_stream(request):
                     else:
                         conn['is_online'] = False
 
+                # status_blob is already selected for _compute_status, so the
+                # version rides along for free and the LS pill stops needing a
+                # page reload to notice a Logstash upgrade.
                 payload = json.dumps([
-                    {'id': conn['pk'], 'name': conn['name'], 'status': _compute_status(conn)}
+                    {
+                        'id': conn['pk'],
+                        'name': conn['name'],
+                        'status': _compute_status(conn),
+                        'logstash_version': resolve_running_logstash_version(
+                            logstash_version_resolved=conn.get('logstash_version_resolved'),
+                            status_blob=conn.get('status_blob')
+                            if isinstance(conn.get('status_blob'), dict) else None,
+                        ),
+                    }
                     for conn in connections
                 ])
                 yield f"data: {payload}\n\n"

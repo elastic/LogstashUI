@@ -152,11 +152,13 @@ freeze_wheels() {
     [[ -n "$whl" && -f "$whl" ]] || die "uv build did not produce dist/logstashui-${VERSION}-*.whl"
     cp "$whl" "$wheels/"
 
-    echo "==> uv export --frozen --extra databases"
-    (cd "$ROOT" && uv export --frozen --no-dev --extra databases --no-emit-project \
+    # otel rides along so an air-gapped site can still enable tracing with
+    # LOGSTASHUI_OTEL=true. It is inert until then.
+    echo "==> uv export --frozen --extra databases --extra otel"
+    (cd "$ROOT" && uv export --frozen --no-dev --extra databases --extra otel --no-emit-project \
         -o "$req" >/dev/null)
     local req_plain="$OUT/requirements-offline.nohash.txt"
-    (cd "$ROOT" && uv export --frozen --no-dev --extra databases --no-emit-project --no-hashes \
+    (cd "$ROOT" && uv export --frozen --no-dev --extra databases --extra otel --no-emit-project --no-hashes \
         -o "$req_plain" >/dev/null)
 
     echo "==> download manylinux cp312 wheels (pure-python sdists → wheel on builder)"
@@ -175,7 +177,7 @@ freeze_wheels() {
         echo "git ${GIT_SHA}"
         echo "python CPython 3.12"
         echo "platform linux-x86_64"
-        echo "extra databases"
+        echo "extras databases otel"
         echo
         echo "wheels:"
         (cd "$wheels" && ls -1 *.whl | sort)

@@ -25,6 +25,25 @@ from LogstashUI.database import ensure_psycopg_gevent
 application = get_wsgi_application()
 ensure_psycopg_gevent()
 
+# Runs once per worker, post-fork and post-monkey-patch. No-op unless
+# LOGSTASHUI_OTEL is set and the optional 'otel' extra is installed.
+try:
+    from LogstashUI.telemetry import init_telemetry
+
+    init_telemetry()
+except Exception:
+    pass
+
+# A tarball download dies with its worker, so a restart can leave a .part behind.
+# Clear them here rather than at import of settings, which also runs for every
+# management command.
+try:
+    from PipelineManager.artifacts import sweep_partials
+
+    sweep_partials()
+except Exception:
+    pass
+
 
 # Quiet gevent/gunicorn spam: clients that reject the product CA (browser
 # probes, scanners, default-trust Python) abort the handshake with

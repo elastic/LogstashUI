@@ -46,6 +46,14 @@ databases = [
     "psycopg[binary]>=3.2.0",
     "PyMySQL>=1.1.1",
 ]
+# Deliberately HTTP/protobuf, never gRPC: grpcio's native C-core threads cannot
+# be monkey-patched by gevent and deadlock under the gunicorn worker class.
+otel = [
+    "opentelemetry-sdk>=1.30.0",
+    "opentelemetry-exporter-otlp-proto-http>=1.30.0",
+    "opentelemetry-instrumentation-django>=0.51b0",
+    "opentelemetry-instrumentation-requests>=0.51b0",
+]
 
 [tool.uv]
 package = true

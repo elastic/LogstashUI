@@ -347,16 +347,29 @@ def SettingsView(request):
         try:
             experimental_mode = request.POST.get('experimental_mode') == 'on'
             agent_ui_url = (request.POST.get('agent_ui_url') or '').strip()
+            artifact_base_url = (
+                request.POST.get('logstash_artifact_base_url') or ''
+            ).strip()
+
+            if artifact_base_url and not artifact_base_url.startswith(
+                ('http://', 'https://')
+            ):
+                return JsonResponse({
+                    'success': False,
+                    'message': 'Tarball source must start with http:// or https://',
+                })
 
             app_settings = Settings.get_settings()
             previous_url = (app_settings.agent_ui_url or "").strip()
             app_settings.experimental_mode = experimental_mode
             app_settings.agent_ui_url = agent_ui_url
+            app_settings.logstash_artifact_base_url = artifact_base_url
             app_settings.save()
 
             logger.info(
                 f"User '{request.user.username}' updated settings "
-                f"(experimental_mode={experimental_mode}, agent_ui_url={agent_ui_url!r})"
+                f"(experimental_mode={experimental_mode}, agent_ui_url={agent_ui_url!r}, "
+                f"logstash_artifact_base_url={artifact_base_url!r})"
             )
 
             cert_note = ""
@@ -563,3 +576,150 @@ def ApiTokens(request):
         return _token_error('Unknown action.')
 
     return render(request, 'api_tokens.html', {'tokens': _all_tokens()})
+
+
+# ---------------------------------------------------------------------------
+# Logstash tarball cache
+# ---------------------------------------------------------------------------
+
+def _artifact_error(message):
+    return HttpResponse(
+        '<div class="p-4 mb-4 bg-red-500/10 border border-red-500/50 rounded-lg '
+        f'text-red-300 text-sm">{escape(message)}</div>'
+    )
+
+
+def _artifact_in_flight(artifacts):
+    from PipelineManager.models import LogstashArtifact
+
+    return any(
+        a.status in (
+            LogstashArtifact.Status.FETCHING,
+            LogstashArtifact.Status.IMPORTING,
+        )
+        for a in artifacts
+    )
+
+
+def _render_artifact_tbody(artifacts, request):
+    """Render the whole tbody, not just rows.
+
+    The polling attributes live on the tbody, so it has to be swapped as a unit
+    (outerHTML) for polling to be able to stop.
+    """
+    return render_to_string('components/logstash_artifact_tbody.html', {
+        'artifacts': artifacts,
+        'in_flight': _artifact_in_flight(artifacts),
+        'csrf_token': request.META.get('CSRF_COOKIE', ''),
+    }, request=request)
+
+
+@require_admin_role
+def LogstashArtifacts(request):
+    """Manage the cache of Logstash tarballs served to agents.
+
+    Downloads happen in a background greenlet, so both the download and import
+    actions return immediately and the table polls itself while anything is in
+    flight. There is no upload action: 450 MB through a browser is not viable.
+    """
+    from PipelineManager import artifacts as artifact_lib
+    from PipelineManager.models import LogstashArtifact, parse_artifact_filename
+
+    def _all_artifacts():
+        """Artifacts, each tagged with whether a policy still pins its version.
+
+        Deleting an in-use tarball is allowed — an operator may be reclaiming
+        disk deliberately — but it silently sends every agent on that policy
+        into a 503 retry loop, so the row says so before they click.
+        """
+        from PipelineManager.models import Policy
+
+        in_use = set(
+            Policy.objects.filter(
+                logstash_via_ui=True,
+                logstash_source=Policy.LogstashSource.VERSION,
+            ).values_list('logstash_version', flat=True)
+        )
+        rows = list(LogstashArtifact.objects.all())
+        for row in rows:
+            row.in_use = row.version in in_use
+        return rows
+
+    def _table():
+        return HttpResponse(_render_artifact_tbody(_all_artifacts(), request))
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+
+        if action == 'download':
+            url = (request.POST.get('source_url') or '').strip()
+            if url:
+                if not url.startswith(('http://', 'https://')):
+                    return _artifact_error('A full URL must start with http:// or https://.')
+                filename = url.rsplit('/', 1)[-1]
+            else:
+                version = (request.POST.get('version') or '').strip()
+                arch = (request.POST.get('arch') or 'linux-x86_64').strip()
+                if not version:
+                    return _artifact_error('A Logstash version is required.')
+                filename = f'logstash-{version}-{arch}.tar.gz'
+
+            if parse_artifact_filename(filename) is None:
+                return _artifact_error(
+                    f'"{filename}" is not a recognized Logstash tarball name. '
+                    'Expected logstash-<version>-linux-x86_64.tar.gz or similar.'
+                )
+
+            artifact = artifact_lib.get_or_create_artifact(filename, source_url=url)
+            if artifact.status == LogstashArtifact.Status.READY:
+                return _artifact_error(f'{filename} is already cached.')
+
+            artifact_lib.start_fetch(artifact)
+            logger.info(
+                f"User '{request.user.username}' requested Logstash tarball {filename}"
+            )
+            # 204 is the "work started" signal the page reloads on. An error
+            # comes back as 200 with an HTML fragment, so the two never collide.
+            return HttpResponse(status=204)
+
+        if action == 'import':
+            imported = artifact_lib.scan_for_imports()
+            if not imported:
+                return _artifact_error(
+                    'No new tarballs found. Copy them into '
+                    f'{artifact_lib.artifact_dir()} and try again.'
+                )
+            logger.info(
+                f"User '{request.user.username}' imported {len(imported)} "
+                f"Logstash tarball(s): {', '.join(imported)}"
+            )
+            return HttpResponse(status=204)
+
+        if action == 'delete':
+            artifact = LogstashArtifact.objects.filter(
+                id=request.POST.get('artifact_id')
+            ).first()
+            if artifact is None:
+                return _artifact_error('Tarball not found.')
+            logger.warning(
+                f"User '{request.user.username}' deleted Logstash tarball "
+                f"{artifact.filename}"
+            )
+            artifact_lib.delete_artifact(artifact)
+            return _table()
+
+        if action == 'rows':
+            return _table()
+
+        return _artifact_error('Unknown action.')
+
+    if request.GET.get('rows'):
+        return _table()
+
+    artifacts = _all_artifacts()
+    return render(request, 'logstash_artifacts.html', {
+        'artifacts': artifacts,
+        'artifact_dir': artifact_lib.artifact_dir(),
+        'base_url': artifact_lib.upstream_base_url(),
+        'in_flight': _artifact_in_flight(artifacts),
+    })
