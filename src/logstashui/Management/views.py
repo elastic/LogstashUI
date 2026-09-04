@@ -425,6 +425,13 @@ def SettingsTlsUpload(request):
     """Upload a custom UI server certificate (replaces product default leaf only)."""
     if request.method != 'POST':
         return JsonResponse({'success': False, 'message': 'Method not allowed'}, status=405)
+    from LogstashUI.insecure_http import INSECURE_HTTP_WARNING, insecure_http
+
+    if insecure_http():
+        return JsonResponse(
+            {"success": False, "message": INSECURE_HTTP_WARNING},
+            status=409,
+        )
     try:
         from Common.product_ca import save_custom_ui_certificate, get_ui_tls_status
 
@@ -463,6 +470,13 @@ def SettingsTlsRevert(request):
     """Revert UI server cert to product-CA-signed default."""
     if request.method != 'POST':
         return JsonResponse({'success': False, 'message': 'Method not allowed'}, status=405)
+    from LogstashUI.insecure_http import INSECURE_HTTP_WARNING, insecure_http
+
+    if insecure_http():
+        return JsonResponse(
+            {"success": False, "message": INSECURE_HTTP_WARNING},
+            status=409,
+        )
     try:
         from Common.product_ca import revert_ui_certificate_to_product_default
 

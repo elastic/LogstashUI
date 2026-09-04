@@ -489,3 +489,44 @@ def test_revert_raises_and_preserves_files_when_insecure(tmp_path, settings, mon
     assert (tls / "ui-server.crt").read_bytes() == cert_bytes
     assert (tls / "ui-server.key").read_bytes() == key_bytes
     assert (tls / "ui-server.mode").read_text() == "custom"
+
+
+def test_tls_upload_409_preserves_custom_leaf_when_insecure(
+    admin_client, tmp_path, settings, monkeypatch
+):
+    from django.core.files.uploadedfile import SimpleUploadedFile
+
+    tls, cert_bytes, key_bytes = _seed_custom_leaf(settings, tmp_path)
+    monkeypatch.setenv("LOGSTASHUI_INSECURE_HTTP", "true")
+    resp = admin_client.post(
+        "/Management/Settings/Tls/",
+        {
+            "certificate": SimpleUploadedFile("cert.pem", b"NEW-CERT"),
+            "private_key": SimpleUploadedFile("key.pem", b"NEW-KEY"),
+        },
+    )
+    assert resp.status_code == 409
+    data = resp.json()
+    assert data["success"] is False
+    assert "INSECURE_HTTP" in data["message"]
+    assert (tls / "ui-server.crt").read_bytes() == cert_bytes
+    assert (tls / "ui-server.key").read_bytes() == key_bytes
+
+
+def test_tls_revert_409_preserves_custom_leaf_when_insecure(
+    admin_client, tmp_path, settings, monkeypatch
+):
+    tls, cert_bytes, key_bytes = _seed_custom_leaf(settings, tmp_path)
+    monkeypatch.setenv("LOGSTASHUI_INSECURE_HTTP", "true")
+    resp = admin_client.post(
+        "/Management/Settings/Tls/Revert/",
+        data="{}",
+        content_type="application/json",
+    )
+    assert resp.status_code == 409
+    data = resp.json()
+    assert data["success"] is False
+    assert "INSECURE_HTTP" in data["message"]
+    assert (tls / "ui-server.crt").read_bytes() == cert_bytes
+    assert (tls / "ui-server.key").read_bytes() == key_bytes
+    assert (tls / "ui-server.mode").read_text() == "custom"
