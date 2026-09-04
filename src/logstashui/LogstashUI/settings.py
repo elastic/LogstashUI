@@ -19,6 +19,14 @@ import os, platform
 from importlib.metadata import version, PackageNotFoundError
 from Common.encryption import get_django_secret_key
 from .config import CONFIG, merge_allowed_hosts
+from .insecure_http import (
+    force_http_origins,
+    force_http_url,
+    insecure_http,
+    secure_cookies,
+    tls_enabled,
+    warn_if_enabled,
+)
 from .database import build_databases
 from .logging_config import resolve_django_log_levels, resolve_log_level
 from .paths import (
@@ -280,7 +288,7 @@ USE_X_FORWARDED_PORT = True
 # Example: CSRF_TRUSTED_ORIGINS=https://myserver.com,https://192.168.1.100
 csrf_origins_env = os.environ.get("CSRF_TRUSTED_ORIGINS", "")
 if csrf_origins_env:
-    CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in csrf_origins_env.split(",")]
+    CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in csrf_origins_env.split(",") if origin.strip()]
 else:
     # Default for local development
     CSRF_TRUSTED_ORIGINS = [
@@ -290,33 +298,34 @@ else:
         "https://127.0.0.1",
     ]
 
+INSECURE_HTTP = insecure_http()
+if INSECURE_HTTP:
+    CSRF_TRUSTED_ORIGINS = force_http_origins(CSRF_TRUSTED_ORIGINS, enabled=True)
+
 # Security Headers
 # These settings protect against common web vulnerabilities
 # Only enforce in production (when DEBUG=False)
 _tls_env = os.environ.get("LOGSTASHUI_TLS", "true")
-TLS_ENABLED = _tls_env.strip().lower() not in ("0", "false", "no", "off")
+TLS_ENABLED = tls_enabled(tls_env=_tls_env, insecure=INSECURE_HTTP)
+if INSECURE_HTTP:
+    warn_if_enabled()
+
+_secure_cookies = secure_cookies(debug=DEBUG, insecure=INSECURE_HTTP)
 
 if not DEBUG:
-    # Ensure cookies are only sent over HTTPS
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
-
-    # HTTP Strict Transport Security (HSTS)
-    # Tells browsers to only access the site via HTTPS for the next year
-    SECURE_HSTS_SECONDS = 31536000  # 1 year
-    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-    SECURE_HSTS_PRELOAD = True
-
-    # Only redirect when TLS is actually on — LOGSTASHUI_TLS=false must suppress this
+    SESSION_COOKIE_SECURE = _secure_cookies
+    CSRF_COOKIE_SECURE = _secure_cookies
+    if _secure_cookies:
+        SECURE_HSTS_SECONDS = 31536000  # 1 year
+        SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+        SECURE_HSTS_PRELOAD = True
+    else:
+        SECURE_HSTS_SECONDS = 0
+        SECURE_HSTS_INCLUDE_SUBDOMAINS = False
+        SECURE_HSTS_PRELOAD = False
     SECURE_SSL_REDIRECT = TLS_ENABLED
-
-    # Prevent the site from being embedded in iframes (clickjacking protection)
     X_FRAME_OPTIONS = "DENY"
-
-    # Prevent browsers from guessing content types
     SECURE_CONTENT_TYPE_NOSNIFF = True
-
-    # Enable browser's XSS filtering
     SECURE_BROWSER_XSS_FILTER = True
 else:
     # Development mode - allow HTTP for local testing
@@ -334,6 +343,7 @@ else:
     LOGSTASH_AGENT_URL = os.environ.get(
         "LOGSTASH_AGENT_URL", "https://logstashagent:9500"
     )
+LOGSTASH_AGENT_URL = force_http_url(LOGSTASH_AGENT_URL, enabled=INSECURE_HTTP)
 
 # Logstash tarball proxy
 # Cache of Logstash release tarballs served to agents whose policy sets
