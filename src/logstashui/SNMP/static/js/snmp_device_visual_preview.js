@@ -29,8 +29,21 @@ function toggleDevicePreview(deviceId) {
         .then(data => {
           indicator.classList.add('hidden');
 
-          if (data.success) {
+          if (data.success && !data.no_data) {
             renderDevicePreview(deviceId, data.device, data.visualizations);
+          } else if (data.no_data) {
+            contentDiv.innerHTML = `
+              <div class="flex flex-col items-center text-center py-8 px-6 gap-3">
+                <div class="inline-flex items-center justify-center w-12 h-12 bg-blue-600/20 rounded-full">
+                  <svg class="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <p class="text-white font-medium">We aren&apos;t seeing any results in Elasticsearch yet.</p>
+                <p class="text-sm text-gray-400">If you have already deployed this configuration and still see no results, check your Logstash logs.</p>
+              </div>
+            `;
           } else {
             contentDiv.innerHTML = `
               <div class="text-center text-red-400 py-4">

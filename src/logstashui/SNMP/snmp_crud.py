@@ -4329,6 +4329,8 @@ def get_visualizations(device):
 
     # Decide what visualizations to show and fetch the data
     visualizations = decide_visualizations(device, es)
+    if not visualizations.get('success'):
+        return {'success': True, 'visualizations': [], 'no_data': True}
     return generate_visualizations(visualizations['results'], device, es)
 
 
