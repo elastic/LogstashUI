@@ -5,6 +5,7 @@
 from django.http import JsonResponse
 
 from PipelineManager.models import Revision, Policy, Connection as ConnectionTable, Keystore
+from PipelineManager.agent_versions import resolve_running_logstash_version
 
 from Common.decorators import require_admin_role
 
@@ -636,6 +637,10 @@ def get_policy_nodes(request):
                 "status_class": status_class,
                 "last_check_in": node.last_check_in.isoformat() if node.last_check_in else None,
                 "agent_version": node.status_blob.get('agent_version') if node.status_blob else None,
+                "logstash_version": resolve_running_logstash_version(
+                    logstash_version_resolved=node.logstash_version_resolved,
+                    status_blob=node.status_blob if isinstance(node.status_blob, dict) else None,
+                ),
                 "cpm_enabled": cpm_enabled,
                 "snmp_networks": sorted(snmp_networks_by_conn.get(node.id, [])),
             })

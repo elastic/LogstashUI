@@ -78,11 +78,13 @@ cd src/logstashui/theme/static_src
 npm install && npm run build
 cd ../../../..
 uv build
-# dist/logstashui-0.5.1.tar.gz
-# dist/logstashui-0.5.1-py3-none-any.whl
+# dist/logstashui-0.5.2.tar.gz
+# dist/logstashui-0.5.2-py3-none-any.whl
 ```
 
 The wheel includes systemd templates (`LogstashUI/packaging/`) and the `logstashui` console script.
+
+Air-gapped hosts that cannot reach PyPI or a registry: optional `bin/freeze_logstashui.sh` (not default packaging). See [Air-gapped freeze](/docs/docs/logstashui/general/offline.md).
 
 ---
 

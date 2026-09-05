@@ -13,8 +13,10 @@ from django.core.exceptions import ValidationError
 from django.template.loader import render_to_string
 from django.conf import settings
 from django.db import transaction
+from django.utils import timezone
 from .models import UserProfile, Settings
 from django.http import JsonResponse
+from datetime import timedelta
 import logging
 import json
 import os
@@ -345,24 +347,40 @@ def SettingsView(request):
         try:
             experimental_mode = request.POST.get('experimental_mode') == 'on'
             agent_ui_url = (request.POST.get('agent_ui_url') or '').strip()
+            artifact_base_url = (
+                request.POST.get('logstash_artifact_base_url') or ''
+            ).strip()
+
+            if artifact_base_url and not artifact_base_url.startswith(
+                ('http://', 'https://')
+            ):
+                return JsonResponse({
+                    'success': False,
+                    'message': 'Tarball source must start with http:// or https://',
+                })
 
             app_settings = Settings.get_settings()
             previous_url = (app_settings.agent_ui_url or "").strip()
             app_settings.experimental_mode = experimental_mode
             app_settings.agent_ui_url = agent_ui_url
+            app_settings.logstash_artifact_base_url = artifact_base_url
             app_settings.save()
 
             logger.info(
                 f"User '{request.user.username}' updated settings "
-                f"(experimental_mode={experimental_mode}, agent_ui_url={agent_ui_url!r})"
+                f"(experimental_mode={experimental_mode}, agent_ui_url={agent_ui_url!r}, "
+                f"logstash_artifact_base_url={artifact_base_url!r})"
             )
 
             cert_note = ""
             if agent_ui_url != previous_url:
                 try:
+                    from LogstashUI.insecure_http import insecure_http
                     from Common.product_ca import ensure_default_ui_server_cert, get_ui_server_mode
 
-                    if get_ui_server_mode() == "product":
+                    if insecure_http():
+                        cert_note = ""
+                    elif get_ui_server_mode() == "product":
                         ensure_default_ui_server_cert()  # re-issues when SANs change
                         cert_note = (
                             " Product UI certificate was re-checked for new callback URL SANs; "
@@ -407,6 +425,13 @@ def SettingsTlsUpload(request):
     """Upload a custom UI server certificate (replaces product default leaf only)."""
     if request.method != 'POST':
         return JsonResponse({'success': False, 'message': 'Method not allowed'}, status=405)
+    from LogstashUI.insecure_http import INSECURE_HTTP_WARNING, insecure_http
+
+    if insecure_http():
+        return JsonResponse(
+            {"success": False, "message": INSECURE_HTTP_WARNING},
+            status=409,
+        )
     try:
         from Common.product_ca import save_custom_ui_certificate, get_ui_tls_status
 
@@ -445,6 +470,13 @@ def SettingsTlsRevert(request):
     """Revert UI server cert to product-CA-signed default."""
     if request.method != 'POST':
         return JsonResponse({'success': False, 'message': 'Method not allowed'}, status=405)
+    from LogstashUI.insecure_http import INSECURE_HTTP_WARNING, insecure_http
+
+    if insecure_http():
+        return JsonResponse(
+            {"success": False, "message": INSECURE_HTTP_WARNING},
+            status=409,
+        )
     try:
         from Common.product_ca import revert_ui_certificate_to_product_default
 
@@ -458,3 +490,253 @@ def SettingsTlsRevert(request):
     except Exception as e:
         logger.error(f"Error reverting TLS certificate: {e}", exc_info=True)
         return JsonResponse({'success': False, 'message': f'Error: {e}'}, status=500)
+
+
+# ---------------------------------------------------------------------------
+# API tokens
+# ---------------------------------------------------------------------------
+
+def _token_error(message):
+    return HttpResponse(
+        '<div class="p-4 mb-4 bg-red-500/10 border border-red-500/50 rounded-lg '
+        f'text-red-300 text-sm">{escape(message)}</div>'
+    )
+
+
+def _generate_token_table_rows(tokens, request):
+    """Render the token table body, reused for htmx swaps after revoke/delete."""
+    rows_html = ''
+    for token in tokens:
+        rows_html += render_to_string('components/api_token_row.html', {
+            'token': token,
+            'csrf_token': request.META.get('CSRF_COOKIE', ''),
+        }, request=request)
+    return rows_html
+
+
+@require_admin_role
+def ApiTokens(request):
+    """Mint, list, revoke and delete admin API tokens.
+
+    A token acts as its owning user, so the caller's own account is the owner —
+    that keeps audit lines like "User 'x' added connection" meaningful, and
+    means a readonly user's token is readonly.
+    """
+    from PipelineManager.models import ApiKey
+
+    def _all_tokens():
+        return (
+            ApiKey.objects.filter(user__isnull=False)
+            .select_related('user')
+            .order_by('-created_at', '-id')
+        )
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+
+        if action == 'create':
+            name = (request.POST.get('name') or '').strip()
+            if not name:
+                return _token_error('A token name is required.')
+            if len(name) > 100:
+                return _token_error('Token name must be 100 characters or fewer.')
+
+            expires_at = None
+            raw_days = (request.POST.get('expires_days') or '').strip()
+            if raw_days:
+                try:
+                    days = int(raw_days)
+                except ValueError:
+                    return _token_error('Expiry must be a whole number of days.')
+                if days < 1:
+                    return _token_error('Expiry must be at least 1 day.')
+                expires_at = timezone.now() + timedelta(days=days)
+
+            token, raw = ApiKey.issue_for_user(
+                request.user, name=name, expires_at=expires_at
+            )
+            # Deliberately not logged — this is the only time the secret exists.
+            logger.info(
+                f"User '{request.user.username}' created API token '{name}' "
+                f"(prefix {token.prefix})"
+            )
+            return render(request, 'components/api_token_created.html', {
+                'token': token,
+                'raw_token': raw,
+            })
+
+        if action in ('revoke', 'delete'):
+            token_id = request.POST.get('token_id')
+            token = ApiKey.objects.filter(
+                id=token_id, user__isnull=False
+            ).first()
+            if token is None:
+                return _token_error('Token not found.')
+
+            if action == 'revoke':
+                if token.revoked_at is None:
+                    token.revoked_at = timezone.now()
+                    token.save()
+                logger.warning(
+                    f"User '{request.user.username}' revoked API token "
+                    f"'{token.name}' (prefix {token.prefix})"
+                )
+            else:
+                logger.warning(
+                    f"User '{request.user.username}' deleted API token "
+                    f"'{token.name}' (prefix {token.prefix})"
+                )
+                token.delete()
+
+            return HttpResponse(_generate_token_table_rows(_all_tokens(), request))
+
+        return _token_error('Unknown action.')
+
+    return render(request, 'api_tokens.html', {'tokens': _all_tokens()})
+
+
+# ---------------------------------------------------------------------------
+# Logstash tarball cache
+# ---------------------------------------------------------------------------
+
+def _artifact_error(message):
+    return HttpResponse(
+        '<div class="p-4 mb-4 bg-red-500/10 border border-red-500/50 rounded-lg '
+        f'text-red-300 text-sm">{escape(message)}</div>'
+    )
+
+
+def _artifact_in_flight(artifacts):
+    from PipelineManager.models import LogstashArtifact
+
+    return any(
+        a.status in (
+            LogstashArtifact.Status.FETCHING,
+            LogstashArtifact.Status.IMPORTING,
+        )
+        for a in artifacts
+    )
+
+
+def _render_artifact_tbody(artifacts, request):
+    """Render the whole tbody, not just rows.
+
+    The polling attributes live on the tbody, so it has to be swapped as a unit
+    (outerHTML) for polling to be able to stop.
+    """
+    return render_to_string('components/logstash_artifact_tbody.html', {
+        'artifacts': artifacts,
+        'in_flight': _artifact_in_flight(artifacts),
+        'csrf_token': request.META.get('CSRF_COOKIE', ''),
+    }, request=request)
+
+
+@require_admin_role
+def LogstashArtifacts(request):
+    """Manage the cache of Logstash tarballs served to agents.
+
+    Downloads happen in a background greenlet, so both the download and import
+    actions return immediately and the table polls itself while anything is in
+    flight. There is no upload action: 450 MB through a browser is not viable.
+    """
+    from PipelineManager import artifacts as artifact_lib
+    from PipelineManager.models import LogstashArtifact, parse_artifact_filename
+
+    def _all_artifacts():
+        """Artifacts, each tagged with whether a policy still pins its version.
+
+        Deleting an in-use tarball is allowed — an operator may be reclaiming
+        disk deliberately — but it silently sends every agent on that policy
+        into a 503 retry loop, so the row says so before they click.
+        """
+        from PipelineManager.models import Policy
+
+        in_use = set(
+            Policy.objects.filter(
+                logstash_via_ui=True,
+                logstash_source=Policy.LogstashSource.VERSION,
+            ).values_list('logstash_version', flat=True)
+        )
+        rows = list(LogstashArtifact.objects.all())
+        for row in rows:
+            row.in_use = row.version in in_use
+        return rows
+
+    def _table():
+        return HttpResponse(_render_artifact_tbody(_all_artifacts(), request))
+
+    if request.method == 'POST':
+        action = request.POST.get('action')
+
+        if action == 'download':
+            url = (request.POST.get('source_url') or '').strip()
+            if url:
+                if not url.startswith(('http://', 'https://')):
+                    return _artifact_error('A full URL must start with http:// or https://.')
+                filename = url.rsplit('/', 1)[-1]
+            else:
+                version = (request.POST.get('version') or '').strip()
+                arch = (request.POST.get('arch') or 'linux-x86_64').strip()
+                if not version:
+                    return _artifact_error('A Logstash version is required.')
+                filename = f'logstash-{version}-{arch}.tar.gz'
+
+            if parse_artifact_filename(filename) is None:
+                return _artifact_error(
+                    f'"{filename}" is not a recognized Logstash tarball name. '
+                    'Expected logstash-<version>-linux-x86_64.tar.gz or similar.'
+                )
+
+            artifact = artifact_lib.get_or_create_artifact(filename, source_url=url)
+            if artifact.status == LogstashArtifact.Status.READY:
+                return _artifact_error(f'{filename} is already cached.')
+
+            artifact_lib.start_fetch(artifact)
+            logger.info(
+                f"User '{request.user.username}' requested Logstash tarball {filename}"
+            )
+            # 204 is the "work started" signal the page reloads on. An error
+            # comes back as 200 with an HTML fragment, so the two never collide.
+            return HttpResponse(status=204)
+
+        if action == 'import':
+            imported = artifact_lib.scan_for_imports()
+            if not imported:
+                return _artifact_error(
+                    'No new tarballs found. Copy them into '
+                    f'{artifact_lib.artifact_dir()} and try again.'
+                )
+            logger.info(
+                f"User '{request.user.username}' imported {len(imported)} "
+                f"Logstash tarball(s): {', '.join(imported)}"
+            )
+            return HttpResponse(status=204)
+
+        if action == 'delete':
+            artifact = LogstashArtifact.objects.filter(
+                id=request.POST.get('artifact_id')
+            ).first()
+            if artifact is None:
+                return _artifact_error('Tarball not found.')
+            logger.warning(
+                f"User '{request.user.username}' deleted Logstash tarball "
+                f"{artifact.filename}"
+            )
+            artifact_lib.delete_artifact(artifact)
+            return _table()
+
+        if action == 'rows':
+            return _table()
+
+        return _artifact_error('Unknown action.')
+
+    if request.GET.get('rows'):
+        return _table()
+
+    artifacts = _all_artifacts()
+    return render(request, 'logstash_artifacts.html', {
+        'artifacts': artifacts,
+        'artifact_dir': artifact_lib.artifact_dir(),
+        'base_url': artifact_lib.upstream_base_url(),
+        'in_flight': _artifact_in_flight(artifacts),
+    })

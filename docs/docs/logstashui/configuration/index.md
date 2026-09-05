@@ -12,7 +12,16 @@ Data dir, TLS, bind address, `LOGSTASHUI_NO_AUTH`, agent URL, systemd, and Kuber
 
 **📖 [View environment configuration →](/docs/docs/logstashui/configuration/environment.md)**
 
+Database engines and `LOGSTASHUI_DB_*`: **[Database](/docs/docs/logstashui/database/index.md)**. Kubernetes manifests: **[Kubernetes](/docs/docs/logstashui/kubernetes/index.md)**.
+
 `logstashui.yml` is [removed](/docs/docs/logstashui/configuration/logstashui.yml.md).
+
+### **[Logstash tarball proxy](/docs/docs/logstashui/configuration/logstash_proxy.md)**
+
+Cache each Logstash release once and serve it to every agent, instead of each agent pulling ~450 MB
+from Elastic. Required for air-gapped sites.
+
+**📖 [View the tarball proxy guide →](/docs/docs/logstashui/configuration/logstash_proxy.md)**
 
 ---
 

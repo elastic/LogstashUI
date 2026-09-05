@@ -15,11 +15,40 @@ import os
 import ssl
 import sys
 
-from django.core.wsgi import get_wsgi_application
-
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'LogstashUI.settings')
 
-application = get_wsgi_application()
+from LogstashUI.database import ensure_psycopg_gevent
+
+
+def build_application():
+    """Init OTEL (mutates MIDDLEWARE) then build the Django WSGI handler.
+
+    gunicorn --worker-class gevent monkey-patches before this module loads.
+    """
+    try:
+        from LogstashUI.telemetry import init_telemetry
+
+        init_telemetry()
+    except Exception:
+        pass
+    from django.core.wsgi import get_wsgi_application
+
+    return get_wsgi_application()
+
+
+application = build_application()
+ensure_psycopg_gevent()
+
+# A tarball download dies with its worker, so a restart can leave a .part behind.
+# Clear them here rather than at import of settings, which also runs for every
+# management command.
+try:
+    from PipelineManager.artifacts import sweep_partials
+
+    sweep_partials()
+except Exception:
+    pass
+
 
 # Quiet gevent/gunicorn spam: clients that reject the product CA (browser
 # probes, scanners, default-trust Python) abort the handshake with

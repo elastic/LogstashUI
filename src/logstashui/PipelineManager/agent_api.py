@@ -24,6 +24,7 @@ from .agent_modes import (
     materialize_simulate_logstash_yml,
     next_managed_instance_id,
     next_simulate_instance_id,
+    logstash_via_ui,
     normalize_policy_type,
     simulate_ports,
 )
@@ -124,6 +125,10 @@ def expand_instance_path(path: str | None, instance_id) -> str | None:
 
 def _sign_csr_if_present(data: dict) -> dict | None:
     """If request includes csr_pem, sign with product CA and return payload fragment."""
+    from LogstashUI.insecure_http import insecure_http
+
+    if insecure_http():
+        return None
     csr_pem = data.get("csr_pem") or data.get("certificate_signing_request")
     if not csr_pem:
         return None
@@ -502,6 +507,11 @@ def issue_server_cert(request):
         if not authorized:
             return JsonResponse({"success": False, "error": "Unauthorized"}, status=401)
 
+        from LogstashUI.insecure_http import insecure_http
+
+        if insecure_http():
+            return JsonResponse({"success": True})
+
         from Common.product_ca import sign_agent_csr
 
         signed = sign_agent_csr(csr_pem if isinstance(csr_pem, bytes) else csr_pem.encode("utf-8"))
@@ -580,10 +590,22 @@ def check_in(request):
         if status_blob:
             connection.status_blob = status_blob
             logger.debug(f"Updated status_blob: {status_blob}")
-            # Surface resolved Logstash version for sim target dropdown
-            resolved = status_blob.get("logstash_version_resolved") or status_blob.get(
-                "logstash_version"
+            # Surface resolved Logstash version for the LS pill and the sim
+            # target dropdown. logstash_api.version comes from the running
+            # instance's own API and is the only key that tracks a version
+            # change on the host, so it leads. The bare logstash_version key is
+            # the policy-*desired* version everywhere else (see
+            # build_policy_config and the check-in response below), so it is the
+            # weakest signal and must stay last.
+            api_blob = status_blob.get("logstash_api")
+            resolved = (
+                (api_blob.get("version") if isinstance(api_blob, dict) else None)
+                or status_blob.get("logstash_version_resolved")
+                or status_blob.get("logstash_version")
             )
+            # Only overwrite on a truthy value: a check-in sent while Logstash
+            # is stopped reports nothing, and blanking the column would drop the
+            # last known version out of the UI.
             if resolved:
                 connection.logstash_version_resolved = str(resolved)[:64]
             if status_blob.get("agent_api_port") is not None:
@@ -637,6 +659,8 @@ def check_in(request):
                 or "/opt/logstash-agent/logstash-versions",
                 iid,
             ),
+            # True => fetch the tarball from LogstashUI's proxy, not artifacts.elastic.co
+            "logstash_via_ui": logstash_via_ui(policy),
             "restart": should_restart,
             "desired_agent_version": connection.desired_agent_version,
             "managed_changes_available": managed_changes_available,
@@ -709,6 +733,7 @@ def get_config_changes(request):
         agent_logstash_source = (data.get("logstash_source") or "SYSTEM").upper()
         agent_logstash_version = data.get("logstash_version") or ""
         agent_logstash_download_dir = data.get("logstash_download_dir") or ""
+        agent_logstash_via_ui = bool(data.get("logstash_via_ui", False))
 
         if not connection.policy:
             return JsonResponse({"success": False, "error": "No policy assigned to this connection"}, status=400)
@@ -765,6 +790,7 @@ def get_config_changes(request):
             policy_download_dir = "/opt/logstash-agent" + policy_download_dir[
                 len("/opt/LogstashAgent") :
             ]
+        policy_via_ui = logstash_via_ui(policy)
         runtime_changed = (
             agent_logstash_source != policy_source
             or (policy_source == "VERSION" and agent_logstash_version != policy_version)
@@ -773,6 +799,9 @@ def get_config_changes(request):
                 and (agent_logstash_download_dir or policy_download_dir)
                 and agent_logstash_download_dir != policy_download_dir
             )
+            # Toggling the checkbox alone must re-materialize, or the agent keeps
+            # pulling from whichever source it used last.
+            or (policy_source == "VERSION" and agent_logstash_via_ui != policy_via_ui)
             or (policy_source == "SYSTEM" and agent_binary_path != policy.binary_path)
         )
         if runtime_changed:
@@ -781,6 +810,7 @@ def get_config_changes(request):
                 "version": policy_version,
                 "download_dir": policy_download_dir,
                 "binary_path": policy.binary_path,
+                "via_ui": policy_via_ui,
             }
         else:
             changes["logstash_runtime"] = False

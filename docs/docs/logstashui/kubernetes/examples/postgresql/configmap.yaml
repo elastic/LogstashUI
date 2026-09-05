@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: logstashui
+  namespace: logstashui
+data:
+  LOGSTASHUI_DATA_DIR: /var/lib/logstashui
+  LOGSTASHUI_BIND: 0.0.0.0:8443
+  LOGSTASHUI_TLS: "true"
+  LOGSTASHUI_WORKERS: "2"
+  DEBUG: "false"
+  ALLOWED_HOSTS: logstashui.example.com,logstashui,logstashui.logstashui.svc,logstashui.logstashui.svc.cluster.local
+  CSRF_TRUSTED_ORIGINS: https://logstashui.example.com
+  LOGSTASHUI_TLS_SANS: logstashui.example.com,logstashui.logstashui.svc.cluster.local
+  LOGSTASHUI_HOST_HOSTNAME: logstashui.example.com
+  LOGSTASHUI_AGENT_UI_URL: https://logstashui.example.com
+  LOGSTASHUI_DB_ENGINE: postgresql
+  LOGSTASHUI_DB_HOST: postgres.example.svc.cluster.local
+  LOGSTASHUI_DB_PORT: "5432"
+  LOGSTASHUI_DB_NAME: logstashui
+  LOGSTASHUI_DB_USER: logstashui
+  LOGSTASHUI_DB_SSLMODE: prefer
+  # PASSWORD is in secret.yaml. For CloudNativePG, prefer secretKeyRef from
+  # <cluster>-app instead of these HOST/USER/NAME keys — see cnpg.yaml and
+  # ../../cnpg.md.
+  #
+  # NOT recommended. Automatic product TLS works out of the box.
+  # If you must run the UI and all agent connections over plain HTTP
+  # (no CA, no certs), uncomment. Do not enable without cause.
+  # LOGSTASHUI_INSECURE_HTTP: "true"
+  #
+  # OpenTelemetry (optional). The image already installs LogstashUI[otel].
+  # Uncomment to export traces/metrics over OTLP/HTTP (not gRPC — gevent
+  # cannot patch grpcio). Point at a collector that accepts HTTP/protobuf
+  # on 4318. Leave commented to keep tracing off.
+  # LOGSTASHUI_OTEL: "true"
+  # OTEL_SERVICE_NAME: logstashui
+  # OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector.observability.svc:4318

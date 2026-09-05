@@ -11,6 +11,38 @@ _TRUE = ("1", "true", "yes", "on")
 _FALSE = ("0", "false", "no", "off")
 
 
+def _split_csv_hosts(raw: str) -> list[str]:
+    return [part.strip() for part in (raw or "").split(",") if part.strip()]
+
+
+def merge_allowed_hosts(
+    allowed: str | None = None,
+    host_ips: str | None = None,
+    pod_ip: str | None = None,
+) -> list[str]:
+    """Django ALLOWED_HOSTS, plus pod/host IPs used as kube-probe Host headers.
+
+    ``ALLOWED_HOSTS=*`` stays a single wildcard. Otherwise ``LOGSTASHUI_HOST_IPS``
+    and ``POD_IP`` are appended (Kubernetes Downward API / compose host IPs).
+    """
+    if allowed is None:
+        allowed = os.environ.get("ALLOWED_HOSTS", "*")
+    hosts = _split_csv_hosts(allowed)
+    if not hosts:
+        hosts = ["*"]
+    if hosts == ["*"]:
+        return hosts
+    extras = _split_csv_hosts(
+        host_ips if host_ips is not None else os.environ.get("LOGSTASHUI_HOST_IPS", "")
+    )
+    extra_pod = pod_ip if pod_ip is not None else os.environ.get("POD_IP", "")
+    extras.extend(_split_csv_hosts(extra_pod))
+    for host in extras:
+        if host not in hosts:
+            hosts.append(host)
+    return hosts
+
+
 def env_bool(name: str, default: bool = False) -> bool:
     raw = os.environ.get(name)
     if raw is None:

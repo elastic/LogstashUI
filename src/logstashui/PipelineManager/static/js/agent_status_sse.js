@@ -8,10 +8,12 @@
  * Connects to /PipelineManager/AgentStatusStream/ and updates the status
  * badge for each agent connection without a full page reload.
  *
- * Two surfaces are kept in sync:
+ * Three surfaces are kept in sync:
  *   1. The list badge — the pill inside .status-container[data-agent-id]
  *   2. The modal summary badge — [data-modal-badge] inside #agentInspectContent,
  *      only updated when the flyout is currently open for that agent.
+ *   3. The cyan Logstash version pill inside .ls-version-container[data-agent-id],
+ *      so upgrading Logstash on a host is visible without a page reload.
  */
 
 const BADGE_SVG = `<svg class="w-3 h-3 opacity-60" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"/></svg>`;
@@ -67,7 +69,16 @@ function _buildModalBadge(cfg) {
   return span;
 }
 
-function _applyUpdate(id, name, status) {
+function _buildVersionPill(version) {
+  const span = document.createElement('span');
+  span.className = 'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-cyan-500/15 text-cyan-300 border border-cyan-500/30';
+  // textContent, not innerHTML: the version is agent-reported.
+  span.title = `Logstash ${version}`;
+  span.textContent = `LS ${version}`;
+  return span;
+}
+
+function _applyUpdate(id, name, status, logstashVersion) {
   const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.offline;
 
   // 1. Update list badge
@@ -84,6 +95,17 @@ function _applyUpdate(id, name, status) {
       existing.replaceWith(_buildModalBadge(cfg));
     }
   }
+
+  // 3. Update the Logstash version pill. Only ever written for a truthy value:
+  // an agent whose Logstash is stopped reports no version, and the last known
+  // one is more useful than an empty gap next to an offline badge.
+  if (logstashVersion) {
+    const versionContainer = document.querySelector(`.ls-version-container[data-agent-id="${id}"]`);
+    if (versionContainer && versionContainer.textContent.trim() !== `LS ${logstashVersion}`) {
+      versionContainer.innerHTML = '';
+      versionContainer.appendChild(_buildVersionPill(logstashVersion));
+    }
+  }
 }
 
 // ── SSE connection ────────────────────────────────────────────────────────────
@@ -94,7 +116,8 @@ function _connect() {
   source.onmessage = function (event) {
     try {
       const updates = JSON.parse(event.data);
-      updates.forEach(({ id, name, status }) => _applyUpdate(id, name, status));
+      updates.forEach(({ id, name, status, logstash_version }) =>
+        _applyUpdate(id, name, status, logstash_version));
     } catch (e) {
       console.error('[AgentSSE] Failed to parse event data:', e);
     }

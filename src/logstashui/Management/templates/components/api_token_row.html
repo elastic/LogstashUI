@@ -1,0 +1,84 @@
+<!--
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License;
+ * you may not use this file except in compliance with the Elastic License.
+-->
+
+<tr class="hover:bg-gray-700/50 transition-colors">
+  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+    {{ token.name|default:"—" }}
+  </td>
+  <td class="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-400">
+    {{ token.masked }}
+  </td>
+  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+    {{ token.user.username }}
+    {% if token.user.profile.role != 'admin' %}
+      <span class="ml-1 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-700 text-gray-300 border border-gray-600">
+        readonly
+      </span>
+    {% endif %}
+  </td>
+  <td class="px-6 py-4 whitespace-nowrap text-sm">
+    {% if token.revoked_at %}
+      <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-900/50 text-red-300 border border-red-700">
+        Revoked
+      </span>
+    {% elif token.is_expired %}
+      <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-900/50 text-yellow-300 border border-yellow-700">
+        Expired
+      </span>
+    {% else %}
+      <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-900/50 text-green-300 border border-green-700">
+        Active
+      </span>
+    {% endif %}
+  </td>
+  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
+    {{ token.last_used_at|date:"Y-m-d H:i"|default:"never" }}
+  </td>
+  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
+    {{ token.expires_at|date:"Y-m-d"|default:"never" }}
+  </td>
+  <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+    <div class="action-menu relative">
+      <button class="action-menu-button p-1 hover:bg-gray-700 rounded">
+        <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+          <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+        </svg>
+      </button>
+      <div class="action-menu-items hidden fixed z-50 w-48 bg-gray-800 rounded-md shadow-lg py-1" role="menu" style="transform: translate(-50%, 0);">
+        <div class="px-1 py-1">
+          {% if not token.revoked_at %}
+            <button hx-post="{% url 'ApiTokens' %}"
+               hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+               hx-vals='{"action": "revoke", "token_id": "{{ token.id }}"}'
+               hx-target="#tokenTableBody"
+               hx-confirm="Revoke this token? Any script using it will stop working immediately."
+               class="w-full group flex items-center px-4 py-2 text-sm text-amber-400 hover:bg-gray-700 rounded-md"
+               role="menuitem"
+               type="button">
+              <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+              </svg>
+              Revoke
+            </button>
+          {% endif %}
+          <button hx-post="{% url 'ApiTokens' %}"
+             hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+             hx-vals='{"action": "delete", "token_id": "{{ token.id }}"}'
+             hx-target="#tokenTableBody"
+             hx-confirm="Delete this token permanently?"
+             class="w-full group flex items-center px-4 py-2 text-sm text-red-400 hover:bg-gray-700 rounded-md"
+             role="menuitem"
+             type="button">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+            Delete
+          </button>
+        </div>
+      </div>
+    </div>
+  </td>
+</tr>

@@ -35,11 +35,53 @@ Relative values resolve from the process working directory.
 | `LOGSTASHUI_BIND` | `0.0.0.0:8443` | gunicorn bind |
 | `LOGSTASHUI_WORKERS` | `2` | gunicorn workers |
 | `LOGSTASHUI_TLS` | `true` | HTTPS with product CA under `$LOGSTASHUI_DATA_DIR/tls/` |
+| `LOGSTASHUI_INSECURE_HTTP` | `false` | **Not recommended.** Plain HTTP for the UI and every agent connection. Overrides `LOGSTASHUI_TLS`. No product CA. See below. |
 | `ALLOWED_HOSTS` | `*` | Django allowed hosts |
 | `CSRF_TRUSTED_ORIGINS` | (dev localhost defaults) | comma-separated origins |
 | `SECRET_KEY` | auto in data dir | Django secret |
 
-Set `LOGSTASHUI_TLS=false` when an ingress terminates TLS and the pod should speak HTTP.
+Keep `LOGSTASHUI_TLS=true` (the default) in Kubernetes. Ingress/HTTPRoute should originate HTTPS to `:8443` and skip backend cert verify. See [Kubernetes](/docs/docs/logstashui/kubernetes/index.md).
+
+### Plain HTTP (not recommended)
+
+This is **not best practice.** Do not use it in production.
+
+LogstashUI already provisions TLS automatically: a product CA under `$LOGSTASHUI_DATA_DIR/tls/`, a UI leaf for gunicorn, and signed agent certificates at enroll/check-in. That path is supported and works out of the box.
+
+If you **absolutely must** run the UI and all agent connections over plain HTTP (no certificates at all), set:
+
+```bash
+export LOGSTASHUI_INSECURE_HTTP=true
+```
+
+Effects:
+
+- gunicorn serves HTTP (no `--certfile`). Default bind is still `:8443` — the port is not a protocol.
+- `LOGSTASHUI_TLS` is overridden (default or explicit `true`). Startup logs a WARNING and continues.
+- Product CA and UI certificates are **not** generated or refreshed. Leftover files in `$DATA_DIR/tls/` are left on disk.
+- The UI rewrites every agent URL and every `--logstash-ui-url` / callback it emits from `https://` to `http://`.
+- Enrollment tokens omit the CA fingerprint. A CSR in enroll/check-in is ignored; the request still succeeds.
+- `GET /.well-known/logstashui/ca.crt` returns 404.
+
+LogstashAgent needs a matching TLS-off flag on its side. That flag is not configured here.
+
+**This is not `LOGSTASHUI_TLS=false`.** That setting is only for a TLS-terminating ingress: gunicorn speaks HTTP, agents still use HTTPS, and the product CA is still issued. Kubernetes should keep `LOGSTASHUI_TLS=true` and skip-verify at the Gateway/Ingress. See [Kubernetes](/docs/docs/logstashui/kubernetes/index.md).
+
+**Standard Compose and Kubernetes examples stay HTTPS.** Setting `LOGSTASHUI_INSECURE_HTTP` in the host shell does not enter the UI container. Injecting it without changing the Compose healthcheck (today `https://127.0.0.1:8443/.well-known/logstashui/ca.crt`) leaves the service unhealthy — that endpoint is 404 in this mode. Kubernetes example probes use `scheme: HTTPS`; uncommenting the ConfigMap key without changing probe (and Ingress/HTTPRoute backend) scheme fails the pod. Use this hatch with native `logstashui serve` or a hand-edited systemd EnvironmentFile.
+
+---
+
+## Observability
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `LOGSTASHUI_OTEL` | `false` | Enable OTLP/HTTP traces + metrics. Native: install `LogstashUI[otel]`. |
+| `OTEL_SERVICE_NAME` | `logstashui` | Resource `service.name` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | SDK default | Collector base URL (HTTP/protobuf) |
+
+The Docker/K8s image and freeze artifacts already install `[otel]`. Set `LOGSTASHUI_OTEL=true` to turn tracing on. Native pip/uv still needs `pip install 'LogstashUI[otel]'` (or `uv pip install 'LogstashUI[otel]'`). If the extra is missing, LogstashUI logs **ERROR** and continues without tracing.
+
+Only the HTTP/protobuf OTLP exporter is supported. The gRPC exporter is incompatible with the gevent worker (native threads cannot be monkey-patched). Use collector port **4318**, not 4317.
 
 ---
 
@@ -50,22 +92,66 @@ Set `LOGSTASHUI_TLS=false` when an ingress terminates TLS and the pod should spe
 | `LOGSTASHUI_NO_AUTH` | `false` | Bypass login (**sandbox only**) |
 | `LOGSTASHUI_AGENT_UI_URL` | empty | Prefill `--logstash-ui-url` (DB Settings wins if set) |
 | `LOGSTASHUI_INCLUDE_CA_FINGERPRINT` | `true` | Embed product CA fingerprint in enrollment tokens |
-| `LOGSTASH_AGENT_URL` | debug: `http://127.0.0.1:9500`; else `https://logstashagent:9500` | Embedded/compose agent API |
-| `LOGSTASHUI_HOST_HOSTNAME` / `LOGSTASHUI_HOST_IPS` / `LOGSTASHUI_TLS_SANS` | empty | Extra SANs on the product UI cert |
-| `LOGSTASHUI_AGENT_CSR_SECRET` | empty | Compose/embedded agent CSR without enroll |
+| `LOGSTASH_AGENT_URL` | debug: `http://127.0.0.1:9500`; else `https://logstashagent:9500` | Embedded/compose agent API. Kubernetes examples comment this; apply [embedded-agent.yaml](/docs/docs/logstashui/kubernetes/examples/embedded-agent.yaml) after uncommenting. |
+| `LOGSTASHUI_HOST_HOSTNAME` / `LOGSTASHUI_HOST_IPS` / `LOGSTASHUI_TLS_SANS` | empty | Extra SANs on the product UI cert. Kubernetes: set `LOGSTASHUI_HOST_IPS` from `status.podIP` (Downward API). IPs are also appended to `ALLOWED_HOSTS` unless that list is `*`. |
+| `LOGSTASHUI_AGENT_CSR_SECRET` | empty | Compose/embedded agent CSR without enroll. Kubernetes examples comment this on Secret `logstashui`; the overlay `secretKeyRef` requires it uncommented. |
 | `LOGSTASHUI_DOCS_DIR` | checkout `docs/` or packaged copy | In-app documentation root |
+
+Agent-side (not UI ConfigMap): `LOGSTASH_AGENT_TLS` (default `true`) and `LOGSTASH_UI_TLS_INSECURE` (default `false`) are LogstashAgent env vars. The Kubernetes overlay comments both on ConfigMap `logstashagent`. See the LogstashAgent README TLS table. Do not enable without cause.
 
 Booleans accept `true`/`false`, `1`/`0`, `yes`/`no`, `on`/`off`.
 
 ---
 
-## Database (sqlite only)
+## Database
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `LOGSTASHUI_DB_ENGINE` | `sqlite` | **Only `sqlite` is implemented** |
+| `LOGSTASHUI_DB_ENGINE` | `sqlite` | `sqlite`, `postgresql`, or `mysql` (MariaDB uses `mysql`). Aliases: `sqlite3`, `postgres`, `mariadb`, `my` |
+| `LOGSTASHUI_DB_NAME` | sqlite: `$LOGSTASHUI_DATA_DIR/db.sqlite3`; else `logstashui` | Database name / sqlite path |
+| `LOGSTASHUI_DB_HOST` | empty | **Required** for postgresql/mysql |
+| `LOGSTASHUI_DB_PORT` | `5432` / `3306` | |
+| `LOGSTASHUI_DB_USER` | empty | **Required** for postgresql/mysql |
+| `LOGSTASHUI_DB_PASSWORD` | empty | Put in a Secret / `chmod 640` EnvironmentFile |
+| `LOGSTASHUI_DB_SSLMODE` | postgres: `prefer` | `disable` `allow` `prefer` `require` `verify-ca` `verify-full` |
+| `LOGSTASHUI_DB_SSL_CA` | empty | CA file for mysql TLS and postgres `verify-*` |
+| `LOGSTASHUI_DB_CONN_MAX_AGE` | `60` | Persistent connections (seconds); `0` closes per request |
+| `LOGSTASHUI_DB_CONN_HEALTH_CHECKS` | `true` | Django `CONN_HEALTH_CHECKS` |
 
-`postgresql` and `mysql` are reserved names: setting them **fails at startup** until those backends land. Keep a PVC on `LOGSTASHUI_DATA_DIR` even after that work (TLS material and secrets still live there).
+Floors: PostgreSQL 14+, MariaDB 10.6+, MySQL 8.0+. Create MySQL/MariaDB as `utf8mb4` / `utf8mb4_bin` so unique names match SQLite/Postgres case-sensitivity. Full engine docs, env defaults, and SQL examples: [Database](/docs/docs/logstashui/database/index.md). Migration (offline + BETA CLI): [Migration](/docs/docs/logstashui/database/migration.md).
+
+**Install extras (native pip/uv):** `uv pip install 'LogstashUI[postgres]'`, `'LogstashUI[mysql]'`, or `'LogstashUI[databases]'`. The Docker/K8s image already installs `[databases]` and `[otel]`. Missing driver fails at startup with that extra name. Tracing stays off until `LOGSTASHUI_OTEL=true`.
+
+`LOGSTASHUI_DATA_DIR` is still required when the database is remote (TLS, `.django_secret_key`, logs, staticfiles).
+
+**SQLite scale:** `logstashui serve` logs a warning when engine is sqlite and `LOGSTASHUI_WORKERS` > 1. Use PostgreSQL or MySQL/MariaDB for concurrent agents. Startup still succeeds.
+
+**Connections:** gunicorn remains gevent (`--worker-connections 1000`). Keep `LOGSTASHUI_WORKERS` × in-flight requests under the server `max_connections`. PgBouncer (or equivalent) is optional, not required.
+
+No `DATABASE_URL`. No YAML.
+
+### Offline migration (supported)
+
+1. `systemctl stop logstashui` (or stop the container).
+2. Copy `$LOGSTASHUI_DATA_DIR/db.sqlite3` somewhere safe. Keep the rest of `DATA_DIR` (same Django secret key).
+3. Dump **from sqlite** while `LOGSTASHUI_DB_ENGINE` is still sqlite (or unset): `logstashui manage dumpdata --natural-foreign --natural-primary -e contenttypes -e auth.permission -e sessions -o dump.json`. Do not set target `LOGSTASHUI_DB_*` yet, or dumpdata will dump the empty server database.
+4. Create the server database (`utf8mb4_bin` on MySQL/MariaDB).
+5. **Then** set `LOGSTASHUI_DB_*` for the target. Native installs need the matching extra.
+6. `logstashui manage migrate --noinput && logstashui manage loaddata dump.json`
+7. Postgres sequences: the BETA CLI (`logstashui migrate-engine`) resets them through Django (no `psql`). The dump/load path above does not; use `migrate-engine` when you need sequence reset without a Postgres client.
+8. Start LogstashUI. Log in again (sessions were not copied).
+
+### BETA CLI
+
+```bash
+# env already points at the empty target server; sqlite file still in DATA_DIR
+sudo systemctl stop logstashui    # avoid Restart= racing SIGTERM
+logstashui migrate-engine --to postgresql --i-have-a-backup
+# optional: --write-env /etc/default/logstashui
+sudo systemctl start logstashui
+```
+
+`--to mysql` covers MariaDB and MySQL. The command SIGTERMs gunicorn if `$LOGSTASHUI_DATA_DIR/gunicorn.pid` is live, checkpoints WAL, dump/load from the sqlite file in `DATA_DIR` (regardless of target `LOGSTASHUI_DB_*`), and **does not** restart serve.
 
 ---
 
@@ -73,12 +159,12 @@ Booleans accept `true`/`false`, `1`/`0`, `yes`/`no`, `on`/`off`.
 
 Minimum:
 
-1. Deployment env from a ConfigMap + Secret
-2. PVC mounted at `/var/lib/logstashui`
+1. StatefulSet `replicas: 1`, env from a ConfigMap (`LOGSTASHUI_DB_ENGINE` / `HOST` / `NAME` / `USER`) + Secret (`SECRET_KEY`, `LOGSTASHUI_DB_PASSWORD`)
+2. PVC mounted at `/var/lib/logstashui` (still required when the database is external)
 3. Container image `CMD` is `logstashui serve` (already the Docker default)
-4. Optional ingress: `LOGSTASHUI_TLS=false` and `CSRF_TRUSTED_ORIGINS=https://<host>`
+4. Ingress or HTTPRoute: keep `LOGSTASHUI_TLS=true`, originate HTTPS to `:8443`, skip backend cert verify, set `CSRF_TRUSTED_ORIGINS=https://<host>`
 
-No ConfigMap file mount is required.
+No ConfigMap file mount is required. Manifests and CloudNativePG: [Kubernetes](/docs/docs/logstashui/kubernetes/index.md).
 
 ---
 

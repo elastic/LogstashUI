@@ -1,0 +1,100 @@
+<!--
+ * Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+ * or more contributor license agreements. Licensed under the Elastic License;
+ * you may not use this file except in compliance with the Elastic License.
+-->
+
+<tr class="hover:bg-gray-700/50 transition-colors">
+  <td class="px-6 py-4 text-sm font-mono text-gray-300 break-all">
+    {{ artifact.filename }}
+  </td>
+  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+    {{ artifact.version }}
+    {% if artifact.in_use %}
+      <span class="ml-1 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-900/50 text-blue-300 border border-blue-700"
+            title="A policy still pins this version. Deleting it sends those agents into a retry loop.">
+        in use
+      </span>
+    {% endif %}
+  </td>
+  <td class="px-6 py-4 text-sm">
+    {% if artifact.status == 'READY' %}
+      <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-900/50 text-green-300 border border-green-700">
+        Ready
+      </span>
+    {% elif artifact.status == 'FAILED' %}
+      <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-900/50 text-red-300 border border-red-700"
+            title="{{ artifact.error }}">
+        Failed
+      </span>
+      {% if artifact.error %}
+        <p class="mt-1 text-xs text-red-400 break-all">{{ artifact.error|truncatechars:160 }}</p>
+      {% endif %}
+    {% elif artifact.status == 'PENDING' %}
+      <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-700 text-gray-300 border border-gray-600">
+        Queued
+      </span>
+    {% else %}
+      <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-900/50 text-yellow-300 border border-yellow-700">
+        {% if artifact.status == 'IMPORTING' %}Verifying{% else %}Downloading{% endif %}
+      </span>
+      <div class="mt-2 w-full bg-gray-700 rounded-full h-2">
+        <div class="bg-primary h-2 rounded-full transition-all"
+             style="width: {{ artifact.percent|default:0 }}%"></div>
+      </div>
+      <p class="mt-1 text-xs text-gray-400">
+        {% if artifact.percent is not None %}{{ artifact.percent }}%{% else %}starting…{% endif %}
+      </p>
+    {% endif %}
+  </td>
+  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
+    {% if artifact.size_bytes %}{{ artifact.size_bytes|filesizeformat }}{% else %}—{% endif %}
+  </td>
+  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
+    {{ artifact.serve_count }}&times;
+    {% if artifact.last_served_at %}
+      <span class="block text-xs text-gray-500">{{ artifact.last_served_at|date:"Y-m-d H:i" }}</span>
+    {% endif %}
+  </td>
+  <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+    <div class="action-menu relative">
+      <button class="action-menu-button p-1 hover:bg-gray-700 rounded">
+        <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
+          <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+        </svg>
+      </button>
+      <div class="action-menu-items hidden fixed z-50 w-48 bg-gray-800 rounded-md shadow-lg py-1" role="menu" style="transform: translate(-50%, 0);">
+        <div class="px-1 py-1">
+          {% if artifact.status == 'FAILED' %}
+            <button hx-post="{% url 'LogstashArtifacts' %}"
+               hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+               hx-vals='{"action": "download", "source_url": "{{ artifact.source_url }}", "version": "{{ artifact.version }}", "arch": "{{ artifact.arch }}"}'
+               hx-on::after-request="window.location.reload()"
+               class="w-full group flex items-center px-4 py-2 text-sm text-amber-400 hover:bg-gray-700 rounded-md"
+               role="menuitem"
+               type="button">
+              <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              Retry download
+            </button>
+          {% endif %}
+          <button hx-post="{% url 'LogstashArtifacts' %}"
+             hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+             hx-vals='{"action": "delete", "artifact_id": "{{ artifact.id }}"}'
+             hx-target="#artifactTableBody"
+             hx-swap="outerHTML"
+             {% if artifact.in_use %}hx-confirm="A policy still pins {{ artifact.version }}. Deleting this tarball will make those agents retry until it is cached again. Delete anyway?"{% else %}hx-confirm="Delete {{ artifact.filename }} from the cache?"{% endif %}
+             class="w-full group flex items-center px-4 py-2 text-sm text-red-400 hover:bg-gray-700 rounded-md"
+             role="menuitem"
+             type="button">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+            Delete
+          </button>
+        </div>
+      </div>
+    </div>
+  </td>
+</tr>

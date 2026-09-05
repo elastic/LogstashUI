@@ -834,6 +834,19 @@
             <input type="text" id="logstashDownloadDir" value="/opt/logstash-agent/logstash-versions" class="input input-bordered input-sm w-full bg-gray-700 text-white border-gray-600">
           </div>
         </div>
+        <div id="logstashViaUiWrap" class="hidden">
+          <label class="flex items-start gap-2 cursor-pointer">
+            <input type="checkbox" id="logstashViaUi" class="checkbox checkbox-sm mt-1 border-gray-600">
+            <span class="text-sm text-gray-300">
+              Download the tarball from LogstashUI
+              <span class="block text-xs text-gray-400">
+                LogstashUI fetches each release once and serves it to every agent, instead of
+                each agent pulling ~450&nbsp;MB from artifacts.elastic.co. Required for air-gapped
+                sites. Manage the cache in <strong>Management → Logstash Tarballs</strong>.
+              </span>
+            </span>
+          </label>
+        </div>
         <p id="versionLifecycleHint" class="hidden text-xs text-cyan-200/90 bg-cyan-950/30 border border-cyan-500/25 rounded px-2 py-1.5">
           <strong class="text-cyan-100">VERSION lifecycle:</strong>
           Save this policy — enrolled agents download the pin on the next check-in

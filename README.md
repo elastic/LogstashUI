@@ -4,7 +4,7 @@
 > 
 > ⚠️ **Beta Release** - This project is under active development. Features may change.
 >
-> **Current package version: 0.5.1** — see [CHANGELOG.md](CHANGELOG.md). Pair with **LogstashAgent 0.5.1**. Operator guide: [agent roles / ports / coexistence / VERSION](docs/docs/logstashagent/general/roles.md).
+> **Current package version: 0.5.2** — see [CHANGELOG.md](CHANGELOG.md). Pair with **LogstashAgent 0.5.2**. Operator guide: [agent roles / ports / coexistence / VERSION](docs/docs/logstashagent/general/roles.md).
 
 <img src="docs/images/simulate.png" width="100%">
 

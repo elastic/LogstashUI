@@ -1,3 +1,100 @@
+## [0.5.2] - Multi-database - 09/01/2026
+
+Package version is **0.5.2** (`pyproject.toml`). Preferred LogstashAgent version is **0.5.2** (lockstep).
+
+SQLite does not scale under gunicorn/gevent. Operators can now run LogstashUI on **SQLite** (default), **PostgreSQL 14+**, or **MariaDB 10.6+ / MySQL 8.0+** without changing the Django ORM data model.
+
+### Database engines
+
+- `LOGSTASHUI_DB_ENGINE=sqlite|postgresql|mysql` (MariaDB uses `mysql`). Aliases: `sqlite3`, `postgres`, `mariadb`, `my`.
+- Discrete env only: `LOGSTASHUI_DB_HOST`, `PORT`, `NAME`, `USER`, `PASSWORD`, plus `LOGSTASHUI_DB_SSLMODE` / `LOGSTASHUI_DB_SSL_CA`, `LOGSTASHUI_DB_CONN_MAX_AGE` (default 60), `LOGSTASHUI_DB_CONN_HEALTH_CHECKS` (default true). No YAML. No `DATABASE_URL`.
+- Unset engine is still SQLite at `$LOGSTASHUI_DATA_DIR/db.sqlite3` (WAL + `busy_timeout` unchanged).
+- `logstashui serve` logs a warning when engine is SQLite and `LOGSTASHUI_WORKERS>1`; it does not refuse to start.
+- Fail-fast on unknown engine, missing driver extra, missing HOST/USER, or server below version floors. `logstashui serve` checks the server version **before** `migrate` and still checks when `--skip-migrate` is set.
+- `logstashui migrate-engine --to` accepts `postgresql`, `mysql`, and `mariadb` (`mariadb` is an alias of `mysql`).
+- MySQL/MariaDB use `utf8mb4` / `utf8mb4_bin` so unique names match SQLite/Postgres case-sensitivity. Create the database with that collation.
+- `LOGSTASHUI_DATA_DIR` is still required when the database is remote (TLS, Django secret, logs, staticfiles).
+- gunicorn stays `--worker-class gevent`. PostgreSQL uses `psycopg[binary]`; MySQL/MariaDB use PyMySQL (not mysqlclient). Optional PgBouncer is documented, not required.
+
+### Packaging and Docker
+
+- Native extras: `LogstashUI[postgres]`, `LogstashUI[mysql]`, `LogstashUI[databases]`, `LogstashUI[otel]`. Default wheel stays SQLite-only.
+- Optional air-gapped freeze: `bin/freeze_logstashui.sh` (`--wheels` / `--docker` / `--standalone`). Default `uv build` unchanged. Linux x86_64, CPython 3.12, `[databases]` and `[otel]` included, no Agent. Wheelhouse prefers manylinux2014 then manylinux_2_28; pure-Python sdists are wheeled on the builder. Standalone PyInstaller is experimental. See [Air-gapped freeze](docs/docs/logstashui/general/offline.md).
+- Container image installs `LogstashUI[databases,otel]`. Tracing stays off until `LOGSTASHUI_OTEL=true`. Kubernetes only sets env.
+- systemd generator prompts for engine/host/port/name/user; sample `/etc/default/logstashui` documents all `LOGSTASHUI_DB_*` keys. Set the password in the EnvironmentFile or a Secret (`chmod 640`).
+- gunicorn writes `$LOGSTASHUI_DATA_DIR/gunicorn.pid`.
+
+### Migration off SQLite
+
+- **Supported offline path:** stop UI → back up `db.sqlite3` → `dumpdata` while still on SQLite → create the server database → set `LOGSTASHUI_DB_*` → `migrate` + `loaddata`. Keep `DATA_DIR` (same secret key) or encrypted keystore rows will not decrypt. Sessions are not copied; log in again.
+- **BETA** `logstashui migrate-engine --to postgresql|mysql --i-have-a-backup` dumps the SQLite file, loads the target, and does **not** restart serve. It SIGTERMs gunicorn if a pidfile is live. Prefer `systemctl stop` first so `Restart=` does not race. Optional `--write-env` appends engine/host/name/user (never the password).
+- BETA `migrate-engine` is **not atomic** on the target: `dumpdata` → `migrate` → `loaddata` is three steps. If `loaddata` fails, the target may be partially populated. Drop or recreate the target database (SQLite is only WAL-checkpointed) and re-run. A later production migrator could wrap `loaddata` and Postgres `sequence_reset_sql` in `transaction.atomic()` after `migrate`; `migrate` itself applies DDL and cannot be one atomic unit on MySQL/MariaDB.
+
+### Testing
+
+- Default `pytest` stays SQLite (no Docker, no extras).
+- `bin/test_databases.sh` / `bin/test_databases.bat` start local Docker Postgres 16, MariaDB 11, and MySQL 8.0 and run the full suite on each engine, then run `tests/Database/` via testcontainers. CI workflow `.github/workflows/test-databases.yml` calls the same script.
+- Self-contained database test suite at `tests/Database/integration/` uses `testcontainers` (postgres:16, mysql:8.0, mariadb:11 — no external Docker Compose). Parametrized over PostgreSQL and MySQL; MariaDB covered for `check_server_version` version-detection. Skips gracefully when Docker is unavailable. Covers DB config, migrations (clean, idempotent, no unapplied), ORM CRUD/JSON/uniqueness, and full SQLite → PG/MySQL/MariaDB `migrate-engine` round-trips. Run with `uv run pytest tests/Database/ -v --no-cov` after `uv sync --group dev --extra databases`.
+- All tests migrated from `src/logstashui/<App>/tests/` to a dedicated `tests/` tree at the project root. Layout: `tests/<App>/unit/` per Django app, `tests/Database/unit|integration/` for database and migration tests. Shared fixtures moved from `Common/test_resources.py` to `tests/conftest.py` (auto-discovered by pytest). `testpaths` trimmed to `["tests"]`; `pythonpath = ["src/logstashui"]` unchanged so app imports still resolve. Run any app in isolation: `uv run pytest tests/SNMP -v`.
+- `test_case_sensitive_unique` now asserts case-sensitive uniqueness at both layers. `Network.save()` calls `full_clean()`, so a duplicate name raises `ValidationError` from `validate_unique()` and the `INSERT` is never issued — the test previously expected an `IntegrityError` that the database could never raise, and failed identically on both engines. The collation check (`utf8mb4_bin` on MySQL, default on PostgreSQL) rides on the `validate_unique()` query; the database unique index is verified separately via `bulk_create()`, which bypasses `save()`, inside `transaction.atomic()` so PostgreSQL can roll back the aborted statement before cleanup.
+- Container fixtures moved from the deprecated `testcontainers.postgres` / `testcontainers.mysql` shims to `testcontainers.community.*`. The dev-dependency floor is raised to `testcontainers>=4.15.0`, the first release containing that package.
+- API token coverage in `tests/Common/unit/test_api_token_middleware.py` and `tests/Management/unit/test_api_tokens.py`. The load-bearing case is the inverse one: a logged-in session POSTing without a CSRF token must still be rejected, so the exemption cannot regress into a site-wide CSRF bypass. Also covers revoked/expired/inactive-owner tokens, readonly-owner denial, agent keys passing through untouched, and that re-saving a token does not double-hash it.
+- Smoke compose is still SQLite (product CA / PUID unchanged).
+
+### Kubernetes and database docs
+
+- Kubernetes subsection: StatefulSet + one PVC at `/var/lib/logstashui`, TLS kept on `:8443`, Ingress-nginx skip backend verify, Envoy Gateway `Backend` `insecureSkipVerify` (enable Backend API), CloudNativePG Cluster in the app namespace.
+- K8s probes send `Host: logstashui` (kubelet otherwise uses the pod IP and Django returns 400). Downward API `status.podIP` → `LOGSTASHUI_HOST_IPS` for the product leaf; those IPs are appended to `ALLOWED_HOSTS` unless the list is `*`.
+- Example manifests under `docs/docs/logstashui/kubernetes/examples/{sqlite,postgresql,mysql}/`.
+- Optional embedded simulation agent overlay: `docs/docs/logstashui/kubernetes/examples/embedded-agent.yaml` (compose `--profile embedded` analog). ClusterIP 9500 / 9560 / 9449. Uncomment `LOGSTASH_AGENT_URL` and `LOGSTASHUI_AGENT_CSR_SECRET` on the UI examples before apply. Agent ConfigMap comments `LOGSTASH_AGENT_TLS` (default true) and `LOGSTASH_UI_TLS_INSECURE` (default false).
+- Database subsection: engines, every `LOGSTASHUI_DB_*` default, offline dump/load, BETA `migrate-engine`, CREATE DATABASE scripts (`utf8mb4_bin` for MySQL/MariaDB), schema snapshots from 0.5.2 `migrate`.
+
+### Insecure HTTP (escape hatch)
+
+- `LOGSTASHUI_INSECURE_HTTP=true` forces plain HTTP for the UI and every UI→agent URL, skips product CA and certificate generation, and overrides `LOGSTASHUI_TLS`. This is **not** best practice; automatic TLS remains the supported default. It is **not** the same as `LOGSTASHUI_TLS=false` (TLS-terminating ingress). See [Environment](docs/docs/logstashui/configuration/environment.md).
+- Settings TLS **Upload** and **Revert** are hidden in this mode and return **409** before any filesystem change. Leftover `$DATA_DIR/tls/` custom leaves are left intact (`save_custom_ui_certificate` / `revert_ui_certificate_to_product_default` raise `ProductCADisabled` first).
+- Default Compose and Kubernetes examples remain HTTPS. The hatch is native/`logstashui serve` (or a hand-edited EnvironmentFile). StatefulSet examples comment that probes stay `scheme: HTTPS`.
+
+### Fixes
+
+- `LOGSTASHUI_OTEL=true` without the `[otel]` extra now logs **ERROR** (was INFO) and continues. Docker/K8s and freeze artifacts install `[otel]`; uncomment the OTEL keys in the Kubernetes ConfigMap examples to enable OTLP/HTTP (port 4318, not gRPC 4317).
+- `LOGSTASHUI_TLS=false` now suppresses the Django-level HTTP→HTTPS redirect (`SECURE_SSL_REDIRECT`) in addition to disabling the Gunicorn TLS certificate. Previously, running the container with `-e LOGSTASHUI_TLS=false` still returned a `301` because `SECURE_SSL_REDIRECT` was gated on `DEBUG` only. Both knobs are now independent.
+- `ApiKey.save()` no longer re-hashes an already-hashed key. `make_password()` ran unconditionally on every save, so any update to an existing row silently rewrote the hash and invalidated the credential. Latent until now — nothing re-saved an `ApiKey` — but renaming or revoking a token does.
+- The pipeline editor's simulation **Target** picker no longer hides the embedded agent on first page load. Making the probe non-blocking left `list_simulation_targets()` requiring a successful probe it never performed, so the sticky embedded row lost a race against the background thread and the dropdown rendered empty until a later refresh. The row is now dropped only when a probe has *explicitly* reported the agent offline — never-probed is treated as unknown, not offline. Target rows also carry a `discovered` flag so callers can distinguish a confirmed agent from an unconfirmed one.
+
+### API access
+
+- **Admin API tokens** (`Management → API Tokens`) let scripts, CI, and provisioning tools call LogstashUI's JSON endpoints without a browser session. Send `Authorization: ApiKey lsui_<prefix>_<secret>`. The original motivation was registering a remote Elasticsearch cluster for Centralized Pipeline Management from `curl`, which previously failed CSRF verification; it now works against the existing `/ConnectionManager/AddConnection` URL. Every other JSON endpoint accepts a token too — no per-endpoint opt-in.
+- A token acts as the user who created it and inherits that account's role, so audit lines stay attributable and a `readonly` user's token stays readonly. Tokens can carry an optional expiry and be revoked or deleted; revocation takes effect on the next request. Only a hash is stored, so the secret is displayed exactly once at creation.
+- Implemented as a pair of middlewares rather than per-view decorators. `ApiTokenCsrfMiddleware` runs immediately before `CsrfViewMiddleware` and sets `_dont_enforce_csrf_checks` **only after a token verifies** — a forged or absent header cannot switch CSRF off, and cookie-authenticated browser requests are unaffected. `ApiTokenUserMiddleware` runs just after `AuthenticationMiddleware`, which would otherwise overwrite `request.user`; the split is forced by that ordering. Because `request.user` becomes a real user, `LoginRequiredMiddleware` and `require_admin_role` pass on their own — no `@csrf_exempt` and no `LOGIN_REQUIRED_IGNORE_PATHS` entries were added.
+- `require_admin_role` now answers API-token callers with JSON instead of an `HX-Trigger` toast, which is unreadable to a script.
+- Admin tokens reuse the agent `ApiKey` table and its `make_password`/`check_password` machinery. The one addition is an unhashed, indexed `prefix` column: agent keys are found via the `connection_id` in the request body before their hash is checked, but a token presents only a header, and without a lookup key resolving it would mean a PBKDF2 comparison against every row. Existing agent keys get `prefix=NULL` and are never matched by the middleware.
+- See [API Access](docs/docs/logstashui/api_access.md).
+
+### Agent version display
+
+- ConnectionManager and Policy editor Agents tab show a cyan **LS X.Y.Z** pill for the Logstash version the agent reported (`logstash_version_resolved`, else Logstash API version). Hidden until known.
+- Policy Source **VERSION** live-fills and persists Binary Path as `{download_dir}/logstash-{version}/bin` (default `/opt/logstash-agent/logstash-versions/logstash-X.Y.Z/bin`). Custom paths are kept. Switching back to SYSTEM restores `/usr/share/logstash/bin` when the field still looks derived.
+- Agent newer than preferred (`__PREFERRED_LS_AGENT_VERSION__`, currently 0.5.2) shows **unreleased version** instead of a backwards Upgrade button. Older agents still get Upgrade. Unparseable versions still get Upgrade.
+- **The LS pill now tracks the Logstash version actually running on the host.** It was frozen at whatever version happened to be recorded first, for two reasons. `resolve_running_logstash_version()` consulted the `Connection.logstash_version_resolved` column *before* the current check-in's `status_blob`, and that column is only ever written on a truthy value and never cleared — so one stored version permanently shadowed every later one. The check-in handler also never read `status_blob.logstash_api.version`, the version the running instance reports through its own API, so on hosts that report it only there the column was never refreshed at all. The blob now leads and the column is the fallback, which keeps the last known version on screen while Logstash is stopped or its API is unreachable.
+- The pill also updates without a page reload. The Connections page adds `logstash_version` to the existing agent-status SSE payload — free, since the stream already selects `status_blob` — and the Policies → Agents table, which had no live channel at all, polls every 10s while that tab is visible and pauses when the browser tab is hidden.
+
+### Logstash tarball proxy
+
+- **LogstashUI can now cache Logstash release tarballs and serve them to agents.** A `MANAGED` or `SIMULATE` policy pinned to **VERSION** previously made every agent pull its own ~450 MB tarball from `artifacts.elastic.co`. Tick **Download the tarball from LogstashUI** on the policy and LogstashUI fetches each release once, verifies its SHA-512, and serves it to every agent. Required for air-gapped sites, where the direct download is impossible. See [Logstash Tarball Proxy](docs/docs/logstashui/configuration/logstash_proxy.md).
+- **Compatibility — the agent artifact URL gained a `connection_id` segment.** `GET /ConnectionManager/LogstashArtifact/{filename}` is now `GET /ConnectionManager/LogstashArtifact/{connection_id}/{filename}`. A GET has no body, and an agent key is a bare hash with no lookup column, so the header alone cannot identify the caller — the path is what narrows the lookup to one row before `check_password` runs. Agents older than the paired release cannot use the proxy; the boolean simply stays off for them and they continue downloading from Elastic.
+- The proxy is exposed to agents in three places: `logstash_via_ui` in the enrollment `policy_config`, `logstash_via_ui` in the check-in response, and `logstash_runtime.via_ui` in the config delta. `via_ui` participates in the `runtime_changed` comparison, so flipping the checkbox alone triggers a re-materialize — no separate Deploy for binary-only changes.
+- **Management → Logstash Tarballs** manages the cache: download by version + architecture (or from a full URL for an internal mirror), delete, retry, and **Import from disk** for air-gapped operators who copy a tarball into the cache directory by hand. Import hashes the file, checks a supplied `.sha512` and fails on mismatch, and writes one when none was supplied. There is no browser upload — 450 MB through a form is not viable. Progress polls over htmx only while a row is actively fetching.
+- **Single-flight is a conditional database `UPDATE`, not an in-process lock.** `settings.py` defines no `CACHES`, so Django falls back to per-process `LocMemCache`, which does not coordinate across gunicorn workers. The first agent to ask claims the row and gets a `503`; everyone else gets a `503` until the file lands, across all workers. A fetch killed by a restart leaves a stale claim that the next request reclaims after the heartbeat window, and the orphaned `.part` is swept at startup — crash recovery is the normal path, not an edge case, because a 450 MB fetch will always be killed by `graceful_timeout`.
+- Nothing partial is ever served: downloads land in a `.part` file and are `os.replace()`d into place only after the SHA-512 verifies. Agents get `200`/`206` when the file is ready, `503` while it is being fetched, `429` at the concurrent-serve cap, `502` on an upstream failure, `404` for an unrecognized filename, and `401` for a bad key or mismatched `connection_id`. `503`/`429`/`502` all carry `Retry-After`; agents honour it, backing off to a 5-minute ceiling, and never fall back to `artifacts.elastic.co` while the proxy is enabled.
+- Range requests are supported (single range only) so an interrupted transfer resumes instead of re-pulling the whole tarball. Files under 1 MiB — the `.sha512` companions — are exempt from the serve semaphore, so a burst of checksum fetches cannot consume download slots.
+- New env vars: `LOGSTASHUI_LOGSTASH_DIR` (default `<DATA_DIR>/logstashes`), `LOGSTASHUI_ARTIFACT_MAX_UPSTREAM` (default `2`, cluster-wide), and `LOGSTASHUI_ARTIFACT_MAX_SERVE_PER_WORKER` (default `4`; effective total is this × `LOGSTASHUI_WORKERS`). The serve cap is deliberately per-worker — dividing a global limit by the worker count truncates to zero and makes the knob lie. The upstream base URL is **Management → Settings → Logstash tarball source**, blank meaning `https://artifacts.elastic.co/downloads/logstash`.
+- Tarballs are stored in `<DATA_DIR>/logstashes`, **not** under `staticfiles/` — `STATIC_ROOT` is served by WhiteNoise at `/static/`, which is in `LOGIN_REQUIRED_IGNORE_PATHS`, so every tarball would have been an unauthenticated public download, and `collectstatic` would churn over them on every `serve`.
+- **Optional OpenTelemetry export** (`LOGSTASHUI_OTEL=true` plus the new `LogstashUI[otel]` extra) sends traces and metrics over OTLP/HTTP. The Docker/K8s image and freeze artifacts install `[otel]` (the wheelhouse already downloaded those wheels); tracing stays off until the env flag is set. Native pip/uv still needs the extra. If `LOGSTASHUI_OTEL=true` and the extra is missing, LogstashUI logs ERROR and the worker keeps serving. Four custom instruments answer the capacity question Django spans cannot: `logstashui.gevent.hub.lag`, `logstashui.artifact.downloads.active`, `logstashui.artifact.requests`, and `logstashui.artifact.serve.bytes_per_second`. Only the HTTP/protobuf exporter is supported — the gRPC exporter's native threads are not gevent-patchable.
+- Migrations: `PipelineManager/0029_logstash_artifacts` (the `LogstashArtifact` model and `Policy.logstash_via_ui`) and `Management/0004_settings_logstash_artifact_base_url`.
+- New tests: `tests/PipelineManager/unit/test_logstash_artifacts.py` and `tests/Management/unit/test_logstash_artifact_page.py`.
+
+
 ## [0.5.1] - Agent control plane, SNMP NMS, dual HTTPS - 08/31/2026
 
 Package version is **0.5.1** (`pyproject.toml`). Preferred LogstashAgent version is **0.5.1**.
