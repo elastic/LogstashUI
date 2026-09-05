@@ -172,7 +172,7 @@ def process_file(file_path, dry_run=False, verbose=False):
         return True
     else:
         try:
-            with open(file_path, 'w', encoding='utf-8') as f:
+            with open(file_path, 'w', encoding='utf-8', newline='\n') as f:
                 f.write(new_content)
             if verbose:
                 print(f"[MODIFIED] {file_path}")

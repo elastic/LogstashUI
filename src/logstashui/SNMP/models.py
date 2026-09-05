@@ -290,7 +290,7 @@ class Device(models.Model):
             except ValueError:
                 # Not a valid IP address
                 raise ValidationError({
-                    'ip_address': 'Must be a valid IP address (e.g. 192.168.1.1)'
+                    'ip_address': 'Must be a valid IP address (e.g. 192.168.1.1 or 2001:db8::1)'
                 })
 
         # Validate hostname format when present

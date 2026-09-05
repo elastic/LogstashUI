@@ -200,8 +200,11 @@ function renderDevices(devices) {
       <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
         ${device.hostname ? `<span class="font-mono">${escapeHtml(device.hostname)}</span>` : '<span class="text-gray-500 italic">—</span>'}
       </td>
-      <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-        <span class="font-mono">${escapeHtml(device.ip_address || '—')}</span>
+      <td class="px-6 py-4 text-sm text-gray-300 max-w-[160px]">
+        ${(() => {
+          const ip = device.ip_address || '—';
+          return `<span class="font-mono block truncate cursor-default" title="${escapeHtml(ip)}">${escapeHtml(ip)}</span>`;
+        })()}
       </td>
       <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
         ${device.credential_name ? escapeHtml(device.credential_name) : '<span class="text-gray-500 italic">None</span>'}

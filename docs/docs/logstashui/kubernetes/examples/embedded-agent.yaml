@@ -1,3 +1,7 @@
+#Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+#or more contributor license agreements. Licensed under the Elastic License;
+#you may not use this file except in compliance with the Elastic License.
+
 # Optional embedded simulation agent (compose --profile embedded analog).
 # Apply a DB tree first (sqlite/ postgresql/ or mysql/), uncomment
 # LOGSTASH_AGENT_URL in ConfigMap/logstashui and LOGSTASHUI_AGENT_CSR_SECRET

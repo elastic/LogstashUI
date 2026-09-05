@@ -1,3 +1,7 @@
+#Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+#or more contributor license agreements. Licensed under the Elastic License;
+#you may not use this file except in compliance with the Elastic License.
+
 # Optional. Requires the CloudNativePG operator (often in cnpg-system).
 # See ../../cnpg.md. After Ready, point LogstashUI at Secret logstashui-pg-app
 # instead of the HOST/USER/PASSWORD in configmap.yaml / secret.yaml.
