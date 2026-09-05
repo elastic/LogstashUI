@@ -22,10 +22,12 @@ data:
   LOGSTASHUI_DB_USER: logstashui
   # Optional CA file path if the server requires TLS:
   # LOGSTASHUI_DB_SSL_CA: /etc/ssl/certs/mysql-ca.pem
+  #
   # NOT recommended. Automatic product TLS works out of the box.
   # If you must run the UI and all agent connections over plain HTTP
   # (no CA, no certs), uncomment. Do not enable without cause.
   # LOGSTASHUI_INSECURE_HTTP: "true"
+  #
   # OpenTelemetry (optional). The image already installs LogstashUI[otel].
   # Uncomment to export traces/metrics over OTLP/HTTP (not gRPC — gevent
   # cannot patch grpcio). Point at a collector that accepts HTTP/protobuf
@@ -33,7 +35,3 @@ data:
   # LOGSTASHUI_OTEL: "true"
   # OTEL_SERVICE_NAME: logstashui
   # OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector.observability.svc:4318
-  # Embedded simulation agent (optional). Apply examples/embedded-agent.yaml
-  # after uncommenting this key and LOGSTASHUI_AGENT_CSR_SECRET in the Secret.
-  # Leave commented if you are not running the in-cluster embedded node.
-  # LOGSTASH_AGENT_URL: https://logstashagent:9500

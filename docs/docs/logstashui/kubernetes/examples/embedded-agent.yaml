@@ -13,12 +13,13 @@ metadata:
 data:
   LOGSTASH_UI_URL: https://logstashui:8443
   LOGSTASH_URL: https://logstashui:8443
-  SIMULATION_MODE: "true"
+  #
   # Agent API TLS (default true). Automatic product TLS works out of the box.
-  # Uncomment false only if the UI is also plain HTTP (LOGSTASHUI_INSECURE_HTTP)
+  # Uncomment false ONLY if the UI is also plain HTTP (LOGSTASHUI_INSECURE_HTTP)
   # and you have rewritten LOGSTASH_UI_URL / LOGSTASH_URL / LOGSTASH_AGENT_URL
   # to http://. Do not enable without cause.
   # LOGSTASH_AGENT_TLS: "false"
+  #
   # Skip verifying the UI HTTPS certificate (default false).
   # Not the same as plain HTTP. Product CA pinning works OOTB; leave commented.
   # LOGSTASH_UI_TLS_INSECURE: "true"

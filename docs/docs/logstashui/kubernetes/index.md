@@ -105,7 +105,7 @@ Default engine is SQLite on the PVC. For Postgres or MySQL/MariaDB, set the disc
 
 ## Embedded agent (optional)
 
-Compose `--profile embedded` analog: [embedded-agent.yaml](examples/embedded-agent.yaml). Apply a DB tree, uncomment `LOGSTASH_AGENT_URL` and `LOGSTASHUI_AGENT_CSR_SECRET`, then apply the overlay. ClusterIP only (`9500` / `9560` / `9449`). Details: [examples README](examples/README.md#embedded-agent-optional).
+This uses the embedded agent image [embedded-agent.yaml](examples/embedded-agent.yaml). Apply a DB tree, set `LOGSTASHUI_AGENT_CSR_SECRET`, then apply the overlay. ClusterIP only (`9500` / `9560` / `9449`). Details: [examples README](examples/README.md#embedded-agent-optional).
 
 ---
 
