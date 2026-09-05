@@ -136,16 +136,42 @@ class ConnectionForm(ModelForm):
     def clean(self):
         cleaned_data = super().clean()
         connection_type = cleaned_data.get('connection_type')
-        
+
         if connection_type == Connection.ConnectionType.AGENT:
             # For Agent connections, require either host or cloud_url
             if not cleaned_data.get('host') and not cleaned_data.get('cloud_url'):
                 raise forms.ValidationError("Either Host or Cloud URL is required for Agent connections.")
         else:  # CENTRALIZED
-            # For Centralized connections, require either cloud_id or cloud_url
-            if not cleaned_data.get('cloud_id') and not cleaned_data.get('host'):
-                raise forms.ValidationError("Either Cloud ID or host is required for centralized connections.")
-        
+            # Read the radio-button selections from raw POST data so we can zero
+            # out whichever fields the user hid before submitting. Hidden inputs
+            # are still included in the POST payload, so without this a stale
+            # cloud_id (or stale auth credential) silently wins even after the
+            # user has switched modes.
+            connection_mode = self.data.get('connection_mode', 'cloud')
+            auth_type = self.data.get('auth_type', 'basic')
+
+            # --- Connection mode ---
+            if connection_mode == 'cloud':
+                # URL-mode fields should be ignored
+                cleaned_data['host'] = ''
+                cleaned_data['port'] = None
+                if not cleaned_data.get('cloud_id'):
+                    raise forms.ValidationError("Cloud ID is required when using Cloud ID mode.")
+            else:  # 'url'
+                # Cloud ID field should be ignored
+                cleaned_data['cloud_id'] = ''
+                if not cleaned_data.get('host'):
+                    raise forms.ValidationError("Host is required when using Elastic Node URL mode.")
+
+            # --- Auth type ---
+            if auth_type == 'basic':
+                # API key field should be ignored
+                cleaned_data['api_key'] = ''
+            else:  # 'apiKey'
+                # Username / password fields should be ignored
+                cleaned_data['username'] = ''
+                cleaned_data['password'] = ''
+
         return cleaned_data
 
     def save(self, commit=True):

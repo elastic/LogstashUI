@@ -1095,14 +1095,24 @@ ${day2}`;
   }
 
   // Toggle between Cloud ID and Node URL fields (for centralized connections)
+  // Also clear the values of whichever field group is being hidden so that
+  // stale data is not silently included in the POST payload.
   document.querySelectorAll('input[name="connection_mode"]').forEach(radio => {
     radio.addEventListener('change', function() {
       if (this.value === 'cloud') {
         document.getElementById('cloudIdField').classList.remove('hidden');
         document.getElementById('nodeUrlField').classList.add('hidden');
+        // Clear the now-hidden URL fields
+        const hostInput = document.querySelector('[name="host"]');
+        const portInput = document.querySelector('[name="port"]');
+        if (hostInput) hostInput.value = '';
+        if (portInput) portInput.value = '';
       } else {
         document.getElementById('cloudIdField').classList.add('hidden');
         document.getElementById('nodeUrlField').classList.remove('hidden');
+        // Clear the now-hidden Cloud ID field
+        const cloudIdInput = document.querySelector('[name="cloud_id"]');
+        if (cloudIdInput) cloudIdInput.value = '';
       }
     });
   });
@@ -1110,10 +1120,23 @@ ${day2}`;
 
 
 // Toggle between Basic Auth and API Key fields (for centralized connections)
+  // Also clear the values of whichever field group is being hidden so that
+  // stale credentials are not silently included in the POST payload.
   document.querySelectorAll('input[name="auth_type"]').forEach(radio => {
     radio.addEventListener('change', function() {
       document.getElementById('basicAuthFields').classList.toggle('hidden', this.value !== 'basic');
       document.getElementById('apiKeyField').classList.toggle('hidden', this.value !== 'apiKey');
+      if (this.value === 'basic') {
+        // Clear the now-hidden API key field
+        const apiKeyInput = document.querySelector('[name="api_key"]');
+        if (apiKeyInput) apiKeyInput.value = '';
+      } else {
+        // Clear the now-hidden username / password fields
+        const usernameInput = document.querySelector('[name="username"]');
+        const passwordInput = document.querySelector('[name="password"]');
+        if (usernameInput) usernameInput.value = '';
+        if (passwordInput) passwordInput.value = '';
+      }
     });
   });
 
