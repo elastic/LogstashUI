@@ -21,7 +21,7 @@ kubectl apply -f docs/docs/logstashui/kubernetes/examples/sqlite/
 Same role as compose `--profile embedded`: an in-cluster LogstashAgent for the pipeline editor Sim target (`embedded · docker`). No enroll. Lab only — prefer an enrolled Simulate agent for serious work.
 
 1. Apply **one** DB tree above.
-2. Uncomment `LOGSTASH_AGENT_URL` in that tree's ConfigMap and `LOGSTASHUI_AGENT_CSR_SECRET` in its Secret. Replace the secret placeholder. Do not reuse the compose default.
+2. Set `LOGSTASHUI_AGENT_CSR_SECRET` in its Secret. DO NOT use the secret default.
 3. Apply the overlay:
 
 ```bash
@@ -32,7 +32,7 @@ kubectl apply -f docs/docs/logstashui/kubernetes/examples/embedded-agent.yaml
 
 If the CSR secret key is still commented, the agent pod is `CreateContainerConfigError` until you uncomment it.
 
-Agent ConfigMap `logstashagent` already sets `LOGSTASH_UI_URL` / `LOGSTASH_URL` to `https://logstashui:8443` and `SIMULATION_MODE=true`. Two extra keys are **commented** (LogstashAgent env, not UI):
+Agent ConfigMap `logstashagent` already sets `LOGSTASH_UI_URL` / `LOGSTASH_URL` to `https://logstashui:8443`. Two extra keys are **commented** (LogstashAgent env, not UI):
 
 | Env | Default | Do not enable without cause |
 |---|---|---|
