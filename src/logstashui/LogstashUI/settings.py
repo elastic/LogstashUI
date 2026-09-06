@@ -28,7 +28,7 @@ from .insecure_http import (
     warn_if_enabled,
 )
 from .database import build_databases
-from .logging_config import resolve_django_log_levels, resolve_log_level
+from .logging_config import resolve_django_log_levels, resolve_log_level, ROTATING_FILE_HANDLER_CLASS
 from .paths import (
     resolve_data_dir,
     resolve_docs_dir,
@@ -395,11 +395,13 @@ LOGGING = {
         },
         "file": {
             "level": LOGSTASHUI_LOG_LEVEL,
-            "class": "logging.handlers.RotatingFileHandler",
+            "class": ROTATING_FILE_HANDLER_CLASS,
             "filename": LOGS_DIR / "logstashui.log",
             "maxBytes": 1024 * 1024 * 10,  # 10 MB
             "backupCount": 5,
             "formatter": "verbose",
+            "delay": True,
+            "encoding": "utf-8",
         },
     },
     "loggers": {

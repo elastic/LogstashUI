@@ -468,7 +468,7 @@ def ensure_notice_header():
         # Check if header is already present
         if not content.startswith("LogstashUI\nCopyright 2025-"):
             # Header missing or outdated, prepend it
-            with open(notice_path, "w", encoding="utf-8") as f:
+            with open(notice_path, "w", encoding="utf-8", newline='\n') as f:
                 f.write(header)
                 if content and not content.startswith("\n"):
                     f.write("\n")
@@ -486,12 +486,12 @@ def ensure_notice_header():
                     content,
                     count=1
                 )
-                with open(notice_path, "w", encoding="utf-8") as f:
+                with open(notice_path, "w", encoding="utf-8", newline='\n') as f:
                     f.write(updated_content)
                 print(f"Updated copyright year to {current_year}")
     else:
         # Create new file with header
-        with open(notice_path, "w", encoding="utf-8") as f:
+        with open(notice_path, "w", encoding="utf-8", newline='\n') as f:
             f.write(header)
         print("Created NOTICE.txt with header")
 
@@ -531,7 +531,7 @@ def append_to_notice(package_name, license_text, license_name=None):
     
     metadata[package_name] = license_name or 'UNKNOWN'
     
-    with open(metadata_path, 'w', encoding='utf-8') as f:
+    with open(metadata_path, 'w', encoding='utf-8', newline='\n') as f:
         json.dump(metadata, f, indent=2, sort_keys=True)
 
     print(f"Added {package_name} to NOTICE.txt")
@@ -739,7 +739,7 @@ def generate_dependency_tracking(all_deps, license_cache):
     class_width = max(max_class_len, len('Classification'))
     
     # Generate table
-    with open(tracking_path, 'w', encoding='utf-8') as f:
+    with open(tracking_path, 'w', encoding='utf-8', newline='\n') as f:
         # Header
         f.write(f"{'Dependency':<{name_width}} | {'Type':<{type_width}} | {'License':<{license_width}} | {'Classification':<{class_width}}\n")
         f.write(f"{'-' * name_width}-+-{'-' * type_width}-+-{'-' * license_width}-+-{'-' * class_width}\n")

@@ -6,9 +6,44 @@
 
 from __future__ import annotations
 
+import logging.handlers
 import os
+import sys
 
 _ALLOWED = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
+
+
+class WindowsSafeRotatingFileHandler(logging.handlers.RotatingFileHandler):
+    """RotatingFileHandler that handles Windows file-locking during rotation gracefully.
+
+    On Windows, os.rename() raises PermissionError (WinError 32) when another
+    thread still holds the log file open at the moment rotation is triggered.
+    Python's logging machinery re-raises this from emit(), producing a flood of
+    '--- Logging error ---' lines that can crash a running instance.
+
+    This subclass overrides rotate() to catch PermissionError and skip the
+    current rotation cycle instead of propagating the error. The file continues
+    to be written to, and the next emit() that triggers shouldRollover() will
+    attempt rotation again.
+    """
+
+    def rotate(self, source: str, dest: str) -> None:
+        try:
+            super().rotate(source, dest)
+        except PermissionError:
+            # Another thread holds the file open; skip this rotation cycle.
+            # The next shouldRollover check will retry.
+            pass
+
+
+# Resolved at import time so settings.py can reference it as a dotted class
+# path string. On Windows we use the safe subclass above; on POSIX platforms
+# os.rename() is atomic on open files so the stock handler is fine.
+ROTATING_FILE_HANDLER_CLASS = (
+    "LogstashUI.logging_config.WindowsSafeRotatingFileHandler"
+    if sys.platform == "win32"
+    else "logging.handlers.RotatingFileHandler"
+)
 
 
 def resolve_log_level(name: str, *, default: str = "INFO") -> str:

@@ -111,6 +111,26 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 });
 
+/**
+ * Wraps a modal close function with a styled "Are you sure?" confirmation dialog.
+ * Use on backdrop onclick handlers for form-heavy modals to prevent accidental data loss.
+ * X and Cancel buttons should still call the close function directly (intentional close).
+ *
+ * Opt a modal in by:
+ *   1. Adding the data-confirm-close attribute to the root modal element.
+ *   2. Changing the backdrop onclick from closeXxxModal() to safeClose(closeXxxModal).
+ *
+ * @param {Function} closeFn - The close function to invoke if the user confirms.
+ */
+window.safeClose = async function(closeFn) {
+  const confirmed = await ConfirmationModal.show(
+    'Are you sure you want to close? Any unsaved changes will be lost.',
+    'Unsaved Changes',
+    'Close Anyway'
+  );
+  if (confirmed) closeFn();
+};
+
 // Global ESC key handler to close any open modal
 document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape' || e.key === 'Esc') {
@@ -126,6 +146,7 @@ document.addEventListener('keydown', function(e) {
       // Close the topmost modal (last in the array if multiple open)
       const modalToClose = visibleModals[visibleModals.length - 1];
       const modalId = modalToClose.id;
+      const needsConfirmation = modalToClose.hasAttribute('data-confirm-close');
       
       // Build possible close function names
       // Examples: credentialFormModal -> closeCredentialFormModal, closeCredentialModal
@@ -140,15 +161,28 @@ document.addEventListener('keydown', function(e) {
       let functionCalled = false;
       for (const funcName of possibleCloseFunctions) {
         if (typeof window[funcName] === 'function') {
-          window[funcName]();
+          if (needsConfirmation) {
+            // Stop other ESC listeners (e.g. popup.html's ConfirmationModal.cancel handler)
+            // from firing on the same keypress, otherwise they'd immediately dismiss
+            // the confirmation dialog we're about to show.
+            e.stopImmediatePropagation();
+            safeClose(window[funcName]);
+          } else {
+            window[funcName]();
+          }
           functionCalled = true;
           break;
         }
       }
       
-      // If no close function found, just hide the modal
+      // If no close function found, just hide the modal (with confirmation if opted-in)
       if (!functionCalled) {
-        modalToClose.classList.add('hidden');
+        if (needsConfirmation) {
+          e.stopImmediatePropagation();
+          safeClose(() => modalToClose.classList.add('hidden'));
+        } else {
+          modalToClose.classList.add('hidden');
+        }
       }
     }
   }

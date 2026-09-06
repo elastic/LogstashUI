@@ -1,4 +1,4 @@
-## [0.5.2] - Multi-database - 09/01/2026
+## [0.5.2] - Multi-database + k8s - 09/06/2026
 
 Package version is **0.5.2** (`pyproject.toml`). Preferred LogstashAgent version is **0.5.2** (lockstep).
 
@@ -61,6 +61,15 @@ SQLite does not scale under gunicorn/gevent. Operators can now run LogstashUI on
 - `LOGSTASHUI_TLS=false` now suppresses the Django-level HTTP→HTTPS redirect (`SECURE_SSL_REDIRECT`) in addition to disabling the Gunicorn TLS certificate. Previously, running the container with `-e LOGSTASHUI_TLS=false` still returned a `301` because `SECURE_SSL_REDIRECT` was gated on `DEBUG` only. Both knobs are now independent.
 - `ApiKey.save()` no longer re-hashes an already-hashed key. `make_password()` ran unconditionally on every save, so any update to an existing row silently rewrote the hash and invalidated the credential. Latent until now — nothing re-saved an `ApiKey` — but renaming or revoking a token does.
 - The pipeline editor's simulation **Target** picker no longer hides the embedded agent on first page load. Making the probe non-blocking left `list_simulation_targets()` requiring a successful probe it never performed, so the sticky embedded row lost a race against the background thread and the dropdown rendered empty until a later refresh. The row is now dropped only when a probe has *explicitly* reported the agent offline — never-probed is treated as unknown, not offline. Target rows also carry a `discovered` flag so callers can distinguish a confirmed agent from an unconfirmed one.
+- Connection Manager – Cloud ID field bleed-through: Fixed a bug where switching from Cloud ID to URL connection type with a Cloud ID already entered would attempt to use the Cloud ID value to establish the connection instead of the URL.
+- SNMP – Graceful "no data yet" error: Resolved an unhelpful error message shown to users who had successfully created a device in SNMP but for whom no data had yet been written to Elasticsearch. The experience is now clean and friendly.
+- SNMP – Cancel icon color in Safari: Fixed a cross-browser rendering issue where cancel/delete icons (which should be pink) were rendering as green in Safari.
+- Windows – Logging file handler: Updated the logging file handler configuration so that it works correctly on Windows (file rotation and path handling were broken on Windows previously).
+- Pre-commit – Windows line endings: Fixed the add_license_headers.py script to prevent CRLF line endings from being injected when adding the NOTICE header to source files on Windows. Also retroactively corrected headers added to files that were previously missing them.
+
+# UI
+- Modal close confirmation: Added a confirmation dialogue to modal close handlers for modals with significant user input (e.g. Connection, SNMP Device, Network, Profile modals). This prevents accidental data loss when a user clicks outside the modal.
+- SNMP Device – IPv6 support: Relaxed the IP address validation on SNMP devices to accept IPv6 addresses in addition to IPv4.
 
 ### API access
 

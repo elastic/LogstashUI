@@ -1,3 +1,7 @@
+#Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+#or more contributor license agreements. Licensed under the Elastic License;
+#you may not use this file except in compliance with the Elastic License.
+
 # Air-gapped UI-only compose. No Agent, no embedded profile, no registry pull.
 # Load the image first: ./load.sh
 # Image: __IMAGE_NAME__

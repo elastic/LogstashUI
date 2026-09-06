@@ -440,6 +440,16 @@ class TestDeviceClean:
                 network=test_network,
             )
 
+    def test_device_accepts_ipv6(self, test_credential_v2c, test_network):
+        """Device.clean accepts a valid IPv6 address."""
+        device = Device.objects.create(
+            name='ipv6_dev',
+            ip_address='2001:db8::1',
+            credential=test_credential_v2c,
+            network=test_network,
+        )
+        assert device.id is not None
+
     def test_device_valid_hostname_only(self, test_credential_v2c, test_network):
         """A device with only a hostname (no IP) is valid."""
         device = Device.objects.create(

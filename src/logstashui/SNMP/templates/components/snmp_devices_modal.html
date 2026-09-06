@@ -6,8 +6,8 @@
 {% load static %}
 
 <!-- SNMP Device Form Modal -->
-<div id="deviceFormModal" class="hidden fixed inset-0 overflow-hidden z-50">
-  <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="closeDeviceModal()"></div>
+<div id="deviceFormModal" class="hidden fixed inset-0 overflow-hidden z-50" data-confirm-close>
+  <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="safeClose(closeDeviceModal)"></div>
   <div class="absolute inset-y-0 right-0 max-w-full flex">
     <div class="w-full max-w-md bg-base-200 shadow-xl flex flex-col h-full">
       <div class="flex justify-between items-center p-6 border-b border-base-300">
@@ -52,7 +52,7 @@
                 <label for="deviceIpAddress" class="block text-sm font-medium text-gray-300 mb-2">
                   IP Address
                 </label>
-                <input type="text" id="deviceIpAddress" name="ip_address" class="input input-bordered w-full font-mono" placeholder="192.168.1.1">
+                <input type="text" id="deviceIpAddress" name="ip_address" class="input input-bordered w-full font-mono" placeholder="192.168.1.1 or 2001:db8::1">
                 <p class="text-gray-400 text-xs mt-1">IPv4 or IPv6</p>
               </div>
             </div>
