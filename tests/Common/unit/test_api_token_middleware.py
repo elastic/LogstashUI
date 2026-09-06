@@ -25,6 +25,7 @@ ADD_CONNECTION = '/ConnectionManager/AddConnection'
 FORM_CT = 'application/x-www-form-urlencoded'
 BODY = (
     'connection_type=CENTRALIZED&name=api-created'
+    '&connection_mode=url&auth_type=apiKey'
     '&host=https://es.invalid&port=443&api_key=abc'
 )
 

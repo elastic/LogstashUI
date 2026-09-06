@@ -36,17 +36,8 @@ CUSTOM_DATE \d{4}-\d{2}-\d{2}"""
 
 @pytest.fixture
 def grok_patterns_file_path():
-    """Path to the grok patterns file"""
-    utilities_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    patterns_file = os.path.join(utilities_dir, 'data', 'grok-patterns.txt')
-    
-    if not os.path.exists(patterns_file):
-        patterns_file = os.path.join(utilities_dir, 'grok-patterns')
-    
-    if not os.path.exists(patterns_file):
-        patterns_file = os.path.join(utilities_dir, 'static', 'grok-patterns')
-    
-    return patterns_file
+    """Path to the grok patterns file shipped with the Utilities app."""
+    return os.path.join(settings.BASE_DIR, 'Utilities', 'data', 'grok-patterns.txt')
 
 
 @pytest.mark.django_db

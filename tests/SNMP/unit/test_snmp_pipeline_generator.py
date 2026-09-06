@@ -7,8 +7,11 @@ Tests for SNMP.snmp_pipeline_generator — pure utility functions that require
 no database or network access.
 """
 
-import pytest
+from pathlib import Path
 from unittest.mock import MagicMock
+
+import pytest
+from django.conf import settings
 
 from SNMP.snmp_pipeline_generator import (
     _normalize_template_name,
@@ -660,11 +663,10 @@ class TestHostSystemMetricsSplit:
 
     def test_official_profile_averages_cores_to_ecs_cpu_field(self):
         import json
-        from pathlib import Path
 
         path = (
-            Path(__file__).resolve().parents[1]
-            / 'data' / 'official_profiles' / 'generic_host_system_metrics.json'
+            Path(settings.BASE_DIR)
+            / 'SNMP' / 'data' / 'official_profiles' / 'generic_host_system_metrics.json'
         )
         profile = json.loads(path.read_text(encoding='utf-8'))
         average = next(n for n in profile['normalizers'] if n['operation'] == 'average')
@@ -731,10 +733,9 @@ class TestPaloaltoComponentsProfile:
 
     def _profile(self):
         import json
-        from pathlib import Path
         path = (
-            Path(__file__).resolve().parents[1]
-            / 'data' / 'official_profiles' / 'paloalto_components.json'
+            Path(settings.BASE_DIR)
+            / 'SNMP' / 'data' / 'official_profiles' / 'paloalto_components.json'
         )
         return json.loads(path.read_text(encoding='utf-8'))
 
@@ -755,10 +756,9 @@ class TestPaloaltoComponentsProfile:
 
     def test_firewall_template_uses_components_not_generic_entity_sensor(self):
         import json
-        from pathlib import Path
         path = (
-            Path(__file__).resolve().parents[1]
-            / 'data' / 'official_device_templates' / 'palo_alto_firewall.json'
+            Path(settings.BASE_DIR)
+            / 'SNMP' / 'data' / 'official_device_templates' / 'palo_alto_firewall.json'
         )
         template = json.loads(path.read_text(encoding='utf-8'))
         assert 'paloalto_components' in template['profiles']

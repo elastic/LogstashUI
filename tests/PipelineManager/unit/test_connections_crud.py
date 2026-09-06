@@ -129,6 +129,7 @@ class TestAddConnection:
         response = authenticated_client.post('/ConnectionManager/AddConnection', {
             'name': 'Test Connection',
             'connection_type': 'CENTRALIZED',
+            'connection_mode': 'url',
             'host': 'https://localhost:9200',
             'username': 'elastic',
             'password': 'changeme'
@@ -152,6 +153,7 @@ class TestAddConnection:
         response = authenticated_client.post('/ConnectionManager/AddConnection', {
             'name': 'Bad Connection',
             'connection_type': 'CENTRALIZED',
+            'connection_mode': 'url',
             'host': 'https://invalid:9200',
             'username': 'elastic',
             'password': 'wrong'
