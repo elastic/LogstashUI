@@ -5,8 +5,8 @@
 -->
 
   <!-- Connection Form Flyout -->
-  <div id="connectionFormFlyout" class="hidden fixed inset-0 overflow-hidden" style="z-index: 80;">
-    <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="closeFlyout()"></div>
+  <div id="connectionFormFlyout" class="hidden fixed inset-0 overflow-hidden" style="z-index: 80;" data-confirm-close>
+    <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" onclick="safeClose(closeFlyout)"></div>
     <div class="absolute inset-y-0 right-0 max-w-full flex">
       <div class="w-[32rem] bg-base-200 shadow-xl flex flex-col h-full">
         <div class="flex justify-between items-center p-6 border-b border-base-300">
