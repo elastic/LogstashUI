@@ -283,6 +283,25 @@ def materialize_simulate_logstash_yml(
     return "\n".join(lines) + ("\n" if lines else "")
 
 
+def logstash_via_ui(policy: Policy) -> bool:
+    """Effective value of the "download Logstash from LogstashUI" flag.
+
+    The stored field is only meaningful for a MANAGED or SIMULATE policy that
+    pins a version; PACKAGED uses the OS package and EMBEDDED runs in-process,
+    so neither ever downloads a tarball. Normalizing here rather than at each
+    call site means a stale True left behind by a policy-type change cannot leak
+    out to an agent.
+    """
+    if not getattr(policy, "logstash_via_ui", False):
+        return False
+    if policy.logstash_source != Policy.LogstashSource.VERSION:
+        return False
+    return normalize_policy_type(policy.policy_type) in (
+        Policy.PolicyType.MANAGED,
+        Policy.PolicyType.SIMULATE,
+    )
+
+
 def build_policy_config(policy: Policy, *, instance_id: int | None = None) -> dict:
     """
     Build enrollment / apply policy_config payload.
@@ -307,6 +326,7 @@ def build_policy_config(policy: Policy, *, instance_id: int | None = None) -> di
             "logstash_download_dir": normalize_agent_opt_path(
                 policy.logstash_download_dir or f"{AGENT_OPT_ROOT}/logstash-versions"
             ),
+            "logstash_via_ui": False,
             "logstash_yml": materialize_simulate_logstash_yml(
                 policy.logstash_yml, EMBEDDED_LOGSTASH_API_PORT, instance_id=None
             ),
@@ -342,6 +362,7 @@ def build_policy_config(policy: Policy, *, instance_id: int | None = None) -> di
             "logstash_source": policy.logstash_source,
             "logstash_version": policy.logstash_version or "",
             "logstash_download_dir": download_dir,
+            "logstash_via_ui": logstash_via_ui(policy),
             "logstash_unit": f"ls-simulate@{instance_id}",
             "agent_unit": f"lsagent-simulate@{instance_id}",
             "logstash_yml": yml,
@@ -375,6 +396,7 @@ def build_policy_config(policy: Policy, *, instance_id: int | None = None) -> di
             "logstash_source": policy.logstash_source,
             "logstash_version": policy.logstash_version or "",
             "logstash_download_dir": download_dir or f"{AGENT_OPT_ROOT}/logstash-versions",
+            "logstash_via_ui": logstash_via_ui(policy),
             "logstash_unit": f"logstash-managed@{instance_id}",
             "agent_unit": f"logstash-agent@{instance_id}",
             "path_root": paths["path_root"],
@@ -397,6 +419,7 @@ def build_policy_config(policy: Policy, *, instance_id: int | None = None) -> di
         "logstash_source": policy.logstash_source or "SYSTEM",
         "logstash_version": policy.logstash_version or "",
         "logstash_download_dir": normalize_agent_opt_path(policy.logstash_download_dir or ""),
+        "logstash_via_ui": False,
         "logstash_unit": "logstash",
         "agent_unit": "logstash-agent",
         "logstash_yml": policy.logstash_yml,
@@ -407,14 +430,15 @@ def build_policy_config(policy: Policy, *, instance_id: int | None = None) -> di
 
 def embedded_agent_base_url() -> str:
     """URL the UI uses to reach the docker/local embedded agent FastAPI."""
+    from LogstashUI.insecure_http import force_http_url
+
     try:
         from django.conf import settings
 
-        return (getattr(settings, "LOGSTASH_AGENT_URL", None) or "https://127.0.0.1:9500").rstrip(
-            "/"
-        )
+        url = getattr(settings, "LOGSTASH_AGENT_URL", None) or "https://127.0.0.1:9500"
     except Exception:
-        return "https://127.0.0.1:9500"
+        url = "https://127.0.0.1:9500"
+    return force_http_url(url).rstrip("/")
 
 
 def probe_embedded_agent_online(timeout: float = 2.0) -> bool:
@@ -528,7 +552,8 @@ def ensure_embedded_connection(*, probe: bool = True) -> Connection | None:
             agent_api_port=port,
             logstash_api_port=EMBEDDED_LOGSTASH_API_PORT,
             last_check_in=now if online else None,
-            status_blob=update_fields.get("status_blob") or {"embedded": True, "online": online},
+            # probe=False leaves online *unknown* rather than asserting offline
+            status_blob=update_fields.get("status_blob") or {"embedded": True},
         )
         conn.save()
         return conn
@@ -574,6 +599,21 @@ def is_embedded_discovered(conn) -> bool:
     return (now - ts).total_seconds() < 600
 
 
+def embedded_probe_failed(conn) -> bool:
+    """True only when a probe explicitly reported the embedded agent offline.
+
+    A row that has never been probed carries no ``online`` key — that is
+    unknown, not failed, and the sticky picker row stays visible.
+    """
+    if conn is None:
+        return False
+    if isinstance(conn, dict):
+        blob = conn.get("status_blob") or {}
+    else:
+        blob = getattr(conn, "status_blob", None) or {}
+    return blob.get("online") is False
+
+
 def is_embedded_connection(conn) -> bool:
     """True for the docker/local pseudo agent (dict or model)."""
     if conn is None:
@@ -595,6 +635,8 @@ def list_simulation_targets(active_only: bool = True, *, ensure_embedded: bool =
     """
     Return list of dicts describing simulate-capable connections for the editor.
     """
+    from LogstashUI.insecure_http import force_http_url
+
     if ensure_embedded:
         ensure_embedded_connection(probe=False)
 
@@ -620,9 +662,12 @@ def list_simulation_targets(active_only: bool = True, *, ensure_embedded: bool =
             or ("system" if policy.policy_type == Policy.PolicyType.SIMULATE else "")
         )
         if policy.policy_type == Policy.PolicyType.EMBEDDED:
-            # Picker only — and only after a successful live probe
-            if not is_embedded_discovered(conn):
+            # Picker only. This path never probes (see
+            # refresh_embedded_connection_async), so keep the sticky row until
+            # a probe has actually failed — unprobed is unknown, not offline.
+            if embedded_probe_failed(conn):
                 continue
+            discovered = is_embedded_discovered(conn)
             # Closed select: terse; detail on hover / open option list
             label = "embedded"
             ver_label = version or "docker"
@@ -637,9 +682,11 @@ def list_simulation_targets(active_only: bool = True, *, ensure_embedded: bool =
             if not base_url:
                 host = conn.host or "127.0.0.1"
                 base_url = f"https://{host}:{agent_port}"
+            base_url = force_http_url(base_url)
             host = conn.host or "127.0.0.1"
             detail = f"embedded · {host} · Logstash {ver_label}"
         else:
+            discovered = True
             n = conn.instance_id or "?"
             ver_label = version or "system"
             host = conn.host or "127.0.0.1"
@@ -648,7 +695,9 @@ def list_simulation_targets(active_only: bool = True, *, ensure_embedded: bool =
             agent_port = conn.agent_api_port
             if agent_port is None and conn.instance_id:
                 agent_port = SIMULATE_AGENT_API_BASE + conn.instance_id
-            base_url = f"https://{host}:{agent_port}" if agent_port else None
+            base_url = (
+                force_http_url(f"https://{host}:{agent_port}") if agent_port else None
+            )
 
         row = {
             "connection_id": conn.id,
@@ -664,6 +713,7 @@ def list_simulation_targets(active_only: bool = True, *, ensure_embedded: bool =
             "logstash_source": policy.logstash_source,
             "host": host,
             "base_url": base_url,
+            "discovered": discovered,
             "last_selected_at": conn.last_selected_at.isoformat()
             if conn.last_selected_at
             else None,

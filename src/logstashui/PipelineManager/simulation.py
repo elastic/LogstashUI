@@ -225,6 +225,10 @@ def SimulatePipeline(request):
                 or request.build_absolute_uri("/")
             ).rstrip("/")
 
+        from LogstashUI.insecure_http import force_http_url
+
+        logstash_ui_url = force_http_url(logstash_ui_url)
+
         logger.debug("USING THIS URL: %s", logstash_ui_url)
         # Recursive function to instrument plugins, including nested conditionals
         step_counter = [0]  # Use list to maintain counter across recursive calls

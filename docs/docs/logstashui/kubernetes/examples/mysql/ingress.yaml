@@ -1,0 +1,31 @@
+#Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+#or more contributor license agreements. Licensed under the Elastic License;
+#you may not use this file except in compliance with the Elastic License.
+
+# Ingress-nginx: originate HTTPS to the pod and skip verify of the product leaf.
+# Do not set LOGSTASHUI_TLS=false on the container.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: logstashui
+  namespace: logstashui
+  annotations:
+    nginx.ingress.kubernetes.io/backend-protocol: "HTTPS"
+    nginx.ingress.kubernetes.io/proxy-ssl-verify: "off"
+spec:
+  ingressClassName: nginx
+  # tls:
+  #   - hosts:
+  #       - logstashui.example.com
+  #     secretName: logstashui-tls
+  rules:
+    - host: logstashui.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: logstashui
+                port:
+                  number: 8443

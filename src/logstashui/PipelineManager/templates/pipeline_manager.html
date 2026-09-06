@@ -219,7 +219,9 @@
                     <span class="text-xs text-gray-500">v{{ connection.status_blob.agent_version }}</span>
                     {% if connection.desired_agent_version and connection.status_blob.agent_version != connection.desired_agent_version %}
                     <span class="text-xs text-gray-500">Upgrading</span>
-                    {% elif connection.status_blob.agent_version != preferred_agent_version %}
+                    {% elif connection.agent_version_relation == "newer" %}
+                    <span class="text-xs text-amber-300/90">unreleased version</span>
+                    {% elif connection.agent_version_relation == "older" or connection.agent_version_relation == "unknown" %}
                     <button onclick="upgradeAgent({{ connection.pk }}, '{{ connection.name }}', '{{ preferred_agent_version }}')" class="text-xs px-2 py-0.5 rounded bg-blue-600 hover:bg-blue-700 text-white font-medium transition-colors">
                       Upgrade
                     </button>
@@ -230,6 +232,11 @@
                     {% if connection.feature_agent %}
                     <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-500/15 text-purple-300 border border-purple-500/30">LogstashAgent</span>
                     {% endif %}
+                    {% comment %}
+                    Container always renders so agent_status_sse.js can fill it in when a
+                    version first arrives, not just replace one that is already there.
+                    {% endcomment %}
+                    <span class="ls-version-container inline-flex" data-agent-id="{{ connection.pk }}">{% if connection.logstash_version %}<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-cyan-500/15 text-cyan-300 border border-cyan-500/30" title="Logstash {{ connection.logstash_version }}">LS {{ connection.logstash_version }}</span>{% endif %}</span>
                     {% if connection.feature_cpm %}
                     <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-500/15 text-blue-300 border border-blue-500/30" title="Centralized Pipeline Management">CPM</span>
                     {% endif %}

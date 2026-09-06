@@ -2,11 +2,16 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
+from django.conf import settings
 from django.db import models
 from Common.encryption import encrypt_credential, decrypt_credential
 from django.core.exceptions import ValidationError
-from django.contrib.auth.hashers import make_password, check_password
+from django.contrib.auth.hashers import make_password, check_password, identify_hasher
+from django.utils import timezone
+from datetime import timedelta
 import hashlib
+import re
+import secrets
 from Common import logstash_config_parse
 
 
@@ -109,6 +114,14 @@ class Policy(models.Model):
         blank=True,
         default="/opt/logstash-agent/logstash-versions",
         help_text="Directory for auto-downloaded Logstash versions"
+    )
+    logstash_via_ui = models.BooleanField(
+        default=False,
+        help_text=(
+            "Fetch the Logstash tarball from LogstashUI instead of "
+            "artifacts.elastic.co. Only meaningful when logstash_source=VERSION "
+            "on a MANAGED or SIMULATE policy."
+        )
     )
     logstash_yml = models.TextField(
         help_text="Content of logstash.yml configuration file"
@@ -701,35 +714,343 @@ class EnrollmentToken(models.Model):
         return f"{self.policy.name} - {self.name}"
 
 
+#: Namespace marker on admin API tokens. Agent keys carry no prefix, so the
+#: token middleware can tell the two apart from the header alone.
+API_TOKEN_SCHEME = 'lsui'
+
+
 class ApiKey(models.Model):
     """
-    Represents an API key used by an enrolled agent for authenticated polling/check-in.
-    Each API key belongs to a specific connection.
+    A hashed bearer credential. Two flavours share this table:
+
+    * **Agent keys** — issued at enrollment, scoped to a ``connection``. The
+      agent sends ``connection_id`` in the request body, so the row is found
+      before the hash is ever checked and no lookup column is needed. These
+      rows have ``prefix=None``.
+    * **Admin API tokens** — issued from Management, scoped to a ``user``, and
+      presented as ``Authorization: ApiKey lsui_<prefix>_<secret>``. Here the
+      header is the *only* identifier, so ``prefix`` is stored unhashed and
+      indexed; without it, resolving a token would mean a PBKDF2 comparison
+      against every row in the table on every request.
+
+    Exactly one of ``connection`` / ``user`` is set.
     """
     connection = models.ForeignKey(
         Connection,
         on_delete=models.CASCADE,
         related_name='api_keys',
-        help_text="Connection this API key belongs to"
+        null=True,
+        blank=True,
+        help_text="Connection this API key belongs to (agent keys only)"
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='api_tokens',
+        null=True,
+        blank=True,
+        help_text="User this API token acts as (admin tokens only)"
+    )
+    name = models.CharField(
+        max_length=100,
+        blank=True,
+        default='',
+        help_text="Human-readable label for this token"
+    )
+    prefix = models.CharField(
+        max_length=12,
+        null=True,
+        blank=True,
+        unique=True,
+        db_index=True,
+        help_text="Unhashed lookup key for admin tokens; null for agent keys"
     )
     api_key = models.CharField(
         max_length=512,
         help_text="Hashed API key for agent authentication"
     )
-    
+    created_at = models.DateTimeField(null=True, blank=True, auto_now_add=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         verbose_name = 'API Key'
         verbose_name_plural = 'API Keys'
-    
+
     def __str__(self):
-        return f"{self.connection.name} - API Key"
-    
+        if self.connection_id:
+            return f"{self.connection.name} - API Key"
+        return f"{self.name or 'unnamed'} - API Token"
+
+    def clean(self):
+        # Not a DB CheckConstraint: constraint enforcement is uneven across the
+        # MySQL 8.0 floor, and this is only ever violated by our own code.
+        if bool(self.connection_id) == bool(self.user_id):
+            raise ValidationError(
+                "An ApiKey must belong to exactly one of connection or user."
+            )
+
     def save(self, *args, **kwargs):
-        # Always hash the API key before saving
-        if self.api_key:
+        # Hash on the way in, but only once. Renaming or revoking a token
+        # re-saves the row, and re-running make_password on a stored hash
+        # would silently invalidate the credential.
+        if self.api_key and not self._is_hashed(self.api_key):
             self.api_key = make_password(self.api_key)
         super().save(*args, **kwargs)
-    
+
+    @staticmethod
+    def _is_hashed(value):
+        try:
+            identify_hasher(value)
+        except ValueError:
+            return False
+        return True
+
     def verify_api_key(self, raw_api_key):
         """Verify a raw API key against the stored hash"""
         return check_password(raw_api_key, self.api_key)
+
+    # -- admin API tokens ---------------------------------------------------
+
+    @classmethod
+    def issue_for_user(cls, user, name='', expires_at=None):
+        """Mint an admin API token. Returns ``(instance, raw_token)``.
+
+        The raw token is the only time the secret exists in plaintext — it is
+        not recoverable afterwards.
+        """
+        # token_hex, not token_urlsafe: the prefix must contain no '_' so that
+        # split('_', 2) on the wire format is unambiguous.
+        prefix = secrets.token_hex(6)
+        secret = secrets.token_urlsafe(32)
+        token = cls(
+            user=user,
+            name=name,
+            prefix=prefix,
+            api_key=secret,
+            expires_at=expires_at,
+        )
+        token.full_clean(exclude=['api_key'], validate_unique=False)
+        token.save()
+        return token, f"{API_TOKEN_SCHEME}_{prefix}_{secret}"
+
+    @staticmethod
+    def parse_token(raw):
+        """Split a wire-format token into ``(prefix, secret)``.
+
+        Returns ``(None, None)`` for anything that is not an admin token,
+        including agent keys, which carry no scheme marker.
+        """
+        parts = (raw or '').split('_', 2)
+        if len(parts) != 3 or parts[0] != API_TOKEN_SCHEME:
+            return None, None
+        if not parts[1] or not parts[2]:
+            return None, None
+        return parts[1], parts[2]
+
+    @property
+    def masked(self):
+        """Display form for the token list — prefix only, never the secret."""
+        return f"{API_TOKEN_SCHEME}_{self.prefix}_…" if self.prefix else ''
+
+    @property
+    def is_expired(self):
+        return self.expires_at is not None and self.expires_at <= timezone.now()
+
+    @property
+    def is_active(self):
+        return self.revoked_at is None and not self.is_expired
+
+
+#: Release tarballs LogstashUI is willing to cache and serve. Anchored, and with
+#: no path separators in any branch, so a filename that matches can never escape
+#: the cache directory.
+ARTIFACT_FILENAME_RE = re.compile(
+    r'^logstash-(?P<version>[0-9][0-9A-Za-z.+-]{0,31})'
+    r'-(?P<platform>linux|darwin|windows)'
+    r'-(?P<arch>x86_64|aarch64)'
+    r'\.tar\.gz(?P<checksum>\.sha512)?$'
+)
+
+#: Checksum sidecars are a few dozen bytes. Serving one must not consume a slot
+#: in the download semaphore, or a burst of them starves real transfers.
+SMALL_FILE_BYTES = 1024 * 1024
+
+
+def parse_artifact_filename(filename):
+    """Validate a requested filename.
+
+    Returns ``(tarball_name, version, arch, is_checksum)``, where ``tarball_name``
+    is the ``.tar.gz`` even when the checksum sidecar was requested — both files
+    belong to one :class:`LogstashArtifact` row and one upstream fetch.
+
+    Returns ``None`` for anything unrecognized, which callers answer with 404.
+    """
+    match = ARTIFACT_FILENAME_RE.match(filename or '')
+    if match is None:
+        return None
+    is_checksum = bool(match.group('checksum'))
+    tarball = filename[:-len('.sha512')] if is_checksum else filename
+    arch = f"{match.group('platform')}-{match.group('arch')}"
+    return tarball, match.group('version'), arch, is_checksum
+
+
+class LogstashArtifact(models.Model):
+    """A Logstash release tarball cached locally and served to agents.
+
+    One row covers the ``.tar.gz`` and its ``.sha512`` sidecar; a request for
+    either resolves here and a single fetch pulls both.
+
+    The status field doubles as the cross-process lock. LogstashUI has no shared
+    cache backend (no ``CACHES`` in settings, so Django falls back to per-process
+    LocMemCache), and gunicorn runs 2+ worker processes, so an in-memory lock
+    cannot prevent two workers starting the same 450 MB download. A conditional
+    UPDATE on this row can — see :meth:`claim_for_fetch`.
+    """
+
+    class Status(models.TextChoices):
+        PENDING = 'PENDING', 'Pending'
+        FETCHING = 'FETCHING', 'Downloading'
+        READY = 'READY', 'Ready'
+        FAILED = 'FAILED', 'Failed'
+        IMPORTING = 'IMPORTING', 'Verifying import'
+
+    #: A claim whose heartbeat is older than this is assumed dead and may be
+    #: taken over. Fetch greenlets die with their gunicorn worker, so on any
+    #: restart mid-download this is the recovery path, not an edge case.
+    STALE_CLAIM_SECONDS = 120
+
+    filename = models.CharField(
+        max_length=255,
+        unique=True,
+        help_text="Tarball filename, e.g. logstash-9.4.3-linux-x86_64.tar.gz"
+    )
+    version = models.CharField(
+        max_length=32,
+        db_index=True,
+        help_text="Logstash version, e.g. 9.4.3"
+    )
+    arch = models.CharField(
+        max_length=32,
+        help_text="Platform and architecture, e.g. linux-x86_64"
+    )
+    source_url = models.CharField(
+        max_length=512,
+        blank=True,
+        default="",
+        help_text="Explicit upstream URL. Blank derives one from the base URL setting."
+    )
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.PENDING,
+        db_index=True,
+    )
+    size_bytes = models.BigIntegerField(
+        null=True,
+        blank=True,
+        help_text="Total size, from the upstream Content-Length or the file on disk"
+    )
+    bytes_downloaded = models.BigIntegerField(
+        default=0,
+        help_text="Progress counter, written on a time floor rather than per chunk"
+    )
+    sha512 = models.CharField(
+        max_length=128,
+        blank=True,
+        default="",
+        help_text="Verified SHA-512 of the published tarball"
+    )
+    error = models.TextField(
+        blank=True,
+        default="",
+        help_text="Why the last fetch failed"
+    )
+    claimed_at = models.DateTimeField(null=True, blank=True)
+    heartbeat_at = models.DateTimeField(null=True, blank=True)
+    serve_count = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Fresh tarball downloads by agents. Checksum fetches and resumed "
+            "range requests hit the same row but are not counted"
+        )
+    )
+    last_served_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the tarball was last downloaded in full"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'logstash_artifact'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.filename} ({self.status})"
+
+    @property
+    def checksum_filename(self):
+        return f"{self.filename}.sha512"
+
+    @property
+    def percent(self):
+        """Whole-percent progress, or None when the total is not yet known."""
+        if not self.size_bytes:
+            return None
+        return min(100, int(self.bytes_downloaded * 100 / self.size_bytes))
+
+    def resolve_source_url(self, base_url):
+        """Upstream URL for the tarball. An explicit source_url wins."""
+        if self.source_url:
+            return self.source_url
+        return f"{base_url.rstrip('/')}/{self.filename}"
+
+    @classmethod
+    def claim_for_fetch(cls, pk, *, now=None):
+        """Atomically take ownership of a download. Returns True if we won.
+
+        A single conditional UPDATE is the whole mechanism. It is race-free on
+        every supported engine: PostgreSQL re-evaluates the WHERE clause after
+        taking the row lock, InnoDB does a current read so the loser sees the
+        winner's committed FETCHING, and SQLite has one global writer. Exactly
+        one caller comes back with a rowcount of 1.
+
+        A FETCHING row whose heartbeat has gone stale is also claimable, which
+        is how a download orphaned by a worker restart gets picked back up.
+        """
+        now = now or timezone.now()
+        stale_before = now - timedelta(seconds=cls.STALE_CLAIM_SECONDS)
+        updated = cls.objects.filter(pk=pk).filter(
+            models.Q(status__in=[cls.Status.PENDING, cls.Status.FAILED])
+            | models.Q(status=cls.Status.FETCHING, heartbeat_at__lt=stale_before)
+            | models.Q(status=cls.Status.FETCHING, heartbeat_at__isnull=True)
+        ).update(
+            status=cls.Status.FETCHING,
+            claimed_at=now,
+            heartbeat_at=now,
+            bytes_downloaded=0,
+            error='',
+        )
+        return updated == 1
+
+    @classmethod
+    def release_claim(cls, pk):
+        """Hand a claim back without failing it, for the over-capacity path."""
+        return cls.objects.filter(pk=pk, status=cls.Status.FETCHING).update(
+            status=cls.Status.PENDING,
+            claimed_at=None,
+            heartbeat_at=None,
+        )
+
+    @classmethod
+    def active_fetch_count(cls, *, now=None):
+        """Fetches genuinely in flight, ignoring rows abandoned by dead workers."""
+        now = now or timezone.now()
+        stale_before = now - timedelta(seconds=cls.STALE_CLAIM_SECONDS)
+        return cls.objects.filter(
+            status=cls.Status.FETCHING,
+            heartbeat_at__gte=stale_before,
+        ).count()

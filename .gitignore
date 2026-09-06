@@ -223,7 +223,6 @@ __marimo__/
 # LogstashUI
 /src/logstashui/staticfiles/
 /src/logstashui/data/
-/.plans/
 
 # Local config (use logstashui.example.yml)
 /src/logstashui/logstashui.yml
@@ -233,6 +232,7 @@ __marimo__/
 /docker/logstashui_data/
 
 # Agentic / local tooling scratch (not product docs)
+/.plans/
 .grokignore
 /docs/superpowers/
 .hermes.md
@@ -242,6 +242,8 @@ CLAUDE.md
 .cursorrules
 IDEA.md
 graphify-out/
+.github/copilot-instructions.md
+/scratch/
 
 # LogstashAgent (cloned from GitHub in host mode)
 /LogstashAgent/

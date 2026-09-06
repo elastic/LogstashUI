@@ -2,7 +2,7 @@
 
 LogstashAgent and LogstashUI use **policy types** and matching **agent modes** so one Linux host can run production Logstash and one or more isolated multi-instance agents without sharing state or config.
 
-> **Paired releases:** LogstashUI **0.5.1** ↔ LogstashAgent **0.5.1** (see [Compatibility](/docs/docs/logstashui/compatibility.md) and [CHANGELOG](https://github.com/elastic/LogstashUI/blob/main/CHANGELOG.md)).
+> **Paired releases:** LogstashUI **0.5.2** ↔ LogstashAgent **0.5.2** (see [Compatibility](/docs/docs/logstashui/compatibility.md) and [CHANGELOG](https://github.com/elastic/LogstashUI/blob/main/CHANGELOG.md)).
 
 ---
 
@@ -140,7 +140,9 @@ Policies can set **Logstash binary source**:
 
 1. Save the policy in LogstashUI (Source = VERSION, pin e.g. `9.4.3`).
 2. **No separate Deploy is required for binary-only changes** — the next agent check-in detects runtime drift.
-3. Agent downloads (if needed) into `/opt/logstash-agent/logstash-versions/<version>/`.
+3. Agent downloads (if needed) into `/opt/logstash-agent/logstash-versions/<version>/` — from Elastic
+   artifacts, or from LogstashUI when the policy enables
+   [the tarball proxy](/docs/docs/logstashui/configuration/logstash_proxy.md).
 4. Writes `LOGSTASH_BINARY=` into the instance `env` file.
 5. Restarts the Logstash unit when the binary path or pin changes.
 6. Reports resolved version on check-in (`status_blob.logstash_version_resolved`).

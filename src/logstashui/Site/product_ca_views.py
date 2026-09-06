@@ -22,6 +22,10 @@ def product_ca_crt(request):
     Returns the product CA certificate (PEM). Public; used by agents that
     receive a fingerprint in the enrollment token.
     """
+    from LogstashUI.insecure_http import insecure_http
+
+    if insecure_http():
+        return HttpResponse("CA disabled", status=404, content_type="text/plain")
     try:
         pem = get_ca_pem()
     except Exception as e:

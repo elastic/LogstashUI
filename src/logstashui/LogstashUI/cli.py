@@ -7,11 +7,14 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import shutil
 import sys
 from importlib.resources import files
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -46,6 +49,30 @@ def build_parser() -> argparse.ArgumentParser:
 
     manage = sub.add_parser("manage", help="Django management command passthrough")
     manage.add_argument("manage_args", nargs=argparse.REMAINDER)
+
+    migrate = sub.add_parser(
+        "migrate-engine",
+        help="BETA: copy SQLite data to PostgreSQL or MySQL (stops gunicorn)",
+    )
+    migrate.add_argument(
+        "--to",
+        required=True,
+        choices=("postgresql", "mysql", "mariadb"),
+        help="Target engine (mariadb is an alias of mysql)",
+    )
+    migrate.add_argument(
+        "--i-have-a-backup",
+        dest="i_have_a_backup",
+        action="store_true",
+        help="Required. Confirms db.sqlite3 was copied aside.",
+    )
+    migrate.add_argument("--pid", type=Path, default=None, help="gunicorn pidfile to signal")
+    migrate.add_argument(
+        "--write-env",
+        type=Path,
+        default=None,
+        help="Append LOGSTASHUI_DB_* to this EnvironmentFile",
+    )
 
     systemd = sub.add_parser(
         "systemd",
@@ -89,6 +116,11 @@ def build_parser() -> argparse.ArgumentParser:
         default="false",
         choices=("true", "false"),
     )
+    systemd.add_argument("--db-engine", default="")
+    systemd.add_argument("--db-host", default="")
+    systemd.add_argument("--db-name", default="")
+    systemd.add_argument("--db-user", default="")
+    systemd.add_argument("--db-port", default="")
     parser.set_defaults(
         command="serve",
         bind=os.environ.get("LOGSTASHUI_BIND", "0.0.0.0:8443"),
@@ -126,6 +158,11 @@ def render_default_env(
     tls_sans: str,
     agent_ui_url: str,
     no_auth: str,
+    db_engine: str = "",
+    db_host: str = "",
+    db_name: str = "",
+    db_user: str = "",
+    db_port: str = "",
 ) -> str:
     sample = _packaging_file("logstashui.default")
     replacements = {
@@ -151,6 +188,18 @@ def render_default_env(
         extras.append(f"LOGSTASHUI_TLS_SANS={tls_sans}")
     if agent_ui_url:
         extras.append(f"LOGSTASHUI_AGENT_UI_URL={agent_ui_url}")
+    from LogstashUI.database import canonical_engine
+
+    if db_engine and canonical_engine(db_engine) != "sqlite":
+        extras.append(f"LOGSTASHUI_DB_ENGINE={canonical_engine(db_engine)}")
+        if db_host:
+            extras.append(f"LOGSTASHUI_DB_HOST={db_host}")
+        if db_port:
+            extras.append(f"LOGSTASHUI_DB_PORT={db_port}")
+        if db_name:
+            extras.append(f"LOGSTASHUI_DB_NAME={db_name}")
+        if db_user:
+            extras.append(f"LOGSTASHUI_DB_USER={db_user}")
     if extras:
         text = text.rstrip() + "\n\n# Values from logstashui systemd\n" + "\n".join(extras) + "\n"
     return text
@@ -182,11 +231,18 @@ def install_systemd(
     tls_sans: str = "",
     agent_ui_url: str = "",
     no_auth: str = "false",
+    db_engine: str = "",
+    db_host: str = "",
+    db_name: str = "",
+    db_user: str = "",
+    db_port: str = "",
     dry_run: bool = False,
     print_only: bool = False,
     interactive: bool = False,
 ) -> dict:
     if interactive and not dry_run and output_dir is None:
+        from LogstashUI.database import canonical_engine
+
         exec_start = _prompt(
             "Path to logstashui executable",
             exec_start or _default_exec_start(),
@@ -204,6 +260,15 @@ def install_systemd(
         tls_sans = _prompt("LOGSTASHUI_TLS_SANS", tls_sans)
         agent_ui_url = _prompt("LOGSTASHUI_AGENT_UI_URL", agent_ui_url)
         no_auth = _prompt("LOGSTASHUI_NO_AUTH (true/false)", no_auth)
+        db_engine = _prompt(
+            "LOGSTASHUI_DB_ENGINE (sqlite/postgresql/mysql)",
+            db_engine or "sqlite",
+        )
+        if canonical_engine(db_engine) != "sqlite":
+            db_host = _prompt("LOGSTASHUI_DB_HOST", db_host)
+            db_port = _prompt("LOGSTASHUI_DB_PORT", db_port)
+            db_name = _prompt("LOGSTASHUI_DB_NAME", db_name or "logstashui")
+            db_user = _prompt("LOGSTASHUI_DB_USER", db_user)
 
     if not exec_start:
         exec_start = _default_exec_start()
@@ -226,6 +291,11 @@ def install_systemd(
         tls_sans=tls_sans,
         agent_ui_url=agent_ui_url,
         no_auth=no_auth,
+        db_engine=db_engine,
+        db_host=db_host,
+        db_name=db_name,
+        db_user=db_user,
+        db_port=db_port,
     )
 
     if print_only:
@@ -299,15 +369,65 @@ def _best_effort_call(name: str, **kwargs) -> None:
         print(f"Warning: {name} failed: {exc}", file=sys.stderr)
 
 
+def _check_db_floor() -> None:
+    """Connect and enforce engine version floors before migrate or gunicorn bind."""
+    _django_setup()
+    from django.db import connection
+
+    from LogstashUI.database import check_server_version
+
+    connection.ensure_connection()
+    check_server_version(connection)
+
+
+def _exec_gunicorn(gunicorn_cmd: list[str]) -> int:
+    """Replace this process with gunicorn, or run it in-process when frozen.
+
+    PyInstaller onedir has no ``gunicorn`` console script on PATH. Calling
+    gunicorn's WSGI app in-process keeps ``--worker-class gevent``.
+    """
+    if getattr(sys, "frozen", False):
+        from gunicorn.app.wsgiapp import run as gunicorn_run
+
+        sys.argv = list(gunicorn_cmd)
+        result = gunicorn_run()
+        return int(result or 0)
+    os.execvp("gunicorn", gunicorn_cmd)
+    return 1
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
+    from LogstashUI.database import canonical_engine
+    from LogstashUI.insecure_http import insecure_http, warn_if_enabled
+    from LogstashUI.paths import resolve_data_dir
+
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "LogstashUI.settings")
     tls_env = os.environ.get("LOGSTASHUI_TLS", "true")
-    tls_on = not args.no_tls and tls_env.strip().lower() not in ("0", "false", "no", "off")
+    tls_on = (
+        not args.no_tls
+        and not insecure_http()
+        and tls_env.strip().lower() not in ("0", "false", "no", "off")
+    )
+    if insecure_http():
+        warn_if_enabled()
 
+    engine = canonical_engine(os.environ.get("LOGSTASHUI_DB_ENGINE"))
+    if engine == "sqlite" and args.workers > 1:
+        msg = (
+            "SQLite is the small-install default; use PostgreSQL or MySQL/MariaDB "
+            "for concurrent agents (LOGSTASHUI_WORKERS>1)."
+        )
+        logger.warning(msg)
+        print(msg, file=sys.stderr)
+
+    _check_db_floor()
     if not args.skip_migrate:
         _manage(["migrate", "--noinput"])
         _best_effort_call("sync_snmp_official_data", cleanup=True)
         _best_effort_call("collectstatic", interactive=False)
+
+    data_dir = resolve_data_dir()
+    data_dir.mkdir(parents=True, exist_ok=True)
 
     gunicorn_cmd = [
         "gunicorn",
@@ -326,6 +446,8 @@ def cmd_serve(args: argparse.Namespace) -> int:
         "-",
         "--error-logfile",
         "-",
+        "--pid",
+        str(data_dir / "gunicorn.pid"),
     ]
     if tls_on:
         _django_setup()
@@ -348,8 +470,7 @@ def cmd_serve(args: argparse.Namespace) -> int:
             fullchain.write_bytes(cert.read_bytes())
         gunicorn_cmd += ["--certfile", str(fullchain), "--keyfile", str(key)]
 
-    os.execvp("gunicorn", gunicorn_cmd)
-    return 1
+    return _exec_gunicorn(gunicorn_cmd)
 
 
 def cmd_systemd(args: argparse.Namespace) -> int:
@@ -371,6 +492,11 @@ def cmd_systemd(args: argparse.Namespace) -> int:
         tls_sans=args.tls_sans,
         agent_ui_url=args.agent_ui_url,
         no_auth=args.no_auth,
+        db_engine=args.db_engine,
+        db_host=args.db_host,
+        db_name=args.db_name,
+        db_user=args.db_user,
+        db_port=args.db_port,
         dry_run=dry_run,
         print_only=args.print_only,
         interactive=interactive,
@@ -387,6 +513,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if command == "systemd":
         return cmd_systemd(args)
+    if command == "migrate-engine":
+        from LogstashUI.migrate_engine import cmd_migrate_engine
+        return cmd_migrate_engine(args)
     if command == "serve":
         if not hasattr(args, "bind"):
             args = parser.parse_args(["serve"])

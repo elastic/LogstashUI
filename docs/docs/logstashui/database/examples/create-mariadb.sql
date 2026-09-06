@@ -1,0 +1,13 @@
+-- Empty MariaDB 10.6+ database for LogstashUI.
+-- Engine is still LOGSTASHUI_DB_ENGINE=mysql.
+-- utf8mb4_bin keeps unique names case-sensitive like SQLite/Postgres.
+-- Tables are created by: logstashui manage migrate --noinput
+-- Replace the password before running.
+
+CREATE DATABASE IF NOT EXISTS logstashui
+  CHARACTER SET utf8mb4
+  COLLATE utf8mb4_bin;
+
+CREATE USER IF NOT EXISTS 'logstashui'@'%' IDENTIFIED BY 'change-me';
+GRANT ALL PRIVILEGES ON logstashui.* TO 'logstashui'@'%';
+FLUSH PRIVILEGES;

@@ -1,0 +1,38 @@
+#Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+#or more contributor license agreements. Licensed under the Elastic License;
+#you may not use this file except in compliance with the Elastic License.
+
+# Air-gapped UI-only compose. No Agent, no embedded profile, no registry pull.
+# Load the image first: ./load.sh
+# Image: __IMAGE_NAME__
+
+name: logstashui-offline
+
+services:
+  logstashui:
+    image: __IMAGE_NAME__
+    ports:
+      - "8443:8443"
+    volumes:
+      - logstashui_data:/var/lib/logstashui
+    environment:
+      DEBUG: "False"
+      LOGSTASHUI_DATA_DIR: /var/lib/logstashui
+      LOGSTASHUI_TLS: "true"
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:-*}
+      CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-https://localhost:8443,https://127.0.0.1:8443}
+      LOGSTASHUI_HOST_HOSTNAME: ${LOGSTASHUI_HOST_HOSTNAME:-}
+      LOGSTASHUI_HOST_IPS: ${LOGSTASHUI_HOST_IPS:-}
+      LOGSTASHUI_TLS_SANS: ${LOGSTASHUI_TLS_SANS:-}
+      LOGSTASHUI_DB_ENGINE: ${LOGSTASHUI_DB_ENGINE:-sqlite}
+      LOGSTASHUI_DB_HOST: ${LOGSTASHUI_DB_HOST:-}
+      LOGSTASHUI_DB_PORT: ${LOGSTASHUI_DB_PORT:-}
+      LOGSTASHUI_DB_NAME: ${LOGSTASHUI_DB_NAME:-}
+      LOGSTASHUI_DB_USER: ${LOGSTASHUI_DB_USER:-}
+      LOGSTASHUI_DB_PASSWORD: ${LOGSTASHUI_DB_PASSWORD:-}
+      PUID: ${PUID:-}
+      PGID: ${PGID:-}
+    restart: unless-stopped
+
+volumes:
+  logstashui_data:

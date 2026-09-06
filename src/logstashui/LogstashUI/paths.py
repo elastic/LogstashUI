@@ -4,7 +4,8 @@
 
 """Resolve runtime data / logs directories (no Django import).
 
-Precedence: LOGSTASHUI_DATA_DIR / LOGSTASHUI_LOGS_DIR → default.
+Precedence: LOGSTASHUI_DATA_DIR / LOGSTASHUI_LOGS_DIR / LOGSTASHUI_LOGSTASH_DIR
+→ default.
 
 Default data root is ``$(pwd)/logstashui_data``. Pytest keeps using
 ``<BASE_DIR>/data`` so test runs do not touch a checkout bind-mount.
@@ -75,6 +76,22 @@ def resolve_logs_dir(data_dir: Optional[Path] = None) -> Path:
     if chosen is None:
         root = data_dir if data_dir is not None else resolve_data_dir()
         chosen = root / "logs"
+    return chosen
+
+
+def resolve_logstash_dir(data_dir: Optional[Path] = None) -> Path:
+    """Cache root for proxied Logstash release tarballs.
+
+    Deliberately a sibling of ``staticfiles``, never a child: STATIC_ROOT is
+    served by WhiteNoise at ``/static/``, which is in LOGIN_REQUIRED_IGNORE_PATHS,
+    so anything under it is an unauthenticated public download. ``collectstatic``
+    also runs on every ``serve`` and would churn over half-gigabyte files.
+    """
+    env = os.environ.get("LOGSTASHUI_LOGSTASH_DIR")
+    chosen = _coerce_path(env, relative_to=Path.cwd())
+    if chosen is None:
+        root = data_dir if data_dir is not None else resolve_data_dir()
+        chosen = root / "logstashes"
     return chosen
 
 

@@ -41,6 +41,16 @@ class Settings(models.Model):
             "May differ from the browser reverse-proxy URL."
         ),
     )
+    logstash_artifact_base_url = models.CharField(
+        max_length=512,
+        blank=True,
+        default="",
+        help_text=(
+            "Upstream source for Logstash release tarballs. Blank uses "
+            "https://artifacts.elastic.co/downloads/logstash. Point this at an "
+            "internal mirror to keep tarball fetches inside your network."
+        ),
+    )
 
     class Meta:
         db_table = 'settings'

@@ -69,6 +69,31 @@ uv run logstashui
 
 ---
 
+## Contributing Setup (Pre-commit Hooks)
+
+After your first `uv sync`, install the git pre-commit hooks once:
+
+```bash
+uv run pre-commit install
+```
+
+The hooks run automatically on every `git commit` and handle two things:
+
+- **License headers** — adds the Elastic license notice to any source file that doesn't have one yet
+- **Dependency notices** — regenerates `NOTICE.txt` to reflect any new third-party packages
+
+### Windows developers
+
+Set git's line-ending mode to `input` **before your first commit**. This prevents git from converting LF to CRLF on checkout, which fights the repo's `.gitattributes` settings and produces phantom "modified" files:
+
+```powershell
+git config --global core.autocrlf input
+```
+
+You only need to run this once — it applies to all your repos globally.
+
+---
+
 ## Building an sdist and wheel
 
 Compile Tailwind first (the `dist/` CSS path is not `node_modules`; repo-root `/dist/` is the packaging output):
@@ -78,11 +103,13 @@ cd src/logstashui/theme/static_src
 npm install && npm run build
 cd ../../../..
 uv build
-# dist/logstashui-0.5.1.tar.gz
-# dist/logstashui-0.5.1-py3-none-any.whl
+# dist/logstashui-0.5.2.tar.gz
+# dist/logstashui-0.5.2-py3-none-any.whl
 ```
 
 The wheel includes systemd templates (`LogstashUI/packaging/`) and the `logstashui` console script.
+
+Air-gapped hosts that cannot reach PyPI or a registry: optional `bin/freeze_logstashui.sh` (not default packaging). See [Air-gapped freeze](/docs/docs/logstashui/general/offline.md).
 
 ---
 
