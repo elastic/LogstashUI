@@ -3,31 +3,19 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
-"""
-Rebuild grounding.json from compiled MIB JSON.
+"""Rebuild `grounding.json` from compiled MIB JSON.
 
-The compiled ./mib_json build inputs are gitignored; only grounding.json (the
-runtime artifact the app loads) is committed. Regenerate them as below.
+`./mib_json` inputs are gitignored; only `grounding.json` is committed.
 
-Step 1 - compile MIBs to JSON (auto-fetches sources; add MIB names to extend coverage):
+Note:
+    pysmi `mibdump` aborts the whole batch if one dependency fails to parse, so
+    compile MIBs individually. BGP4-MIB and LLDP-MIB currently fail on an
+    RFC-1212 grammar bug via RMON and are omitted.
 
-    uvx --from pysmi mibdump --destination-format json \
-        --destination-directory ./mib_json \
-        POWER-ETHERNET-MIB IF-MIB ENTITY-MIB SNMPv2-MIB HOST-RESOURCES-MIB \
-        UCD-SNMP-MIB IP-MIB OSPF-MIB BRIDGE-MIB EtherLike-MIB
-        # ...add vendor MIBs as needed
-
-    GOTCHA (upstream pysmi): mibdump aborts the WHOLE batch if any one dependency
-    fails to parse, so compile the MIBs INDIVIDUALLY (they accumulate in ./mib_json)
-    and skip failures. BGP4-MIB and LLDP-MIB currently fail on a pysmi RFC-1212
-    grammar bug (via their RMON dependency) and are omitted; retry when pysmi fixes
-    it or supply a clean RFC-1212 source.
-
-Step 2 - flatten to grounding.json:
-
+Examples:
+    uvx --from pysmi mibdump --destination-format json \\
+        --destination-directory ./mib_json IF-MIB SNMPv2-MIB
     python3 build_grounding.py
-
-Adding coverage = add MIB names in step 1 and rerun. No hand-maintenance of OIDs/enums.
 """
 import json
 import os

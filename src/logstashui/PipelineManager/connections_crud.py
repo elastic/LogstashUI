@@ -2,6 +2,8 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
+"""HTTP views for connection CRUD, policy assignment, and pipeline listing."""
+
 from django.http import JsonResponse, HttpResponse
 from django.conf import settings
 from django.template.loader import get_template
@@ -23,7 +25,11 @@ import logging
 logger = logging.getLogger(__name__)
 
 def GetConnections(request):
-    """Get all connections for dropdown population"""
+    """Return all non-embedded connections for dropdown population.
+
+    Returns:
+        JSON array of ``{id, name, connection_type}``, or 500 on error.
+    """
     try:
         from PipelineManager.agent_modes import is_embedded_connection
 
@@ -41,6 +47,13 @@ def GetConnections(request):
 
 @require_admin_role
 def AddConnection(request):
+    """Create a connection from ``ConnectionForm`` POST and test connectivity.
+
+    On a failed connectivity test the new row is deleted.
+
+    Returns:
+        JSON ``{success, connection_id?}``; 405 if not POST.
+    """
     if request.method == "POST":
 
         form = ConnectionForm(request.POST)
@@ -82,6 +95,11 @@ def AddConnection(request):
 
 @require_admin_role
 def DeleteConnection(request, connection_id=None):
+    """Delete a connection and return an htmx toast + reload script.
+
+    Args:
+        connection_id: ``Connection`` primary key.
+    """
     if request.method != "POST":
         return HttpResponse("Method not allowed", status=405)
 
@@ -113,9 +131,14 @@ def DeleteConnection(request, connection_id=None):
 
 @require_admin_role
 def GetConnection(request, connection_id):
-    """
-    Return connection details (excluding credentials) for pre-filling the edit modal.
-    Only supports CENTRALIZED connections.
+    """Return CENTRALIZED connection details (no credentials) for the edit modal.
+
+    Args:
+        connection_id: ``Connection`` primary key.
+
+    Returns:
+        JSON with ``connection_mode``, ``cloud_id``, ``host``, ``port``,
+        ``auth_type``, ``username``; 400 if not CENTRALIZED.
     """
     if request.method != "GET":
         return JsonResponse({'error': 'Invalid request method'}, status=405)
@@ -146,10 +169,14 @@ def GetConnection(request, connection_id):
 
 @require_admin_role
 def UpdateConnection(request, connection_id):
-    """
-    Update an existing CENTRALIZED connection.
-    Credentials must be re-supplied — they are tested before the change is committed.
-    On connectivity test failure the database record is rolled back.
+    """Update an existing CENTRALIZED connection.
+
+    Credentials must be re-supplied — they are tested before the change is
+    committed. On connectivity test failure the database record is rolled
+    back.
+
+    Args:
+        connection_id: ``Connection`` primary key.
     """
     if request.method != "POST":
         return JsonResponse({'error': 'Invalid request method'}, status=405)
@@ -210,7 +237,11 @@ def UpdateConnection(request, connection_id):
 
 @require_admin_role
 def UpgradeAgent(request, connection_id=None):
-    """Set desired agent version to trigger upgrade on next check-in"""
+    """Set ``desired_agent_version`` so the agent upgrades on next check-in.
+
+    Args:
+        connection_id: Agent ``Connection`` primary key.
+    """
     if request.method != "POST":
         return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
 
@@ -240,8 +271,11 @@ def UpgradeAgent(request, connection_id=None):
 
 @require_admin_role
 def change_connection_policy(request):
-    """
-    Change the policy assigned to an agent connection
+    """Assign a different policy to an agent connection.
+
+    Args:
+        connection_id: Agent connection pk.
+        policy_id: Target policy pk.
     """
     if request.method != "POST":
         return JsonResponse({"success": False, "error": "Method not allowed"}, status=405)
@@ -272,8 +306,10 @@ def change_connection_policy(request):
 
 @require_admin_role
 def restart_logstash(request):
-    """
-    Set restart_on_next_checkin on an agent connection so the agent restarts Logstash on its next check-in.
+    """Queue a Logstash restart for the next agent check-in.
+
+    Args:
+        connection_id: Agent connection pk.
     """
     if request.method != "POST":
         return JsonResponse({"success": False, "error": "Method not allowed"}, status=405)
@@ -296,6 +332,14 @@ def restart_logstash(request):
 
 
 def GetPipelines(request, connection_id):
+    """Render the collapsible pipeline list for one connection.
+
+    CENTRALIZED rows are fetched from Elasticsearch; AGENT rows from the
+    assigned policy (user pipelines plus this agent's SNMP pipelines).
+
+    Args:
+        connection_id: ``Connection`` primary key.
+    """
     context = {}
     try:
         connection = ConnectionTable.objects.get(pk=connection_id)
@@ -402,9 +446,10 @@ def GetPipelines(request, connection_id):
 
 @require_admin_role
 def GetPolicyPipelines(request):
-    """
-    Get pipelines for a specific policy (agent policy context).
-    Returns JSON response with pipeline data.
+    """Return user-authored pipelines for a policy (JSON).
+
+    Args:
+        policy_id: Policy primary key.
     """
     policy_id = request.GET.get('policy_id')
 

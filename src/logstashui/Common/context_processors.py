@@ -2,15 +2,15 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
+"""Template context processors for nav, version, and experimental mode."""
+
 from Site.views import check_for_update
 from PipelineManager.models import Connection
 from Management.models import Settings
 
 
 def version_update_info(request):
-    """
-    Context processor to add version update information to all templates.
-    """
+    """Add ``version_update`` (latest-release check) to every template."""
     update_info = check_for_update()
     return {
         'version_update': update_info
@@ -18,12 +18,14 @@ def version_update_info(request):
 
 
 def navigation_highlight(request):
-    """
-    Context processor to determine which navigation item should have the throbbing border.
-    Logic:
-    - If no connections exist: highlight "Connection Manager"
-    - If connections exist and user has never visited SNMP: highlight "SNMP Devices" (tracked
-      via localStorage on the client — no Device DB query needed here)
+    """Choose which nav item gets the throbbing onboarding border.
+
+    If no connections exist, highlight Connection Manager. SNMP highlighting
+    is tracked in localStorage on the client — this processor does not query
+    Device rows.
+
+    Returns:
+        Dict with ``highlight_connection_manager`` and ``has_connections``.
     """
     has_connections = Connection.objects.exists()
 
@@ -34,9 +36,7 @@ def navigation_highlight(request):
 
 
 def experimental_mode(request):
-    """
-    Context processor to add experimental mode status to all templates.
-    """
+    """Add ``experimental_mode_enabled`` from ``Settings``, defaulting False."""
     try:
         app_settings = Settings.get_settings()
         return {

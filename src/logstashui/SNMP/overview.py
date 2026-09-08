@@ -2,6 +2,8 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
+"""Elasticsearch aggregations that power the SNMP Overview dashboard."""
+
 from django.http import JsonResponse
 from datetime import datetime, timedelta, timezone
 
@@ -16,10 +18,10 @@ logger = logging.getLogger(__name__)
 
 
 def get_discovered_devices_count():
-    """
-    Query all Elasticsearch clusters for discovered devices count.
-    Returns the total count of unique discovered devices across all clusters.
-    Only queries connections that are associated with SNMP networks.
+    """Count unique discovered devices across ES clusters used by SNMP networks.
+
+    Returns:
+        Dict with `success`, `count`, and optional `errors`.
     """
     try:
         # Get unique connections associated with SNMP networks
@@ -119,11 +121,11 @@ def get_discovered_devices_count():
 
 
 def get_template_data_categories():
-    """
-    Aggregate data coverage by device template.
-    For each device template seen in the last hour, return which event.category
-    values are present. This gives a high-level picture of what data is flowing
-    per template type rather than per individual device.
+    """Aggregate `event.category` coverage by device template over the last hour.
+
+    Returns:
+        Dict with `success`, `templates` (`template_name`, `template_display_name`,
+        `categories`), and optional `errors`.
     """
     try:
         connection_ids = Network.objects.filter(
@@ -213,10 +215,10 @@ def get_template_data_categories():
 
 
 def get_high_resource_usage():
-    """
-    Find devices with high CPU (>80%) or high memory usage (>80%).
-    Returns separate lists for high CPU and high memory devices.
-    Uses aggregated queries to get the latest values for all devices.
+    """Find devices with CPU or memory usage above 80%.
+
+    Returns:
+        Dict with `success`, `high_cpu`, `high_memory`, and optional `errors`.
     """
     try:
         # Get all devices with their network connections

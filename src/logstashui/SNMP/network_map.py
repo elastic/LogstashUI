@@ -2,6 +2,8 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
+"""CDP/LLDP topology queries and D3 graph conversion for the SNMP network map."""
+
 from django.http import JsonResponse
 from datetime import datetime, timedelta, timezone
 from Common.elastic_utils import get_elastic_connection
@@ -14,20 +16,18 @@ logger = logging.getLogger(__name__)
 
 
 def get_cdp_adjacencies(network_ids=None):
-    """
-    Query all Elasticsearch clusters for CDP/LLDP neighbor data.
-    Builds an adjacency table structure for network topology visualization.
+    """Query Elasticsearch for CDP/LLDP neighbor docs and build an adjacency table.
 
-    network.neighbor documents do NOT carry a network.name field, so we
-    query without that filter and resolve each device's network via the DB.
+    Neighbor documents have no `network.name`, so each device is resolved to a
+    network via the database.
 
     Args:
-        network_ids: Optional list of Network PKs to restrict scope. When provided
-                     only devices belonging to those networks are considered managed,
-                     and only adjacency entries for those networks appear in the result.
+        network_ids: Optional Network PKs. When set, only those networks' devices
+            are treated as managed and only their adjacency rows are returned.
 
     Returns:
-        dict: Adjacency table structure organized by network -> device -> interface
+        Dict with `success`, `adjacency_table` (network → device → interface), and
+        optional `errors`.
     """
     try:
         # Step 1: Get connections that have at least one SNMP network
@@ -314,19 +314,14 @@ def get_cdp_adjacencies(network_ids=None):
 
 
 def convert_adjacency_to_graph(adjacency_table):
-    """
-    Convert adjacency table to D3.js-compatible graph structure with nodes and edges.
-    Handles bidirectional connections to avoid duplicate edges.
-    Distinguishes between managed devices (in inventory) and discovered-only devices.
-    
+    """Convert an adjacency table to a D3 graph, collapsing bidirectional duplicates.
+
     Args:
-        adjacency_table: Dictionary of network -> device -> interface -> CDP data
-        
+        adjacency_table: Nested dict of network → device → interface → neighbor data.
+
     Returns:
-        dict: {
-            'nodes': [{'id': device_name, 'network': network_name, 'managed': bool, ...}],
-            'edges': [{'source': device1, 'target': device2, 'source_interface': ..., 'target_interface': ...}]
-        }
+        Dict with `nodes` (id, network, managed, optional device_id) and `edges`
+        (source/target plus interface names).
     """
     nodes = {}  # Use dict to avoid duplicates, keyed by device name
     edges = []
@@ -436,12 +431,10 @@ def convert_adjacency_to_graph(adjacency_table):
 
 
 def get_network_map_data(request):
-    """
-    Django view endpoint to fetch network map data.
-    Returns CDP adjacency data as JSON for frontend visualization.
+    """Return CDP adjacency plus D3 graph JSON for the topology UI.
 
-    Optional GET params:
-        networks: one or more Network PKs to restrict scope, e.g. ?networks=1&networks=2
+    Args:
+        networks: Optional repeated GET Network PKs (`?networks=1&networks=2`).
     """
     try:
         # Parse optional network filter
@@ -482,11 +475,10 @@ def get_network_map_data(request):
 
 
 def get_networks_list(request):
-    """
-    Return a lightweight list of all SNMP Networks for the topology filter dropdown.
-    Includes device_count (from the DB, no ES query) so the JS can auto-select the
-    most-populated network by default.
-    Response: { networks: [{id, name, network_range, device_count}, ...] }
+    """Return networks for the topology filter dropdown, including DB `device_count`.
+
+    Returns:
+        JSON `{success, networks: [{id, name, network_range, device_count}]}`.
     """
     try:
         from django.db.models import Count
@@ -502,20 +494,16 @@ def get_networks_list(request):
 
 
 def get_edge_interface_detail(request):
-    """
-    Query Elasticsearch for live interface data on both ends of a topology edge.
+    """Return live interface docs for both ends of a topology edge.
 
-    GET params:
-        source      — host.sysname of the source device
-        source_iface — interface name on the source side
-        target      — host.sysname of the target device
-        target_iface — interface name on the target side
+    Args:
+        source: Source `host.sysname`.
+        source_iface: Interface name on the source.
+        target: Target `host.sysname`.
+        target_iface: Interface name on the target.
 
-    Response: {
-        success: bool,
-        source: { sysname, iface_name, interface: {...} | null },
-        target: { sysname, iface_name, interface: {...} | null },
-    }
+    Returns:
+        JSON `{success, source: {sysname, iface_name, interface}, target: {...}}`.
     """
     source_sysname  = request.GET.get('source', '').strip()
     source_iface    = request.GET.get('source_iface', '').strip()

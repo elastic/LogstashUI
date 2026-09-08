@@ -2,24 +2,22 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
-"""
-Centralised helper for managing Elastic Agent Builder resources
-(tools, skills, agents) via the Elastic Agent Builder REST API.
+"""Manage Elastic Agent Builder resources via the Agent Builder REST API.
 
-API reference: https://www.elastic.co/docs/explore-analyze/ai-features/agent-builder/kibana-api
+Covers tools, skills, and agents. API reference:
+https://www.elastic.co/docs/explore-analyze/ai-features/agent-builder/kibana-api
 
-Typical usage
-─────────────
-    from Common.assets.agent_builder import AgentBuilder, RESOURCE_TOOL, RESOURCE_SKILL, RESOURCE_AGENT
+Examples:
+    from Common.ai.agent_builder import AgentBuilder, RESOURCE_TOOL, RESOURCE_SKILL, RESOURCE_AGENT
 
     builder = AgentBuilder(connection_id=42)
     # or, for URL-based connections:
     builder = AgentBuilder(connection_id=42, kibana_url_override="https://my-kibana:5601")
 
     results = builder.check_resources(
-        tools  = MY_TOOL_DEFINITIONS,
-        skills = MY_SKILL_DEFINITIONS,
-        agents = MY_AGENT_DEFINITIONS,
+        tools=MY_TOOL_DEFINITIONS,
+        skills=MY_SKILL_DEFINITIONS,
+        agents=MY_AGENT_DEFINITIONS,
     )
     # results['tools'][0] == {'id': '...', 'display_name': '...', 'status': 'missing'|'matches'|'differs', ...}
 
@@ -39,9 +37,9 @@ logger = logging.getLogger(__name__)
 # ── Directory loader ───────────────────────────────────────────────────────────
 
 def load_resources_from_directory(base_dir):
-    """
-    Load Agent Builder resource definitions from a directory that follows the
-    standard layout::
+    """Load Agent Builder resource definitions from a standard directory layout.
+
+    Expected layout::
 
         <base_dir>/
             tools/   *.json
@@ -49,14 +47,16 @@ def load_resources_from_directory(base_dir):
             agents/  *.json
 
     Each JSON file must contain a single resource definition object with at
-    minimum an ``id`` field.  Keys whose names start with ``_`` (e.g.
+    minimum an ``id`` field. Keys whose names start with ``_`` (e.g.
     ``_comment``) are stripped before returning so that internal annotations
     in the files do not get sent to Kibana.
 
-    Returns
-    ───────
-    ``(tools, skills, agents)`` — three lists of dicts, each ready to pass to
-    :py:meth:`AgentBuilder.check_resources`.
+    Args:
+        base_dir: Directory containing tools/, skills/, and agents/ subfolders.
+
+    Returns:
+        Tuple of (tools, skills, agents) — three lists of dicts, each ready
+        to pass to AgentBuilder.check_resources.
     """
     result = {RESOURCE_TOOL: [], RESOURCE_SKILL: [], RESOURCE_AGENT: []}
 
@@ -165,20 +165,12 @@ _PUT_STRIP_KEYS = {
 
 
 class AgentBuilder:
-    """
-    Client for the Elastic Elastic Agent Builder API.
+    """Client for the Elastic Agent Builder API.
 
-    Instantiation
-    ─────────────
-    - ``connection_id``: LogstashUI DB Connection pk.  The Kibana URL and
-      auth credentials are derived automatically from the Connection record.
-    - ``kibana_url_override``: Used as the Kibana origin after
-      ``normalize_kibana_url`` (``.es.`` hosts become ``.kb.``, paths stripped).
-      If omitted, the origin is derived from the Connection via
-      ``get_kibana_url``.
-
-    At least one of ``connection_id`` or ``kibana_url_override`` must be
-    provided.
+    At least one of connection_id or kibana_url_override must be provided.
+    The Kibana URL and auth credentials are derived from the Connection
+    record, or from kibana_url_override after normalize_kibana_url
+    (``.es.`` hosts become ``.kb.``, paths stripped).
     """
 
     # Connect timeout is short so a wrong host (ES instead of Kibana) fails
@@ -190,6 +182,18 @@ class AgentBuilder:
     _INVOKE_READ_TIMEOUT = 300
 
     def __init__(self, connection_id=None, kibana_url_override=None):
+        """Initialize an Agent Builder client.
+
+        Args:
+            connection_id: LogstashUI DB Connection pk. Kibana URL and auth
+                credentials are derived automatically from the Connection record.
+            kibana_url_override: Kibana origin after normalize_kibana_url
+                (``.es.`` hosts become ``.kb.``, paths stripped). If omitted, the
+                origin is derived from the Connection via get_kibana_url.
+
+        Raises:
+            ValueError: If neither connection_id nor kibana_url_override is given.
+        """
         from Common.elastic_utils import _get_creds, get_kibana_url, normalize_kibana_url
 
         if connection_id is None and kibana_url_override is None:
@@ -258,12 +262,14 @@ class AgentBuilder:
         return f"{hint} ({exc})"
 
     def _probe_api(self):
-        """
-        Cheap reachability check against the skills collection.
+        """Run a cheap reachability check against the skills collection.
 
         Hitting Elasticsearch (or a dead host) returns quickly with
         api_available=False instead of waiting on per-resource GET timeouts
         for the large SNMP catalog skill.
+
+        Returns:
+            Tuple of (api_available, error_str_or_None).
         """
         try:
             resp = self._get(
@@ -299,14 +305,15 @@ class AgentBuilder:
     # ── Private: fetch by ID ───────────────────────────────────────────────────
 
     def _fetch_one(self, resource_type, resource_id):
-        """
-        Fetch a single resource by ID.
+        """Fetch a single resource by ID.
 
-        Returns
-        ───────
-        (resource_dict, None)   – resource found
-        (None, None)            – 404, resource simply doesn't exist
-        (None, error_str)       – unexpected HTTP error
+        Args:
+            resource_type: One of RESOURCE_TOOL, RESOURCE_SKILL, RESOURCE_AGENT.
+            resource_id: Resource id in Kibana.
+
+        Returns:
+            (resource_dict, None) if found, (None, None) on 404, or
+            (None, error_str) on an unexpected HTTP error.
         """
         path = f"{_PATHS[resource_type]}/{resource_id}"
         try:
@@ -341,7 +348,7 @@ class AgentBuilder:
 
     @staticmethod
     def _diff_fields(desired, current, resource_type):
-        """Return list of field names that differ between desired and current."""
+        """Return the list of field names that differ between desired and current."""
         return [
             k for k in _COMPARE_KEYS.get(resource_type, [])
             if desired.get(k) != current.get(k)
@@ -350,33 +357,20 @@ class AgentBuilder:
     # ── Public: check ──────────────────────────────────────────────────────────
 
     def check_resources(self, tools=None, skills=None, agents=None):
-        """
-        Compare desired definitions against what currently exists in Kibana.
+        """Compare desired definitions against what currently exists in Kibana.
 
-        Parameters
-        ──────────
-        tools   – list of tool definition dicts  (each must have an ``id`` key)
-        skills  – list of skill definition dicts (each must have an ``id`` key)
-        agents  – list of agent definition dicts (each must have an ``id`` key)
+        Args:
+            tools: Tool definition dicts (each must have an ``id`` key).
+            skills: Skill definition dicts (each must have an ``id`` key).
+            agents: Agent definition dicts (each must have an ``id`` key).
 
-        Returns
-        ───────
-        {
-            'api_available': bool,
-            'error': str | None,       # top-level error (e.g. API not found)
-            'tools':  [ ResourceResult, … ],
-            'skills': [ ResourceResult, … ],
-            'agents': [ ResourceResult, … ],
-        }
+        Returns:
+            Dict with api_available, a top-level error (or None), and lists of
+            ResourceResult dicts under tools, skills, and agents.
 
-        ResourceResult:
-        {
-            'id':           str,
-            'display_name': str,
-            'status':       'missing' | 'matches' | 'differs' | 'error',
-            'differences':  [ field_name, … ],   # non-empty only when status=='differs'
-            'error':        str | None,
-        }
+            Each ResourceResult has id, display_name, status
+            (missing | matches | differs | error), differences (field names,
+            non-empty only when status is differs), and error.
         """
         results = {
             'api_available': True,
@@ -440,10 +434,14 @@ class AgentBuilder:
     # ── Public: create / update / delete ──────────────────────────────────────
 
     def create_resource(self, resource_type, definition):
-        """
-        POST a new resource to Kibana.
+        """POST a new resource to Kibana.
 
-        Returns (True, response_dict) on success, (False, error_str) on failure.
+        Args:
+            resource_type: One of RESOURCE_TOOL, RESOURCE_SKILL, RESOURCE_AGENT.
+            definition: Resource body; keys in _POST_STRIP_KEYS are omitted.
+
+        Returns:
+            (True, response_dict) on success, (False, error_str) on failure.
         """
         strip = _POST_STRIP_KEYS.get(resource_type, set())
         body  = {k: v for k, v in definition.items() if k not in strip}
@@ -456,13 +454,18 @@ class AgentBuilder:
         return False, f"HTTP {resp.status_code}: {resp.text[:400]}"
 
     def update_resource(self, resource_type, resource_id, definition):
-        """
-        PUT (overwrite) an existing resource in Kibana.
+        """PUT (overwrite) an existing resource in Kibana.
 
         The ``id`` field is part of the URL path for PUT requests and must not
         be included in the request body — Kibana rejects it with a 400.
 
-        Returns (True, response_dict) on success, (False, error_str) on failure.
+        Args:
+            resource_type: One of RESOURCE_TOOL, RESOURCE_SKILL, RESOURCE_AGENT.
+            resource_id: Resource id in the URL path.
+            definition: Resource body; keys in _PUT_STRIP_KEYS are omitted.
+
+        Returns:
+            (True, response_dict) on success, (False, error_str) on failure.
         """
         path      = f"{_PATHS[resource_type]}/{resource_id}"
         strip     = _PUT_STRIP_KEYS.get(resource_type, {'id'})
@@ -476,10 +479,14 @@ class AgentBuilder:
         return False, f"HTTP {resp.status_code}: {resp.text[:400]}"
 
     def delete_resource(self, resource_type, resource_id):
-        """
-        DELETE a resource from Kibana.
+        """DELETE a resource from Kibana.
 
-        Returns (True, {}) on success, (False, error_str) on failure.
+        Args:
+            resource_type: One of RESOURCE_TOOL, RESOURCE_SKILL, RESOURCE_AGENT.
+            resource_id: Resource id in the URL path.
+
+        Returns:
+            (True, {}) on success, (False, error_str) on failure.
         """
         path = f"{_PATHS[resource_type]}/{resource_id}"
         try:
@@ -494,29 +501,27 @@ class AgentBuilder:
         return False, f"HTTP {resp.status_code}: {resp.text[:400]}"
 
     def invoke_agent(self, agent_id, message, stream=True, conversation_id=None, inference_id=None, configuration_overrides=None):
-        """
-        Send a user message to an Agent Builder agent via the converse API.
+        """Send a user message to an Agent Builder agent via the converse API.
 
-        Sync  (stream=False): POST /api/agent_builder/converse
-        Async (stream=True):  POST /api/agent_builder/converse/async  ← preferred
+        Sync (stream=False) posts to /api/agent_builder/converse.
+        Async (stream=True, preferred) posts to /api/agent_builder/converse/async.
 
-        Parameters
-        ──────────
-        agent_id        – the ``id`` of the agent (must already exist in Kibana)
-        message         – plain-text user message (``input`` field)
-        stream          – use the async/streaming endpoint (default: True)
-        conversation_id – optional; pass to continue an existing conversation
-        inference_id    – reserved for future use; not currently sent to Kibana
+        Args:
+            agent_id: Agent id (must already exist in Kibana).
+            message: Plain-text user message (``input`` field).
+            stream: Use the async/streaming endpoint (default True).
+            conversation_id: Optional; pass to continue an existing conversation.
+            inference_id: Optional; forwarded to Kibana when set.
+            configuration_overrides: Optional dict forwarded to Kibana.
 
-        Streaming mode (stream=True)
-        ────────────────────────────
-        Yields dicts parsed from each ``data:`` SSE line.  Unparseable lines
-        are yielded as ``{'raw': <line>}``.  Errors yield ``{'error': <msg>}``.
+        Yields:
+            In streaming mode, dicts parsed from each ``data:`` SSE line.
+            Unparseable lines are yielded as ``{'raw': <line>}``. Errors yield
+            ``{'error': <msg>}``.
 
-        Non-streaming mode (stream=False)
-        ──────────────────────────────────
-        Returns ``(True, response_dict)`` on success or
-        ``(False, error_str)`` on failure.
+        Returns:
+            In non-streaming mode, (True, response_dict) on success or
+            (False, error_str) on failure.
         """
         if stream:
             path = '/api/agent_builder/converse/async'
@@ -581,29 +586,21 @@ class AgentBuilder:
             return False, f"HTTP {resp.status_code}: {resp.text[:400]}"
 
     def apply_all_resources(self, tools=None, skills=None, agents=None):
-        """
-        Create or overwrite every supplied resource in Kibana.
+        """Create or overwrite every supplied resource in Kibana.
 
         Resources are applied in dependency order: tools first, then skills,
-        then agents.  Each resource is PUT if it already exists or POST if it
-        does not.  Errors for individual resources are collected rather than
+        then agents. Each resource is PUT if it already exists or POST if it
+        does not. Errors for individual resources are collected rather than
         aborting the whole run.
 
-        Returns
-        ───────
-        {
-            'success': bool,           # True only if every resource applied cleanly
-            'results': [
-                {
-                    'type':    str,
-                    'id':      str,
-                    'action':  'created' | 'updated',
-                    'success': bool,
-                    'error':   str | None,
-                },
-                …
-            ],
-        }
+        Args:
+            tools: Tool definition dicts.
+            skills: Skill definition dicts.
+            agents: Agent definition dicts.
+
+        Returns:
+            Dict with success (True only if every resource applied cleanly) and
+            a results list of {type, id, action (created|updated), success, error}.
         """
         available, probe_err = self._probe_api()
         if not available:

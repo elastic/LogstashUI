@@ -2,7 +2,11 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
-"""BETA: copy SQLite data to PostgreSQL or MySQL. Stops gunicorn; does not restart serve."""
+"""BETA: copy SQLite data to PostgreSQL or MySQL.
+
+Stops gunicorn and does not restart serve. Non-atomic: dumpdata, migrate,
+loaddata. If loaddata fails, drop the target database and re-run.
+"""
 
 from __future__ import annotations
 
@@ -24,7 +28,13 @@ _DUMPDATA_EXCLUDES = ("contenttypes", "auth.permission", "sessions")
 
 
 def _with_package_pythonpath(env: dict[str, str]) -> dict[str, str]:
-    """Subprocesses must import this tree, not a stale site-packages copy."""
+    """Prepend this source tree to ``PYTHONPATH`` for subprocesses.
+
+    Subprocesses must import this tree, not a stale site-packages copy.
+
+    Returns:
+        The same ``env`` dict, mutated.
+    """
     pkg_root = str(Path(__file__).resolve().parent.parent)
     existing = env.get("PYTHONPATH", "")
     env["PYTHONPATH"] = pkg_root if not existing else os.pathsep.join([pkg_root, existing])
@@ -32,6 +42,18 @@ def _with_package_pythonpath(env: dict[str, str]) -> dict[str, str]:
 
 
 def run_manage(argv: list[str], extra_env: dict[str, str]) -> None:
+    """Run a Django management command in a subprocess with extra env.
+
+    Prepends this package tree to ``PYTHONPATH`` so the child imports this
+    checkout rather than a stale install.
+
+    Args:
+        argv: Management command and flags, e.g. ``["migrate", "--noinput"]``.
+        extra_env: Overlay on ``os.environ`` (typically ``LOGSTASHUI_DB_*``).
+
+    Raises:
+        SystemExit: If the child process returns a non-zero exit code.
+    """
     env = os.environ.copy()
     env.update(extra_env)
     env.setdefault("DJANGO_SETTINGS_MODULE", "LogstashUI.settings")
@@ -47,6 +69,11 @@ def run_manage(argv: list[str], extra_env: dict[str, str]) -> None:
 
 
 def wal_checkpoint(db_path: Path) -> None:
+    """Flush SQLite WAL into the main database file (``TRUNCATE`` checkpoint).
+
+    Args:
+        db_path: Path to ``db.sqlite3``.
+    """
     conn = sqlite3.connect(str(db_path))
     try:
         conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
@@ -55,6 +82,16 @@ def wal_checkpoint(db_path: Path) -> None:
 
 
 def stop_gunicorn(pidfile: Path) -> None:
+    """Send SIGTERM to the gunicorn master and wait up to 30s for exit.
+
+    Unlinks ``pidfile`` when the process is already gone. Does not restart serve.
+
+    Args:
+        pidfile: gunicorn ``--pid`` file.
+
+    Raises:
+        SystemExit: If the pid is invalid or the process is still alive after 30s.
+    """
     raw = pidfile.read_text(encoding="utf-8").strip()
     try:
         pid = int(raw)
@@ -85,7 +122,14 @@ def stop_gunicorn(pidfile: Path) -> None:
 
 
 def write_env_file(path: Path, engine: str) -> None:
-    """Upsert LOGSTASHUI_DB_* keys (never password). Second run does not duplicate."""
+    """Upsert ``LOGSTASHUI_DB_*`` keys (never password).
+
+    A second run replaces existing keys rather than duplicating them.
+
+    Args:
+        path: EnvironmentFile to create or update.
+        engine: Canonical target engine written as ``LOGSTASHUI_DB_ENGINE``.
+    """
     assignments = {
         "LOGSTASHUI_DB_ENGINE": engine,
         "LOGSTASHUI_DB_NAME": os.environ.get("LOGSTASHUI_DB_NAME") or "",
@@ -108,7 +152,11 @@ def write_env_file(path: Path, engine: str) -> None:
 
 
 def _reset_postgres_sequences(extra_env: dict[str, str]) -> None:
-    """Apply sqlsequencereset via the Django connection (no psql CLI)."""
+    """Apply ``sqlsequencereset`` via the Django connection (no psql CLI).
+
+    Args:
+        extra_env: Overlay used for the child Django process (target DB).
+    """
     env = os.environ.copy()
     env.update(extra_env)
     env.setdefault("DJANGO_SETTINGS_MODULE", "LogstashUI.settings")
@@ -142,6 +190,25 @@ def _reset_postgres_sequences(extra_env: dict[str, str]) -> None:
 
 
 def cmd_migrate_engine(args: Namespace) -> int:
+    """Copy SQLite data to PostgreSQL or MySQL (BETA).
+
+    Requires ``--i-have-a-backup``. Stops gunicorn, checkpoints WAL, then
+    ``dumpdata`` (excluding contenttypes, auth.permission, sessions),
+    ``migrate``, and ``loaddata``. PostgreSQL also resets sequences. Optionally
+    writes ``LOGSTASHUI_DB_*`` to ``--write-env`` (never the password). Does
+    not restart serve.
+
+    Args:
+        args: Parsed ``migrate-engine`` namespace (``to``, ``i_have_a_backup``,
+            ``pid``, ``write_env``).
+
+    Returns:
+        0 on success.
+
+    Raises:
+        SystemExit: On missing backup flag, bad engine, missing SQLite file,
+            gunicorn stop failure, or a failed dump/migrate/load.
+    """
     if not args.i_have_a_backup:
         print(
             "Refusing to run migrate-engine without --i-have-a-backup. "

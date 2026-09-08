@@ -2,10 +2,17 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
+"""Django HTTP error handlers that render ``error.html``."""
+
 from django.template.response import TemplateResponse
 
 
 def handler400(request, exception=None):
+    """Render the 400 Bad Request page.
+
+    Returns:
+        ``TemplateResponse`` with status 400.
+    """
     return TemplateResponse(request, 'error.html', {
         'error_code': '400',
         'error_title': 'Bad Request',
@@ -15,6 +22,11 @@ def handler400(request, exception=None):
 
 
 def handler403(request, exception=None):
+    """Render the 403 Access Denied page.
+
+    Returns:
+        ``TemplateResponse`` with status 403.
+    """
     return TemplateResponse(request, 'error.html', {
         'error_code': '403',
         'error_title': 'Access Denied',
@@ -24,6 +36,11 @@ def handler403(request, exception=None):
 
 
 def handler404(request, exception=None):
+    """Render the 404 Page Not Found page.
+
+    Returns:
+        ``TemplateResponse`` with status 404.
+    """
     return TemplateResponse(request, 'error.html', {
         'error_code': '404',
         'error_title': 'Page Not Found',
@@ -34,6 +51,11 @@ def handler404(request, exception=None):
 
 
 def handler500(request, exception=None):
+    """Render the 500 Server Error page.
+
+    Returns:
+        ``TemplateResponse`` with status 500.
+    """
     return TemplateResponse(request, 'error.html', {
         'error_code': '500',
         'error_title': 'Server Error',

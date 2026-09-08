@@ -2,6 +2,12 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
+"""JSON CRUD, deploy, and visualization endpoints for the SNMP NMS.
+
+Covers credentials, networks, devices, profiles, and device templates, plus
+pipeline generation, Agent/CPM deploy diffs, and Elasticsearch-backed status.
+"""
+
 from django.http import JsonResponse, HttpResponse
 from django.core.exceptions import ValidationError
 from django.conf import settings
@@ -53,15 +59,17 @@ _SNMP_ES_KEY_RE = re.compile(r'^snmp_es_(\d+)_(api_key|user|password)$')
 
 
 def _resolve_manual_keystore_values(keys):
-    """
-    Resolve a list of ${KEY} names (extracted from a generated pipeline) back
-    to their plaintext credential values, for display in the "manual keystore"
-    deploy diff banner. Only used when the network manages its keystore
-    manually — the operator needs the actual values to run `logstash-keystore
-    add` on the Logstash node themselves.
+    """Resolve `${KEY}` names from generated LSCL back to plaintext for the diff banner.
 
-    Returns {key_name: plaintext_value}, omitting any key that can't be
-    resolved (unknown format, missing record, or empty value).
+    Used when a centralized network manages its keystore manually so the operator
+    can run `logstash-keystore add`. Names follow `snmp_{id}_v*` /
+    `snmp_es_{id}_*`.
+
+    Args:
+        keys: Keystore key names extracted from pipeline config.
+
+    Returns:
+        `{key_name: plaintext}` omitting keys that cannot be resolved.
     """
     parsed = {}
     cred_ids = set()
@@ -113,14 +121,13 @@ def _resolve_manual_keystore_values(keys):
 
 
 def _get_unique_templates_for_network(devices):
-    """
-    Get unique device templates used by devices in a network.
-    
+    """Return unique device templates used by `devices`, including None.
+
     Args:
-        devices: QuerySet or list of Device objects
-        
+        devices: Device queryset or list.
+
     Returns:
-        List of unique DeviceTemplate objects (including None for devices without templates)
+        List of DeviceTemplate rows, plus None if any device has no template.
     """
     templates_dict = {}
     has_none_template = False
@@ -141,16 +148,15 @@ def _get_unique_templates_for_network(devices):
 
 
 def _get_template_pipeline_name(network, template, pipeline_type='polling'):
-    """
-    Generate pipeline name for a network+template combination.
-    
+    """Build `snmp-{network}-{template}-{type}` (or `no-template`).
+
     Args:
-        network: Network object
-        template: DeviceTemplate object or None
-        pipeline_type: Type of pipeline ('polling', 'trap', 'discovery')
-        
+        network: Network row.
+        template: DeviceTemplate row or None.
+        pipeline_type: ``polling``, ``trap``, or ``discovery``.
+
     Returns:
-        Pipeline name string
+        Sanitized pipeline name string.
     """
     network_name = _sanitize_pipeline_name_component(network.name)
     
@@ -162,7 +168,11 @@ def _get_template_pipeline_name(network, template, pipeline_type='polling'):
 
 
 def GetCredentials(request):
-    """Get all SNMP credentials"""
+    """Return all SNMP credentials as JSON without secrets.
+
+    Returns:
+        JSON list of `{id, name, version, description, security_level, device_count}`.
+    """
     try:
         from django.db.models import Count
         credentials = Credential.objects.annotate(
@@ -174,7 +184,7 @@ def GetCredentials(request):
 
 
 def GetNetworks(request):
-    """Get all SNMP networks"""
+    """Return all SNMP networks as JSON, including deployment and connection fields."""
     try:
         from django.db.models import Count
 
@@ -210,7 +220,23 @@ def GetNetworks(request):
 
 @require_admin_role
 def AddCredential(request):
-    """Add a new SNMP credential"""
+    """Create an SNMP credential from form POST fields.
+
+    Args:
+        name: Unique credential name.
+        description: Optional description.
+        version: ``1``, ``2c``, or ``3``.
+        community: v1/v2c community.
+        security_name: SNMPv3 user.
+        security_level: ``noAuthNoPriv``, ``authNoPriv``, or ``authPriv``.
+        auth_protocol: SNMPv3 auth protocol.
+        auth_pass: SNMPv3 auth password.
+        priv_protocol: SNMPv3 privacy protocol.
+        priv_pass: SNMPv3 privacy password.
+
+    Returns:
+        JSON `{id, message}` on success.
+    """
     try:
         # Extract form data
         name = request.POST.get('name')
@@ -261,7 +287,23 @@ def AddCredential(request):
 
 @require_admin_role
 def UpdateCredential(request, credential_id):
-    """Update an existing SNMP credential"""
+    """Update an SNMP credential; empty v3 passwords are left unchanged.
+
+    Args:
+        credential_id: Credential primary key.
+        name: Unique credential name.
+        version: ``1``, ``2c``, or ``3``.
+        community: v1/v2c community.
+        security_name: SNMPv3 user.
+        security_level: SNMPv3 security level.
+        auth_protocol: SNMPv3 auth protocol.
+        auth_pass: New auth password; omitted keeps the stored secret.
+        priv_protocol: SNMPv3 privacy protocol.
+        priv_pass: New privacy password; omitted keeps the stored secret.
+
+    Returns:
+        JSON `{id, message}` on success.
+    """
     try:
         credential = Credential.objects.get(pk=credential_id)
 
@@ -323,7 +365,11 @@ def UpdateCredential(request, credential_id):
 
 
 def GetCredential(request, credential_id):
-    """Get a single credential (without sensitive data)"""
+    """Return one credential with secrets redacted as ``***``.
+
+    Args:
+        credential_id: Credential primary key.
+    """
     try:
         credential = Credential.objects.get(pk=credential_id)
 
@@ -362,7 +408,11 @@ def GetCredential(request, credential_id):
 
 @require_admin_role
 def DeleteCredential(request, credential_id):
-    """Delete a credential"""
+    """Delete a credential and mark SNMP config dirty for the next deploy.
+
+    Args:
+        credential_id: Credential primary key.
+    """
     try:
         credential = Credential.objects.get(pk=credential_id)
         credential.delete()
@@ -386,28 +436,24 @@ def DeleteCredential(request, credential_id):
 
 
 def _get_pipeline_name(network):
-    """
-    Generate a sanitized pipeline name for a network (legacy single-pipeline format).
-    Format: snmp-{network_name}-polling
-    This is kept for backward compatibility to detect and delete old pipelines.
-    """
+    """Return the legacy `snmp-{network}-polling` name used to find old pipelines."""
     sanitized_network_name = _sanitize_pipeline_name_component(network.name)
     return f"snmp-{sanitized_network_name}-polling"
 
 
 def _create_or_update_pipeline(es_connection, pipeline_name, pipeline_content, description=""):
-    """
-    Helper function to create or update a Logstash pipeline in Elasticsearch.
-    Only updates if the pipeline content has actually changed.
+    """Create or update a Centralized Pipeline Management pipeline in Elasticsearch.
+
+    Skips the PUT when existing LSCL already matches.
 
     Args:
-        es_connection: Elasticsearch connection object
-        pipeline_name: Name of the pipeline
-        pipeline_content: Pipeline configuration string
-        description: Optional description for the pipeline
+        es_connection: Elasticsearch client.
+        pipeline_name: CPM pipeline id.
+        pipeline_content: Pipeline LSCL.
+        description: Optional CPM description.
 
     Returns:
-        tuple: (success: bool, is_new: bool, error: str or None)
+        Tuple `(success, is_new, error, was_updated)`.
     """
 
     try:
@@ -490,12 +536,17 @@ def _create_or_update_pipeline(es_connection, pipeline_name, pipeline_content, d
 
 
 def _build_trap_components(network, input_data=None):
-    """
-    Build the trap pipeline component dict for a network (traps input + output).
+    """Build trap-pipeline input and output components for a network.
 
-    Mode-agnostic: credentials are emitted as keystore references or inline
-    based on _uses_keystore(network), which covers both Agent mode and
-    Centralized mode with credential_mode='KEYSTORE'.
+    Credentials are `${KEY}` or inline based on `_uses_keystore(network)` (Agent
+    mode and centralized KEYSTORE).
+
+    Args:
+        network: Network row.
+        input_data: Optional pipeline input context.
+
+    Returns:
+        Pipeline component dict with traps input and Elasticsearch output.
     """
     if input_data is None:
         input_data = {
@@ -568,14 +619,21 @@ def _build_trap_components(network, input_data=None):
 
 
 def _build_network_pipeline_configs(network, profile_cache=None):
-    """
-    Generate all pipeline configs a network should produce.
+    """Generate every pipeline config a network should produce.
 
-    Mode-agnostic: the generator embeds credentials inline for CENTRALIZED
-    networks and emits keystore references for AGENT networks.
+    Mode-agnostic: centralized PLAINTEXT embeds secrets; Agent and centralized
+    KEYSTORE emit keystore references.
+
+    Args:
+        network: Network row.
+        profile_cache: Optional shared profile JSON cache.
 
     Returns:
-        list of dicts: {pipeline_name, config, pipeline_type, template_name}
+        List of `{pipeline_name, config, pipeline_type, template_name}` dicts.
+
+    Examples:
+        configs = _build_network_pipeline_configs(network)
+        # [{'pipeline_name': 'snmp-lab-cisco_ios-polling', 'config': '...', ...}]
     """
     if profile_cache is None:
         profile_cache = {}
@@ -666,9 +724,9 @@ def _build_network_pipeline_configs(network, profile_cache=None):
 
 
 def _collect_network_keystore_entries(network):
-    """
-    Return {key_name: plaintext_value} of all keystore entries an Agent-mode
-    network's pipelines reference (SNMP device creds + ES output creds).
+    """Return `{key_name: plaintext}` referenced by an Agent-mode network's pipelines.
+
+    Includes SNMP device credentials and Elasticsearch output secrets.
     """
     entries = {}
     entries.update(es_connection_keystore_entries(network.connection))
@@ -687,11 +745,10 @@ def _collect_network_keystore_entries(network):
 
 
 def _network_keystore_key_names(network):
-    """
-    Names-only mirror of _collect_network_keystore_entries(): the set of
-    keystore key names a network's pipelines reference, WITHOUT decrypting any
-    secret. Kept in lockstep with _collect_network_keystore_entries so scoping
-    never diverges from what actually gets provisioned.
+    """Return keystore key names a network references, without decrypting.
+
+    Kept in lockstep with `_collect_network_keystore_entries` so scoping matches
+    what is provisioned.
     """
     names = set()
     names.update(es_connection_keystore_key_names(network.connection))
@@ -710,18 +767,16 @@ def _network_keystore_key_names(network):
 
 
 def _network_has_pipeline_devices(network):
-    """True if a network should generate at least one pipeline."""
+    """Return True if the network should generate at least one pipeline."""
     has_devices = any(d.credential for d in network.devices.all())
     return has_devices or (network.traps_enabled and network.credential) \
         or (network.discovery_enabled and network.discovery_credential)
 
 
 def _network_pipeline_names(network):
-    """
-    Names-only mirror of _build_network_pipeline_configs(): the set of SNMP
-    pipeline names a single network produces, without regenerating configs.
-    Kept in lockstep with _build_network_pipeline_configs so scoping never
-    diverges from what actually gets deployed.
+    """Return pipeline names a network produces, without regenerating LSCL.
+
+    Kept in lockstep with `_build_network_pipeline_configs`.
     """
     names = set()
     devices = list(network.devices.all())
@@ -745,13 +800,11 @@ def _network_pipeline_names(network):
 
 
 def agent_snmp_pipeline_names(connection):
-    """
-    The set of SNMP pipeline names a specific agent should host, unioned across
-    every Agent-mode network assigned to that agent (agent_connection == it).
+    """Return SNMP pipeline names one agent should host.
 
-    Scoping key is the agent, never the policy: multiple networks can share one
-    agent, but a network's pipelines belong to exactly one agent, so agents that
-    merely share a base policy must not receive each other's SNMP pipelines.
+    Union of Agent-mode networks whose `agent_connection` is this connection.
+    Scoped by agent, not policy: agents that share a base policy must not receive
+    each other's SNMP pipelines.
     """
     if not connection:
         return set()
@@ -765,14 +818,10 @@ def agent_snmp_pipeline_names(connection):
 
 
 def agent_snmp_keystore_keys(connection):
-    """
-    The set of SNMP keystore key names a specific agent needs, unioned across
-    every Agent-mode network assigned to that agent. Same agent-scoping rule as
-    agent_snmp_pipeline_names().
+    """Return SNMP keystore key names one agent needs, without decrypting.
 
-    Derives names WITHOUT decrypting secrets (names come from credential/
-    connection ids + presence of the encrypted columns), so this can run on
-    every check-in without materializing plaintext credentials in memory.
+    Same agent-scoping rule as `agent_snmp_pipeline_names`. Safe to run on every
+    check-in because only encrypted-column presence is inspected.
     """
     if not connection:
         return set()
@@ -786,10 +835,9 @@ def agent_snmp_keystore_keys(connection):
 
 
 def _reconcile_policy_snmp_keystore(policy):
-    """
-    Ensure a policy's SNMP-managed keystore entries exactly match what all
-    Agent-mode networks assigned to it require. Adds/updates needed entries and
-    removes orphaned snmp-managed entries.
+    """Make a policy's SNMP-managed keystore rows match its Agent-mode networks.
+
+    Adds or updates required entries and removes orphaned snmp-managed keys.
     """
     import hashlib
 
@@ -823,16 +871,13 @@ def _reconcile_policy_snmp_keystore(policy):
 
 
 def _agent_policy_keystore_drift(policy):
-    """
-    Compare the SNMP keystore entries an agent policy SHOULD have (derived from
-    its Agent-mode networks) against the Keystore rows currently stored.
+    """Diff expected SNMP keystore names/values against stored Keystore rows.
 
-    This catches credential/secret rotation: rotating a secret does not change
-    any pipeline LSCL (it only holds a ${ref}), so without this the change would
-    never surface in the deploy diff and never propagate to the agent.
+    Secret rotation does not change pipeline LSCL (`${ref}` only), so without this
+    the deploy diff would miss credential changes.
 
-    Returns {added: [...], changed: [...], removed: [...]} of key NAMES only
-    (never values), or None when there is no drift.
+    Returns:
+        `{added, changed, removed}` of key names only, or None when there is no drift.
     """
     import hashlib
 
@@ -866,14 +911,13 @@ def _agent_policy_keystore_drift(policy):
 
 
 def _cleanup_stale_es_pipelines(networks):
-    """
-    Best-effort removal of leftover [MANAGED] Elasticsearch CPM pipelines for
-    networks now managed via Agent mode (handles CPM -> AGENT transition).
+    """Best-effort delete leftover `[MANAGED]` CPM pipelines after a CPM→Agent move.
 
-    Batched per ES connection (one get_pipeline() call per connection instead of
-    one per network). Failures are logged as warnings, never surfaced as deploy
-    errors, so a flaky/unreachable ES cluster can't block an Agent deploy.
-    Returns the number of pipelines deleted.
+    One `get_pipeline()` per ES connection. Failures are logged, never raised, so
+    a flaky cluster cannot block Agent deploy.
+
+    Returns:
+        Number of pipelines deleted.
     """
     by_conn = {}
     for network in networks:
@@ -904,19 +948,17 @@ def _cleanup_stale_es_pipelines(networks):
 
 
 def _compute_agent_network_diffs(networks, profile_cache=None):
-    """
-    Build the list of Agent-mode deployment diff entries by comparing freshly
-    generated pipeline configs against existing Django Pipeline records.
+    """Diff generated Agent-mode pipeline configs against Django Pipeline rows.
 
-    Handles create/update for current Agent networks plus policy-level orphan
-    detection (networks that switched AGENT -> CPM or were deleted).
+    Handles create/update for current Agent networks and policy-level orphans
+    (networks that switched AGENT→CPM or were deleted).
 
     Args:
-        networks: iterable of Network objects
-        profile_cache: optional shared profile cache dict
+        networks: Network rows.
+        profile_cache: Optional shared profile cache.
 
     Returns:
-        list of diff entries (each with deployment_mode == 'AGENT')
+        List of diff dicts with `deployment_mode == 'AGENT'`.
     """
     if profile_cache is None:
         profile_cache = {}
@@ -1056,14 +1098,13 @@ def _compute_agent_network_diffs(networks, profile_cache=None):
 
 
 def _deploy_agent_diffs(agent_diffs):
-    """
-    Apply Agent-mode deployment diffs to Django Pipeline/Keystore records.
+    """Apply Agent-mode diffs to Django Pipeline and Keystore rows.
 
     Args:
-        agent_diffs: list of diff entries with deployment_mode == 'AGENT'
+        agent_diffs: Diff entries with `deployment_mode == 'AGENT'`.
 
     Returns:
-        dict: {created, updated, deleted, errors}
+        Dict `{created, updated, deleted, errors}` (and keystore change counts).
     """
     created = 0
     updated = 0
@@ -1181,7 +1222,28 @@ def _deploy_agent_diffs(agent_diffs):
 
 @require_admin_role
 def AddNetwork(request):
-    """Add a new SNMP network"""
+    """Create an SNMP network from form POST fields.
+
+    Rejects prefixes larger than /20 (discovery expansion would OOM).
+
+    Args:
+        name: Unique network name.
+        network_range: CIDR prefix (/20 or longer).
+        connection: Elasticsearch connection id.
+        agent_connection: LogstashAgent connection id (AGENT mode).
+        credential: Trap credential id.
+        discovery_credential: Discovery credential id.
+        discovery_enabled: Whether discovery is on.
+        traps_enabled: Whether trap ingest is on.
+        interval: Poll interval in seconds.
+        namespace: Data-stream namespace.
+        namespace_from_device_template: Use normalized template name as namespace.
+        deployment_mode: ``CENTRALIZED`` or ``AGENT``.
+        credential_mode: ``KEYSTORE`` or ``PLAINTEXT`` (centralized only).
+
+    Returns:
+        JSON `{id, message}` on success.
+    """
     try:
         # Extract form data
         name = request.POST.get('name')
@@ -1265,7 +1327,13 @@ def AddNetwork(request):
 
 @require_admin_role
 def UpdateNetwork(request, network_id):
-    """Update an existing SNMP network"""
+    """Update an SNMP network from form POST fields.
+
+    Args:
+        network_id: Network primary key.
+
+    Form fields match `AddNetwork`. Clearing connection/credential ids nulls those FKs.
+    """
     try:
         network = Network.objects.get(pk=network_id)
 
@@ -1352,7 +1420,11 @@ def UpdateNetwork(request, network_id):
 
 
 def GetNetwork(request, network_id):
-    """Get a single network"""
+    """Return one network as JSON.
+
+    Args:
+        network_id: Network primary key.
+    """
     try:
         network = Network.objects.get(pk=network_id)
 
@@ -1383,7 +1455,11 @@ def GetNetwork(request, network_id):
 
 @require_admin_role
 def DeleteNetwork(request, network_id):
-    """Delete a network and its underlying Logstash pipeline"""
+    """Delete a network and its generated Logstash pipelines.
+
+    Args:
+        network_id: Network primary key.
+    """
     try:
 
         network = Network.objects.get(pk=network_id)
@@ -1461,7 +1537,14 @@ def DeleteNetwork(request, network_id):
 
 
 def GetNetworkPipelineName(request, network_id):
-    """Get the pipeline name pattern for a network based on its name"""
+    """Return the `snmp-{network}-*` name pattern for a network.
+
+    Args:
+        network_id: Network primary key.
+
+    Returns:
+        JSON `{success, pipeline_name, network_name}`.
+    """
     try:
         network = Network.objects.get(pk=network_id)
 
@@ -1482,12 +1565,12 @@ def GetNetworkPipelineName(request, network_id):
 
 
 def CheckUndeployedChanges(request):
-    """
-    Lightweight endpoint to check if there are undeployed SNMP changes.
-    Uses timestamp comparison instead of full reconciliation for performance.
-    
+    """Return whether SNMP config looks dirty using deployment timestamps.
+
+    Uses `SNMPDeploymentState.has_undeployed_changes` instead of a full reconcile.
+
     Returns:
-        JSON with has_changes boolean
+        JSON `{success, has_changes}`. On error, `has_changes` is True.
     """
     try:
         has_changes = SNMPDeploymentState.has_undeployed_changes()
@@ -1507,7 +1590,29 @@ def CheckUndeployedChanges(request):
 
 @require_admin_role
 def GetDeployDiff(request):
-    """Get diff for all network pipeline configurations"""
+    """Reconcile desired SNMP pipelines against CPM and Agent records.
+
+    Caches the plan as `snmp_deployment_plan` for 60s for `DeployConfiguration`.
+    An empty diff after change-then-revert clears the undeployed-changes indicator.
+    Centralized KEYSTORE diffs include `manual_keystore_keys` and resolved values.
+
+    Returns:
+        JSON `{success, networks, has_changes, blocking_errors, connections}`.
+
+    Examples:
+        {
+            "success": True,
+            "networks": [{
+                "network_name": "lab",
+                "pipeline_name": "snmp-lab-cisco_ios-polling",
+                "action": "update",
+                "deployment_mode": "AGENT",
+            }],
+            "has_changes": True,
+            "blocking_errors": [],
+            "connections": [{"id": 1, "name": "prod-es"}],
+        }
+    """
     try:
         # Clear the official profile cache to ensure we load fresh data from disk
         # This is important when profile JSON files have been edited
@@ -2017,7 +2122,24 @@ def GetDeployDiff(request):
 
 @require_admin_role
 def DeployConfiguration(request):
-    """Deploy SNMP configuration - creates/updates Logstash pipelines in Elasticsearch"""
+    """Deploy SNMP pipelines to Elasticsearch CPM and/or Agent Django records.
+
+    Reuses the plan cached by `GetDeployDiff` when present.
+
+    Returns:
+        JSON `{success, message, pipelines_created, pipelines_updated,
+        pipelines_deleted, errors}`.
+
+    Examples:
+        {
+            "success": True,
+            "message": "Successfully deployed: 1 pipeline(s) updated",
+            "pipelines_created": 0,
+            "pipelines_updated": 1,
+            "pipelines_deleted": 0,
+            "errors": None,
+        }
+    """
     try:
         # Try to use cached deployment plan from GetDeployDiff
         from django.core.cache import cache
@@ -2579,7 +2701,18 @@ def DeployConfiguration(request):
 # ============================================================================
 
 def GetDevices(request):
-    """Get paginated SNMP devices with search, filter, and sort"""
+    """Return a paginated device list with search, network filter, and sort.
+
+    Args:
+        page: 1-based page number.
+        page_size: Page size (default 25).
+        search: Case-insensitive match on name, IP, or hostname.
+        network: Optional network id filter.
+        sort_by: One of name, ip_address, hostname, created_at, with optional `-`.
+
+    Returns:
+        JSON `{devices, total, page, page_size, total_pages, has_next, has_previous}`.
+    """
     try:
         # Get query parameters
         page = int(request.GET.get('page', 1))
@@ -2672,7 +2805,14 @@ def GetDevices(request):
 
 
 def FindDeviceByHost(request):
-    """Find a device by exact ip_address, hostname, or name match. Returns device details or null."""
+    """Find a device by exact IP, hostname, or name.
+
+    Args:
+        host: Exact match string.
+
+    Returns:
+        JSON `{device: {...}}` or `{device: null}`.
+    """
     host = request.GET.get('host', '').strip()
     if not host:
         return JsonResponse({'device': None}, status=200)
@@ -2704,7 +2844,19 @@ def FindDeviceByHost(request):
 
 @require_admin_role
 def AddDevice(request):
-    """Add a new SNMP device"""
+    """Create a device from form POST fields.
+
+    Args:
+        name: Unique device name.
+        ip_address: Optional IPv4/IPv6 address.
+        hostname: Optional DNS name.
+        port: SNMP port (default 161).
+        retries: SNMP retries.
+        timeout: Timeout in milliseconds.
+        credential: Credential id.
+        network: Network id.
+        device_template: Template id.
+    """
     try:
         # Extract form data
         name = request.POST.get('name')
@@ -2774,7 +2926,13 @@ def AddDevice(request):
 
 @require_admin_role
 def UpdateDevice(request, device_id):
-    """Update an existing SNMP device"""
+    """Update a device from form POST fields.
+
+    Args:
+        device_id: Device primary key.
+
+    Form fields match `AddDevice`.
+    """
     try:
         device = Device.objects.get(pk=device_id)
 
@@ -2848,16 +3006,10 @@ def UpdateDevice(request, device_id):
 
 
 def GetDeviceLocationData(request):
-    """
-    Return aggregated location data from all devices so the modal can build
-    hierarchical combobox suggestions without a dedicated location table.
+    """Return distinct site/building/room values for location comboboxes.
 
-    Response shape:
-      {
-        "sites":         ["HQ", ...],                              # all unique non-null site values
-        "site_building": [{"site": "HQ", "building": "Bld A"}, ...]  # all (site, building) pairs
-        "full":          [{"site":…, "building":…, "room":…, "latitude":…, "longitude":…}, ...]
-      }
+    Returns:
+        JSON `{sites, site_building, full}` aggregated from device rows.
     """
     sites = list(
         Device.objects
@@ -2892,7 +3044,11 @@ def GetDeviceLocationData(request):
 
 
 def GetDevice(request, device_id):
-    """Get a single device"""
+    """Return one device as JSON.
+
+    Args:
+        device_id: Device primary key.
+    """
     try:
         device = Device.objects.get(pk=device_id)
 
@@ -2925,7 +3081,11 @@ def GetDevice(request, device_id):
 
 @require_admin_role
 def DeleteDevice(request, device_id):
-    """Delete a device"""
+    """Delete a device.
+
+    Args:
+        device_id: Device primary key.
+    """
     try:
         device = Device.objects.get(pk=device_id)
         device.delete()
@@ -2953,7 +3113,7 @@ def DeleteDevice(request, device_id):
 # ==================== Profile API Endpoints ====================
 
 def GetNormalizerDefinitions(request):
-    """Get normalizer definitions from JSON file"""
+    """Return `SNMP/data/normalizers.json` as JSON."""
     try:
         normalizers_path = os.path.join(settings.BASE_DIR, 'SNMP', 'data', 'normalizers.json')
         
@@ -2973,7 +3133,11 @@ def GetNormalizerDefinitions(request):
 
 
 def GetOfficialProfile(request, profile_name):
-    """Get an official profile from JSON file"""
+    """Return a bundled official profile JSON by file stem.
+
+    Args:
+        profile_name: Official profile filename without `.json`.
+    """
     try:
         official_profiles_dir = os.path.join(settings.BASE_DIR, 'SNMP', 'data', 'official_profiles')
         profile_path = os.path.join(official_profiles_dir, f"{profile_name}.json")
@@ -3001,7 +3165,11 @@ def GetOfficialProfile(request, profile_name):
 
 
 def GetProfile(request, profile_name):
-    """Get a user profile from database"""
+    """Return a user profile from the database.
+
+    Args:
+        profile_name: Profile `name` field.
+    """
     try:
         profile = Profile.objects.get(name=profile_name)
         return JsonResponse({
@@ -3023,7 +3191,16 @@ def GetProfile(request, profile_name):
 
 @require_admin_role
 def AddProfile(request):
-    """Add a new user profile"""
+    """Create a user profile from a JSON body.
+
+    Args:
+        name: Unique profile name.
+        description: Optional description.
+        vendor: Vendor label.
+        product: Optional product line.
+        profile_data: OID map object.
+        normalizers: Normalizer list.
+    """
     try:
         data = json.loads(request.body)
 
@@ -3068,7 +3245,11 @@ def AddProfile(request):
 
 @require_admin_role
 def UpdateProfile(request, profile_name):
-    """Update an existing user profile"""
+    """Update a user profile from a JSON body.
+
+    Args:
+        profile_name: Existing profile name.
+    """
     try:
         data = json.loads(request.body)
 
@@ -3108,7 +3289,11 @@ def UpdateProfile(request, profile_name):
 
 @require_admin_role
 def DeleteProfile(request, profile_name):
-    """Delete a user profile"""
+    """Delete a user profile.
+
+    Args:
+        profile_name: Profile name.
+    """
     try:
         # Prevent deletion of the system profile
         if profile_name in ['system', 'generic_system.json']:
@@ -3133,7 +3318,7 @@ def DeleteProfile(request, profile_name):
 
 
 def GetAllProfiles(request):
-    """Get all profiles (official and user) for dropdown"""
+    """Return official and user profiles for dropdowns."""
     try:
         all_profiles = []
 
@@ -3165,12 +3350,10 @@ HR_STORAGE_RAM_OID = "1.3.6.1.2.1.25.2.1.2"
 
 
 def _device_host_filter(device):
-    """Return an ES filter matching a device by its SNMP poll address.
+    """Return an ES filter on `host.polled_address` for this device.
 
-    The polling pipeline records the raw address used to reach the device in
-    ``host.polled_address`` (the hostname when one is configured, otherwise the
-    IP).  Querying this single field is simpler and more reliable than checking
-    both ``host.ip`` and ``host.hostname``.
+    Polling pipelines store the hostname when set, otherwise the IP, in that
+    single field.
     """
     identifier = device.hostname or device.ip_address
     if not identifier:
@@ -3179,23 +3362,13 @@ def _device_host_filter(device):
 
 
 def GetDevicesStatus(request):
-    """
-    Check online status for multiple devices in batch.
-    Accepts comma-separated device IDs as query parameter.
-    Returns status for all devices in a single response.
+    """Return online status for many devices in one response.
 
-    Query params:
-        device_ids: Comma-separated list of device IDs (e.g., "123,124,125")
+    Args:
+        device_ids: Comma-separated device ids.
 
     Returns:
-        {
-            "success": true,
-            "statuses": {
-                "123": {"is_online": true},
-                "124": {"is_online": false},
-                ...
-            }
-        }
+        JSON `{success, statuses: {id: {is_online}}}`.
     """
     try:
         # Get device IDs from query parameter
@@ -3246,7 +3419,11 @@ def GetDevicesStatus(request):
 
 
 def GetDeviceVisualization(request, device_id):
-    """Get visualization data for a specific device"""
+    """Return visualization payloads for one device.
+
+    Args:
+        device_id: Device primary key.
+    """
     try:
         device = Device.objects.get(id=device_id)
 
@@ -3302,9 +3479,9 @@ def GetDeviceVisualization(request, device_id):
 
 
 def GetDiscoveredDevices(request):
-    """
-    Query Elasticsearch for discovered devices from logs-snmp.discovery-* indices.
-    Aggregates by host.ip and returns top hits from the last 15 minutes.
+    """Query `logs-snmp.discovery-*` for hosts seen in the last 15 minutes.
+
+    Aggregates by `host.ip` and returns top hits per host.
     """
     try:
 
@@ -3550,17 +3727,11 @@ def _get_device_interfaces(device, es_connection):
 
 
 def _flatten_interface(interface):
-    """Flatten an OpenConfig-shaped interface doc to what the frontend reads.
+    """Flatten OpenConfig-shaped interface docs to the UI's flat field names.
 
-    SNMP-polled interfaces arrive flat (``interface.oper_status``), but
-    OpenConfig/gNMI-shaped ones nest the same values under ``state``, with the
-    traffic counters nested one level deeper again under ``state.counters``.
-    The UI reads every one of these off the interface object directly
-    (``iface.oper_status``, ``iface.in_octets``), so lift both levels.
-
-    Existing top-level keys win: the SNMP pipeline's translate normalizers have
-    already decoded those (2 -> "DOWN"), whereas a raw ``state`` value may still
-    be the undecoded integer, which the UI would render as "Unknown".
+    SNMP interfaces are already flat (`interface.oper_status`); gNMI nests values
+    under `state` and counters under `state.counters`. Existing top-level keys win
+    so translate normalizers (2 → ``DOWN``) are not overwritten by raw integers.
     """
     iface = dict(interface)
     state = iface.pop('state', None)
@@ -4188,8 +4359,15 @@ def _get_device_printer_supplies(device, es_connection):
 
 
 def generate_visualizations(visualizations, device, es_connection):
-    """
-    Generate visualization data based on the decided visualizations.
+    """Fetch visualization datasets listed in `visualizations` from Elasticsearch.
+
+    Args:
+        visualizations: Event-category keys such as `metrics` or `interface`.
+        device: Device row.
+        es_connection: Elasticsearch client.
+
+    Returns:
+        Dict of visualization name → payload.
     """
     visualization_data = {}
     if "metrics" in visualizations:
@@ -4215,15 +4393,13 @@ def generate_visualizations(visualizations, device, es_connection):
 
 
 def get_devices_online_batch(devices):
-    """
-    Check online status for multiple devices in batch.
-    Groups devices by their Elasticsearch connection and makes one query per connection.
+    """Check online status for many devices, one ES query per connection.
 
     Args:
-        devices: List of Device objects (should have network and connection prefetched)
+        devices: Device rows with network/connection prefetched.
 
     Returns:
-        dict: {device_id: is_online_bool, ...}
+        `{device_id: is_online_bool}`.
     """
     results = {}
 
@@ -4313,10 +4489,7 @@ def get_devices_online_batch(devices):
 
 
 def get_visualizations(device):
-    """
-    Main entry point to get visualizations for a device.
-    Gets the Elasticsearch connection from the device's network and fetches visualization data.
-    """
+    """Load visualizations for a device using its network Elasticsearch connection."""
     # Get the connection from the device's network
     if not device.network or not device.network.connection:
         return {
@@ -4335,10 +4508,14 @@ def get_visualizations(device):
 
 
 def decide_visualizations(device, es):
-    """
-    Determine which visualizations to show for SNMP devices based on available data.
-    Queries Elasticsearch to see what data is available for this device.
-    Returns a dict with visualization configuration and query results.
+    """List event.category values present for a device in the last six hours.
+
+    Args:
+        device: Device row.
+        es: Elasticsearch client.
+
+    Returns:
+        `{success, results}` where `results` is a list of category strings.
     """
     try:
         results = es.search(
@@ -4385,7 +4562,11 @@ def decide_visualizations(device, es):
 # Device Template CRUD Operations
 
 def GetOfficialDeviceTemplate(request, template_name):
-    """Get an official device template from JSON file"""
+    """Return a bundled official device template JSON by file stem.
+
+    Args:
+        template_name: Official template filename without `.json`.
+    """
     try:
         official_templates_dir = os.path.join(settings.BASE_DIR, 'SNMP', 'data', 'official_device_templates')
         template_path = os.path.join(official_templates_dir, f"{template_name}.json")
@@ -4427,7 +4608,7 @@ def GetOfficialDeviceTemplate(request, template_name):
 
 
 def GetDeviceTemplates(request):
-    """Get all device templates for dropdown selection (official templates are synced to database)"""
+    """Return all device templates (official rows are synced into the database)."""
     try:
         templates_list = []
         
@@ -4450,7 +4631,11 @@ def GetDeviceTemplates(request):
 
 
 def GetDeviceTemplate(request, template_id):
-    """Get a specific device template by ID (or name for official templates)"""
+    """Return one device template by numeric id or official name.
+
+    Args:
+        template_id: Template primary key or official name.
+    """
     try:
         # First, try to get from database by ID
         try:
@@ -4492,7 +4677,18 @@ def GetDeviceTemplate(request, template_id):
 
 @require_admin_role
 def AddDeviceTemplate(request):
-    """Add a new device template"""
+    """Create a user device template from form POST fields.
+
+    Args:
+        name: Unique template name.
+        description: Optional description.
+        vendor: Vendor label.
+        model: Optional model.
+        product: Optional product line.
+        type: Device type.
+        matching_rules: JSON list of sysDescr substrings.
+        profiles: JSON list of profile ids or names.
+    """
     if request.method != 'POST':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
     
@@ -4566,7 +4762,11 @@ def AddDeviceTemplate(request):
 
 @require_admin_role
 def UpdateDeviceTemplate(request, template_id):
-    """Update an existing device template"""
+    """Update a user device template.
+
+    Args:
+        template_id: Template primary key.
+    """
     if request.method != 'POST':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
     
@@ -4641,7 +4841,11 @@ def UpdateDeviceTemplate(request, template_id):
 
 @require_admin_role
 def DeleteDeviceTemplate(request, template_id):
-    """Delete a device template"""
+    """Delete a user device template (official default cannot be removed).
+
+    Args:
+        template_id: Template primary key.
+    """
     if request.method != 'POST':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
     
@@ -4673,7 +4877,11 @@ def DeleteDeviceTemplate(request, template_id):
 # ---------------------------------------------------------------------------
 
 def sync_official_profiles():
-    """Sync official profiles from JSON files to database as placeholders"""
+    """Upsert official profiles from `SNMP/data/official_profiles/` as placeholders.
+
+    Matches on `official_key`, then name, and resets `profile_data` to
+    `{is_official_placeholder: True}` so stale orphan flags are cleared.
+    """
     official_profiles_dir = os.path.join(settings.BASE_DIR, 'SNMP', 'data', 'official_profiles')
 
     if not os.path.exists(official_profiles_dir):
@@ -4722,7 +4930,10 @@ def sync_official_profiles():
 
 
 def sync_official_device_templates():
-    """Sync official device templates from JSON files to database"""
+    """Upsert official templates from `SNMP/data/official_device_templates/`.
+
+    Links profiles by `official_key`, then `{name}.json`, then bare name.
+    """
     official_templates_dir = os.path.join(settings.BASE_DIR, 'SNMP', 'data', 'official_device_templates')
 
     if not os.path.exists(official_templates_dir):
@@ -4807,17 +5018,14 @@ def sync_official_device_templates():
 
 
 def suggest_device_template(device_info):
-    """
-    Suggest device templates based on matching rules against device information.
+    """Rank device templates whose matching rules hit `device_info`.
 
     Args:
-        device_info (str): Device identification string (e.g., sysDescr or sysObject)
+        device_info: Identification string (sysDescr or similar).
 
     Returns:
-        list: List of DeviceTemplate IDs ranked by match quality:
-              - First: Templates where ALL matching rules match
-              - Second: Templates where SOME matching rules match
-              - Templates with null/empty matching_rules are excluded
+        DeviceTemplate ids: full matches first, then partial. Empty `matching_rules`
+        templates are excluded.
     """
     if not device_info:
         return []

@@ -1,13 +1,11 @@
 #Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
-"""
-Inline grounding for AI SNMP profile authoring.
+"""Assemble inline grounding for AI SNMP profile authoring.
 
-LogstashUI is the source of truth: the authoring instructions, the field-naming
-schema, the standard-MIB references, and the reference profiles all live under
-SNMP/data/ and are sent INLINE with each authoring request. There is no backend
-grounding store (no KB) to keep in sync — the data travels with the request.
+Authoring instructions, field-naming schema, standard-MIB references, and
+reference profiles live under `SNMP/data/` and are sent with each request.
+There is no backend knowledge-base to keep in sync.
 """
 import glob
 import json
@@ -27,13 +25,13 @@ def _read_json(path):
 
 
 def load_instructions():
-    """The authoring prompt (source of truth), sent inline as system instructions."""
+    """Return the authoring prompt from `data/authoring_instructions.md`."""
     with open(os.path.join(_DATA, "authoring_instructions.md")) as f:
         return f.read()
 
 
 def _relevant(profile, vendor):
-    """Keep generic/Any profiles always; vendor-specific ones only on a vendor match."""
+    """Keep generic/Any profiles always; keep vendor-specific ones only on a vendor match."""
     pv = (profile.get("vendor") or "").strip().lower()
     if pv in ("", "any", "generic"):
         return True
@@ -42,8 +40,14 @@ def _relevant(profile, vendor):
 
 
 def build_grounding(vendor):
-    """Assemble the inline grounding block from local source-of-truth files:
-    field-naming schema + standard-MIB references + relevant reference profiles."""
+    """Assemble schema, standard-MIB JSON, and vendor-filtered reference profiles.
+
+    Args:
+        vendor: Vendor hint used to filter official profiles.
+
+    Returns:
+        Markdown/JSON block appended to the agent's instructions.
+    """
     parts = []
 
     schema = []

@@ -2,6 +2,8 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
+"""HTTP views for pipeline simulation, slot streaming, and sim-node health."""
+
 from django.shortcuts import HttpResponse
 from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
@@ -38,12 +40,14 @@ simulation_lock = Lock()
 
 
 def _sim_agent_url(request):
-    """
-    Resolve LogstashAgent base URL for simulation traffic.
+    """Resolve the LogstashAgent base URL for simulation traffic.
 
-    Prefer explicit connection_id (POST/GET); else sticky session / single target;
-    fall back to settings.LOGSTASH_AGENT_URL when no enrolled sim agents exist
-    (legacy embedded static URL).
+    Prefer explicit ``connection_id`` (POST/GET); else sticky session /
+    single target; fall back to ``settings.LOGSTASH_AGENT_URL`` when no
+    enrolled sim agents exist (legacy embedded static URL).
+
+    Returns:
+        ``(base_url, target_dict_or_None, error_or_None)``.
     """
     connection_id = (
         request.POST.get("sim_connection_id")
@@ -74,7 +78,11 @@ def _sim_agent_url(request):
 
 @require_admin_role
 def GetSimulationTargets(request):
-    """List simulate-capable agents for the pipeline editor dropdown."""
+    """List simulate-capable agents for the pipeline editor dropdown.
+
+    Returns:
+        JSON ``{success, targets, selected_connection_id, count}``.
+    """
     if request.method != "GET":
         return JsonResponse({"error": "Method not allowed"}, status=405)
     targets = list_simulation_targets(ensure_embedded=True)
@@ -101,9 +109,14 @@ def GetSimulationTargets(request):
 
 @require_admin_role
 def SelectSimulationTarget(request):
-    """
-    Persist the user's chosen simulation agent in the session (sticky selection).
-    Body JSON: { "connection_id": <int> }
+    """Persist the chosen simulation agent in the session (sticky selection).
+
+    Args:
+        connection_id: Simulate/embedded connection pk.
+
+    Examples:
+        payload = {"connection_id": 12}
+        # {"success": True, "selected_connection_id": 12, "label": "simulate-1", ...}
     """
     if request.method != "POST":
         return JsonResponse({"error": "Method not allowed"}, status=405)
@@ -136,9 +149,23 @@ def SelectSimulationTarget(request):
 
 @require_admin_role
 def SimulatePipeline(request):
-    """
-    Simulate a pipeline by building a single pipeline with Ruby instrumentation
-    injected after each filter plugin to capture step-by-step event state.
+    """Run a pipeline simulation with per-filter Ruby instrumentation.
+
+    Injects snapshot code after each filter plugin so the editor can show
+    step-by-step event state. Empty ``log_text`` is a slot-preallocation
+    request (deterministic ``run_id``).
+
+    Args:
+        components: Visual-editor components JSON.
+        log_text: Sample events (empty = preallocate slot).
+        ls_id / policy_id: Optional policy association for keystore sync.
+        sim_connection_id: Optional simulate target.
+
+    Examples:
+        # POST form
+        # components = '{"filter": [{"plugin": "grok", ...}]}'
+        # log_text = "one event per line"
+        # HTML result table is returned (not JSON).
     """
 
     if request.method != 'POST':
@@ -234,9 +261,10 @@ def SimulatePipeline(request):
         step_counter = [0]  # Use list to maintain counter across recursive calls
 
         def instrument_plugins(plugins_list):
-            """
-            Recursively instrument plugins, handling conditional (if) plugins specially.
-            For 'if' plugins, we instrument the nested plugins but not the condition itself.
+            """Recursively instrument plugins, including nested ``if`` branches.
+
+            Nested plugins inside conditionals are instrumented; the
+            condition itself is not.
             """
             instrumented = []
 
@@ -894,9 +922,14 @@ end
 
 @csrf_exempt
 def StreamSimulate(request):
-    """
-    Receive simulation results from Logstash HTTP output and store them.
-    This endpoint is called by the output-block pipeline for each event.
+    """Receive one simulated event from Logstash HTTP output and enqueue it.
+
+    Called by the instrumented pipeline's output for each event.
+
+    Examples:
+        # POST JSON (from the agent / Ruby http output)
+        event = {"run_id": "<uuid>", "snapshots": {"plugin-id": {...}}, ...}
+        # {"status": "ok"}
     """
     if request.method != 'POST':
         return JsonResponse({"error": "Method not allowed"}, status=405)
@@ -942,9 +975,13 @@ def StreamSimulate(request):
 
 
 def GetSimulationResults(request):
-    """
-    Poll endpoint for frontend to retrieve simulation results.
-    Filters results by run_id to ensure each simulation only gets its own results.
+    """Return and dequeue queued simulation events for one ``run_id``.
+
+    Args:
+        run_id: Simulation run identifier.
+
+    Returns:
+        JSON ``{"results": [...]}``.
     """
     if request.method != 'GET':
         return JsonResponse({"error": "Method not allowed"}, status=405)
@@ -999,18 +1036,13 @@ def GetSimulationResults(request):
 
 @login_required
 def CheckIfPipelineLoaded(request):
-    """
-    Check if a pipeline successfully loaded in the Logstash instance.
-    Calls logstashagent's is_pipeline_running endpoint to verify pipeline status.
+    """Check whether a slot pipeline is running on the simulate agent.
 
-    Expected GET parameters:
-        - pipeline_name: The name of the pipeline to check
+    Args:
+        pipeline_name: Pipeline id to look up.
 
     Returns:
-        JSON response with:
-        - is_running: Boolean indicating if pipeline is running
-        - pipeline_name: The pipeline name that was checked
-        - error: Error message if check failed
+        JSON with ``is_running``, ``pipeline_name``, ``running_pipelines``.
     """
     try:
         pipeline_name = request.GET.get('pipeline_name')
@@ -1058,21 +1090,15 @@ def CheckIfPipelineLoaded(request):
 
 @login_required
 def GetRelatedLogs(request):
-    """
-    Get log entries related to a specific slot pipeline.
-    Calls logstashagent's pipeline logs endpoint to fetch related logs.
+    """Fetch Logstash log lines for a simulation slot pipeline.
 
-    Expected GET parameters:
-        - slot_id: The slot ID to get logs for
-        - max_entries: Maximum number of log entries to return (default: 100, max: 500)
-        - min_level: Minimum log level (default: INFO, options: DEBUG, INFO, WARN, ERROR)
+    Args:
+        slot_id: Slot id (required).
+        max_entries: Cap (default 100, max 500).
+        min_level: Minimum level (default ``INFO``).
 
     Returns:
-        JSON response with:
-        - pipeline_id: The pipeline ID searched
-        - log_count: Number of log entries found
-        - logs: List of log entries
-        - error: Error message if fetch failed
+        Agent JSON with ``pipeline_id``, ``log_count``, ``logs``.
     """
     try:
         slot_id = request.GET.get('slot_id')
@@ -1183,9 +1209,11 @@ def GetRelatedLogs(request):
 
 @require_admin_role
 def UploadFile(request):
-    """
-    Upload a file for use in simulation.
-    Receives file binary data and transmits it to logstashagent for storage.
+    """Upload a file to the simulate agent for use in a pipeline.
+
+    Args:
+        file: Uploaded file.
+        filename: Destination name on the agent.
     """
     if request.method != 'POST':
         return JsonResponse({"error": "Method not allowed"}, status=405)
@@ -1245,14 +1273,11 @@ def UploadFile(request):
 
 @login_required
 def GetSimulationNodeStatus(request):
-    """
-    Check the health status of the logstashagent.
-    
+    """Check whether the simulate LogstashAgent process is reachable.
+
     Returns:
-        JSON response with:
-        - status: "running" if agent is healthy, "not_responding" otherwise
-        - message: Human-readable status message
-        - agent_info: Additional info from agent (if available)
+        JSON ``{status, message, agent_info?}`` where ``status`` is
+        ``running`` or ``not_responding``.
     """
     try:
         logstash_agent_url, _, _ = _sim_agent_url(request)
@@ -1291,15 +1316,11 @@ def GetSimulationNodeStatus(request):
 
 @login_required
 def GetSimulationNodeHealth(request):
-    """
-    Check the health status of Logstash within the simulation node.
-    
+    """Check Logstash health inside the selected simulation node.
+
     Returns:
-        JSON response with:
-        - healthy: Boolean indicating if Logstash is healthy
-        - restarting: Boolean indicating if Logstash is restarting
-        - restart_count: Number of times Logstash has restarted
-        - queued_requests: Number of queued simulation requests
+        JSON with ``healthy``, ``restarting``, ``restart_count``,
+        ``queued_requests``, plus TLS pin flags.
     """
     try:
         base, _, err = _sim_agent_url(request)
@@ -1359,19 +1380,15 @@ def GetSimulationNodeHealth(request):
 
 @require_admin_role
 def ValidateLogstashConfig(request):
-    """
-    Validate a Logstash pipeline configuration by sending it to logstashagent
-    for validation using logstash --config.test_and_exit.
-    
-    Expected POST parameters:
-        - components: JSON string of pipeline components
-        - pipeline_name: Name of the pipeline (used for temp file naming)
-    
+    """Validate LSCL via the agent's ``logstash --config.test_and_exit``.
+
+    Args:
+        components: Visual-editor components JSON.
+        pipeline_name: Name used for the temp file.
+
     Returns:
-        JSON response with:
-        - status: "OK" or "ERROR"
-        - notifications: List of warning/deprecation messages
-        - error: Error message if validation failed
+        Agent JSON with ``status`` (``OK``/``ERROR``), ``notifications``,
+        optional ``error``.
     """
     if request.method != 'POST':
         return JsonResponse({"error": "Method not allowed"}, status=405)

@@ -2,6 +2,12 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
+"""Elasticsearch and Kibana helpers used across LogstashUI.
+
+``get_elastic_connection`` is the single entry point for ES clients.
+CENTRALIZED connections only — agent rows have no Elasticsearch endpoint.
+"""
+
 from PipelineManager.models import Connection as ConnectionTable
 
 from elasticsearch import Elasticsearch
@@ -16,9 +22,25 @@ logger = logging.getLogger(__name__)
 
 
 def test_elastic_connectivity(elastic_connection):
+    """Return pretty-printed cluster ``info()`` for a live ES client.
+
+    Args:
+        elastic_connection: An ``elasticsearch.Elasticsearch`` instance.
+
+    Returns:
+        JSON string of the cluster info payload.
+    """
     return json.dumps(dict(elastic_connection.info()), indent=4)
 
 def get_elastic_connections_from_list():
+    """Build ES clients for every CENTRALIZED ``Connection`` row.
+
+    Agent connections are skipped; they have no Elasticsearch endpoint.
+
+    Returns:
+        A list of dicts with keys ``es``, ``name``, ``id``, and
+        ``connection_type``.
+    """
     # Only query CENTRALIZED connections (not AGENT connections)
     # AGENT connections don't have Elasticsearch endpoints to connect to
     es_connections = list(ConnectionTable.objects.filter(
@@ -33,6 +55,23 @@ def get_elastic_connections_from_list():
     } for es_connection in es_connections]
 
 def get_elastic_connection(connection_id):
+    """Return an Elasticsearch client for a LogstashUI Connection pk.
+
+    TLS verification is off and the request timeout is 30s.
+
+    Args:
+        connection_id: Primary key of ``PipelineManager.Connection``.
+
+    Returns:
+        A configured ``elasticsearch.Elasticsearch`` client.
+
+    Raises:
+        Connection.DoesNotExist: If ``connection_id`` is unknown.
+
+    Examples:
+        es = get_elastic_connection(connection.pk)
+        es.ping()
+    """
     elastic_creds = _get_creds(connection_id)
     return Elasticsearch(**elastic_creds, verify_certs=False, request_timeout=30)
 
@@ -60,9 +99,14 @@ def _get_creds(connection_id):
     return connection_data
 
 def get_elasticsearch_indices(connection_id, pattern="*"):
-    """
-    Get Elasticsearch indices using cat.indices API with pattern matching
-    Returns top 50 indices matching the pattern
+    """List index names matching ``pattern``, capped at 50.
+
+    Args:
+        connection_id: Primary key of a CENTRALIZED ``Connection``.
+        pattern: ``cat.indices`` index pattern. Defaults to ``*``.
+
+    Returns:
+        Sorted list of index name strings, or ``[]`` on error.
     """
     es = get_elastic_connection(connection_id)
 
@@ -81,9 +125,14 @@ def get_elasticsearch_indices(connection_id, pattern="*"):
         return []
 
 def get_elasticsearch_field_mappings(connection_id, index):
-    """
-    Get field mappings from an Elasticsearch index
-    Returns a list of field names
+    """List dotted field names from an index mapping.
+
+    Args:
+        connection_id: Primary key of a CENTRALIZED ``Connection``.
+        index: Index (or data-stream) name.
+
+    Returns:
+        Sorted unique field names, or ``[]`` on error.
     """
     es = get_elastic_connection(connection_id)
 
@@ -106,8 +155,14 @@ def get_elasticsearch_field_mappings(connection_id, index):
 
 
 def _extract_field_names(properties, prefix=''):
-    """
-    Recursively extract field names from Elasticsearch mappings
+    """Walk mapping ``properties`` and return dotted field names.
+
+    Args:
+        properties: ``mappings.properties`` dict from ES.
+        prefix: Parent path prepended to each name.
+
+    Returns:
+        List of dotted field name strings, including nested properties.
     """
     fields = []
     for field_name, field_info in properties.items():
@@ -122,19 +177,21 @@ def _extract_field_names(properties, prefix=''):
 
 
 def query_elasticsearch_documents(connection_id, index, doc_ids=None, field=None, size=10, query_string=""):
-    """
-    Query Elasticsearch documents for simulation
+    """Fetch document ``_source`` payloads for pipeline simulation.
+
+    If ``doc_ids`` is set, uses ``mget``. Otherwise searches with an optional
+    Lucene ``query_string`` and optional ``_source`` field filter.
 
     Args:
-        connection_id: ES connection ID
-        index: Index name
-        doc_ids: List of document IDs (for docid method)
-        field: Field name to retrieve (for field method)
-        size: Number of documents to retrieve
-        query_string: Lucene query string
+        connection_id: Primary key of a CENTRALIZED ``Connection``.
+        index: Index name.
+        doc_ids: Document ids for the mget path.
+        field: Restrict ``_source`` to this field when searching.
+        size: Hit cap for the search path.
+        query_string: Lucene query. Empty means ``match_all``.
 
     Returns:
-        List of document _source data
+        List of ``_source`` dicts, or ``[]`` on error.
     """
     es = get_elastic_connection(connection_id)
 
@@ -170,14 +227,14 @@ def query_elasticsearch_documents(connection_id, index, doc_ids=None, field=None
 
 
 def get_inference_models(connection_id):
-    """
-    Get available inference models from Elasticsearch
-    
+    """List non-deprecated chat-completion inference endpoints.
+
     Args:
-        connection_id: ES connection ID
-        
+        connection_id: Primary key of a CENTRALIZED ``Connection``.
+
     Returns:
-        List of completion-type inference models
+        Dicts with ``inference_id``, ``service``, ``task_type``, and ``name``.
+        Empty list on error.
     """
     logger.info(f"get_inference_models called with connection_id: {connection_id}")
     
@@ -235,17 +292,19 @@ def get_inference_models(connection_id):
 
 
 def stream_chat_completion(connection_id, inference_id, system_prompt, user_message):
-    """
-    Stream chat completion from Elasticsearch inference API
-    
+    """Yield NDJSON chunks from the ES chat-completion inference API.
+
     Args:
-        connection_id: ES connection ID
-        inference_id: Inference endpoint ID to use
-        system_prompt: System prompt to guide the AI
-        user_message: User message/query
-        
+        connection_id: Primary key of a CENTRALIZED ``Connection``.
+        inference_id: Inference endpoint id.
+        system_prompt: System message. Must be non-empty.
+        user_message: User message. Must be non-empty.
+
     Yields:
-        Chunks of the completion response
+        Parsed JSON objects per stream line, or ``{'error': ...}`` on failure.
+
+    Raises:
+        ValueError: If either prompt is empty.
     """
     es = get_elastic_connection(connection_id)
     
@@ -313,16 +372,18 @@ def stream_chat_completion(connection_id, inference_id, system_prompt, user_mess
 
 
 def create_ingest_pipeline(connection_id, pipeline_id, pipeline_definition):
-    """
-    Create an Elasticsearch ingest pipeline
-    
+    """Put an ingest pipeline.
+
     Args:
-        connection_id: ID of the Elasticsearch connection
-        pipeline_id: Name/ID for the pipeline
-        pipeline_definition: Dict containing pipeline processors
-    
+        connection_id: Primary key of a CENTRALIZED ``Connection``.
+        pipeline_id: Pipeline id.
+        pipeline_definition: Body with processors (and optional on_failure).
+
     Returns:
-        Response from Elasticsearch
+        Elasticsearch response as a dict.
+
+    Raises:
+        Exception: Propagates the ES client error after logging.
     """
     try:
         es_client = get_elastic_connection(connection_id)
@@ -337,16 +398,17 @@ def create_ingest_pipeline(connection_id, pipeline_id, pipeline_definition):
 
 
 def simulate_ingest_pipeline(connection_id, pipeline_definition, documents):
-    """
-    Simulate an ingest pipeline on sample documents
-    
+    """Run ingest ``simulate`` on sample documents.
+
+    String documents are wrapped as ``{"message": doc}``.
+
     Args:
-        connection_id: ID of the Elasticsearch connection
-        pipeline_definition: Dict containing pipeline processors
-        documents: List of documents to simulate (each should have a 'message' field)
-    
+        connection_id: Primary key of a CENTRALIZED ``Connection``.
+        pipeline_definition: Pipeline body with processors.
+        documents: Strings or ``_source`` dicts.
+
     Returns:
-        Simulation results from Elasticsearch
+        Simulation response as a dict.
     """
     try:
         es_client = get_elastic_connection(connection_id)
@@ -379,16 +441,15 @@ def simulate_ingest_pipeline(connection_id, pipeline_definition, documents):
 
 
 def create_index_template(connection_id, template_name, template_definition):
-    """
-    Create an Elasticsearch index template
-    
+    """Put an index template.
+
     Args:
-        connection_id: ID of the Elasticsearch connection
-        template_name: Name for the index template
-        template_definition: Dict containing template definition
-    
+        connection_id: Primary key of a CENTRALIZED ``Connection``.
+        template_name: Template name.
+        template_definition: Index template body.
+
     Returns:
-        Response from Elasticsearch
+        Elasticsearch response as a dict.
     """
     try:
         es_client = get_elastic_connection(connection_id)
@@ -403,16 +464,15 @@ def create_index_template(connection_id, template_name, template_definition):
 
 
 def get_index_template(connection_id, template_name):
-    """
-    Fetch an installed Elasticsearch index template by name.
+    """Fetch one installed index template by name.
 
     Args:
-        connection_id: ID of the Elasticsearch connection
-        template_name: Name of the index template to fetch
+        connection_id: Primary key of a CENTRALIZED ``Connection``.
+        template_name: Template name.
 
     Returns:
-        The index_template dict if found, or None if not installed.
-        Raises on unexpected errors (not 404).
+        The ``index_template`` dict if found, or ``None`` if not installed
+        (including 404). Re-raises unexpected errors.
     """
     try:
         es_client = get_elastic_connection(connection_id)
@@ -438,24 +498,22 @@ _TEMPLATE_COMPARE_KEYS = ['index_patterns', 'composed_of', 'priority']
 
 
 def check_index_template(connection_id, template_name, template_definition):
-    """
-    Check whether an index template is installed and matches the desired definition.
+    """Compare an installed index template to a desired definition.
 
-    Compares index_patterns, composed_of, priority, and _meta.version (if present).
-    Mapping content is intentionally excluded to avoid false positives from
-    ES field-level normalization.
+    Compares ``index_patterns``, ``composed_of``, ``priority``, and
+    ``_meta.version`` when present. Mapping content is skipped so ES
+    field-level normalization does not produce false positives.
+    ``data_stream`` is a presence-only check (``{}`` vs ``{"hidden": false}``).
 
     Args:
-        connection_id: ID of the Elasticsearch connection
-        template_name: Name of the index template to check
-        template_definition: The desired template definition dict
+        connection_id: Primary key of a CENTRALIZED ``Connection``.
+        template_name: Template name.
+        template_definition: Desired template body.
 
     Returns:
-        {
-            'status': 'not_installed' | 'installed' | 'installed_but_outdated' | 'error',
-            'differences': [str],   # list of field names that differ
-            'error': str | None
-        }
+        Dict with ``status`` (``not_installed``, ``installed``,
+        ``installed_but_outdated``, or ``error``), ``differences`` (field
+        names), and ``error``.
     """
     try:
         current = get_index_template(connection_id, template_name)
@@ -496,17 +554,19 @@ def check_index_template(connection_id, template_name, template_definition):
 
 
 def ingest_to_data_stream(connection_id, data_stream_name, documents, pipeline_name=None):
-    """
-    Ingest documents to an Elasticsearch data stream
+    """Bulk-create documents onto a data stream.
+
+    Derives ``data_stream.{type,dataset,namespace}`` from the stream name
+    (``{type}-{dataset}-{namespace}``) so Kibana OOTB dashboards match.
 
     Args:
-        connection_id: ID of the Elasticsearch connection
-        data_stream_name: Name of the data stream (e.g., 'logs-nginx.access-default')
-        documents: List of documents to ingest (strings or dicts)
-        pipeline_name: Optional pipeline to use for ingestion
+        connection_id: Primary key of a CENTRALIZED ``Connection``.
+        data_stream_name: Stream name, e.g. ``logs-nginx.access-default``.
+        documents: Strings (wrapped as ``message``) or dicts.
+        pipeline_name: Optional ingest pipeline for the bulk create.
 
     Returns:
-        Bulk ingestion response
+        Bulk response dict.
     """
     try:
         es_client = get_elastic_connection(connection_id)
@@ -573,17 +633,15 @@ def ingest_to_data_stream(connection_id, data_stream_name, documents, pipeline_n
 
 
 def bulk_index_documents(connection_id, index_name, documents):
-    """
-    Bulk index documents into a regular Elasticsearch index.
+    """Bulk-index documents into a regular index (not a data stream).
 
     Args:
-        connection_id: ES connection ID
-        index_name:    Target index name (must be lowercase, no spaces)
-        documents:     List of dicts to index.  String values are wrapped in
-                       {"message": value} automatically.
+        connection_id: Primary key of a CENTRALIZED ``Connection``.
+        index_name: Target index (lowercase, no spaces).
+        documents: Dicts to index. Strings are wrapped as ``{"message": ...}``.
 
     Returns:
-        Bulk response dict from Elasticsearch
+        Bulk response dict.
     """
     try:
         es_client = get_elastic_connection(connection_id)
@@ -622,15 +680,23 @@ _ES_ONLY_PORTS = {9200, 9243}
 
 
 def normalize_kibana_url(url):
-    """
-    Return a Kibana origin (scheme://host[:port]) from a user-supplied or
-    connection-derived URL.
+    """Return a Kibana origin (``scheme://host[:port]``) from a stored URL.
 
     Cloud ID extraction already produces a Kibana host. URL-based connections
     often store the Elasticsearch endpoint instead; this rewrites Elastic Cloud
     ES hosts (``.es.`` infix, or a project alias with neither ``.es.`` nor
     ``.kb.``) to the matching Kibana host so Agent Builder calls do not sit on
     Elasticsearch until the HTTP timeout.
+
+    Args:
+        url: User-supplied or connection-derived URL. Empty values pass through.
+
+    Returns:
+        Origin string with no path, or the original empty value.
+
+    Examples:
+        normalize_kibana_url("https://my.es.us-east-1.aws.elastic.cloud:9243")
+        # "https://my.kb.us-east-1.aws.elastic.cloud"
     """
     if not url:
         return url
@@ -682,17 +748,19 @@ def normalize_kibana_url(url):
 
 
 def get_kibana_url(connection_id):
-    """
-    Get Kibana URL from Elasticsearch connection
-    
-    Converts ES URL to Kibana URL by replacing .es. with .kb.
-    For cloud_id, decodes and extracts the URL
-    
+    """Derive a Kibana origin from a CENTRALIZED connection.
+
+    Decodes ``cloud_id`` when present; otherwise rewrites the ES ``hosts``
+    URL through ``normalize_kibana_url``.
+
     Args:
-        connection_id: ID of the Elasticsearch connection
-    
+        connection_id: Primary key of a CENTRALIZED ``Connection``.
+
     Returns:
-        Kibana URL string
+        Kibana origin string.
+
+    Raises:
+        ValueError: If neither ``cloud_id`` nor ``hosts`` can produce a URL.
     """
     import base64
     
@@ -722,18 +790,21 @@ def get_kibana_url(connection_id):
 
 
 def create_kibana_dashboard(connection_id, dashboard_definition):
-    """
-    Create a Kibana dashboard using the Dashboards & Visualizations API
+    """Create a Kibana dashboard via the Dashboards API (legacy SO fallback).
+
+    New format requires ``title`` and ``panels``. The old saved-objects
+    format with ``attributes`` is still accepted.
 
     Args:
-        connection_id: ID of the Elasticsearch connection
-        dashboard_definition: Dict containing dashboard definition (new format with title, panels, time_range)
+        connection_id: Primary key of a CENTRALIZED ``Connection``.
+        dashboard_definition: Dashboard body.
 
     Returns:
-        Response with dashboard ID and URL
+        Dict with ``id``, ``url``, and raw ``response``.
 
     Raises:
-        ValueError: with full Kibana API error body when the API rejects the payload
+        ValueError: If the payload is the wrong shape, or Kibana rejects it
+            (includes the API error body).
     """
     import requests
 
@@ -823,15 +894,14 @@ def create_kibana_dashboard(connection_id, dashboard_definition):
 
 
 def delete_ingest_pipeline(connection_id, pipeline_id):
-    """
-    Delete an Elasticsearch ingest pipeline
-    
+    """Delete an ingest pipeline.
+
     Args:
-        connection_id: ID of the Elasticsearch connection
-        pipeline_id: ID of the pipeline to delete
-    
+        connection_id: Primary key of a CENTRALIZED ``Connection``.
+        pipeline_id: Pipeline id.
+
     Returns:
-        Dict with deletion result
+        Elasticsearch delete response as a dict.
     """
     try:
         es_client = get_elastic_connection(connection_id)
@@ -844,15 +914,14 @@ def delete_ingest_pipeline(connection_id, pipeline_id):
 
 
 def delete_index_template(connection_id, template_name):
-    """
-    Delete an Elasticsearch index template
-    
+    """Delete an index template.
+
     Args:
-        connection_id: ID of the Elasticsearch connection
-        template_name: Name of the template to delete
-    
+        connection_id: Primary key of a CENTRALIZED ``Connection``.
+        template_name: Template name.
+
     Returns:
-        Dict with deletion result
+        Elasticsearch delete response as a dict.
     """
     try:
         es_client = get_elastic_connection(connection_id)
@@ -865,15 +934,14 @@ def delete_index_template(connection_id, template_name):
 
 
 def delete_data_stream(connection_id, data_stream_name):
-    """
-    Delete an Elasticsearch data stream
-    
+    """Delete a data stream.
+
     Args:
-        connection_id: ID of the Elasticsearch connection
-        data_stream_name: Name of the data stream to delete
-    
+        connection_id: Primary key of a CENTRALIZED ``Connection``.
+        data_stream_name: Stream name.
+
     Returns:
-        Dict with deletion result
+        Elasticsearch delete response as a dict.
     """
     try:
         es_client = get_elastic_connection(connection_id)
@@ -886,16 +954,19 @@ def delete_data_stream(connection_id, data_stream_name):
 
 
 def install_fleet_integration(connection_id, integration_name, version):
-    """
-    Install a prebuilt Fleet integration package
-    
+    """Install a Fleet EPM package via Kibana.
+
     Args:
-        connection_id: Connection ID
-        integration_name: Name of the integration (e.g., 'nginx')
-        version: Version of the integration (e.g., '3.1.0')
-    
+        connection_id: Primary key of a CENTRALIZED ``Connection``.
+        integration_name: Package name, e.g. ``nginx``.
+        version: Package version, e.g. ``3.1.0``.
+
     Returns:
-        dict: Response containing installed assets
+        ``{'success': True, 'response': ...}`` on HTTP success.
+
+    Raises:
+        ValueError: If the connection has no Kibana URL.
+        requests.HTTPError: If Fleet EPM rejects the install.
     """
     try:
         # Get Kibana URL
@@ -942,15 +1013,14 @@ def install_fleet_integration(connection_id, integration_name, version):
 
 
 def delete_kibana_dashboard(connection_id, dashboard_id):
-    """
-    Delete a Kibana dashboard using the Dashboards API
+    """Delete a Kibana dashboard via the Dashboards API.
 
     Args:
-        connection_id: ID of the Elasticsearch connection
-        dashboard_id: ID of the dashboard to delete
+        connection_id: Primary key of a CENTRALIZED ``Connection``.
+        dashboard_id: Dashboard id.
 
     Returns:
-        Dict with deletion result
+        Parsed JSON body, or ``{'deleted': True}`` if the body is empty.
     """
     import requests
 

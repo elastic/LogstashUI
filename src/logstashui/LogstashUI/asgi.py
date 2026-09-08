@@ -2,13 +2,9 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
-"""
-ASGI config for logstashui project.
+"""ASGI entry for LogstashUI.
 
-It exposes the ASGI callable as a module-level variable named ``application``.
-
-For more information on this file, see
-https://docs.djangoproject.com/en/5.2/howto/deployment/asgi/
+Exposes the ASGI callable as module-level ``application``.
 """
 
 import os

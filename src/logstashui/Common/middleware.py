@@ -2,6 +2,11 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
+"""Request middleware for admin API tokens, sandbox no-auth, and CSP headers.
+
+``ApiTokenCsrfMiddleware`` and ``ApiTokenUserMiddleware`` are a pair: the
+ordering in ``MIDDLEWARE`` is load-bearing and they must not be merged.
+"""
 
 import logging
 
@@ -14,12 +19,16 @@ _AUTH_SCHEME = 'ApiKey '
 
 
 def _resolve_api_token(request):
-    """Resolve an admin API token from the Authorization header.
+    """Resolve an admin API token from the ``Authorization`` header.
 
-    Returns the ``ApiKey`` row on success, ``None`` when the request carries no
-    admin token at all (browser traffic, or an agent key — those have no
-    ``lsui_`` marker and are authenticated by the agent views themselves), or
-    the string ``'invalid'`` when a token was offered but is not usable.
+    Args:
+        request: Incoming Django request.
+
+    Returns:
+        The ``ApiKey`` row on success; ``None`` when the request carries no
+        admin token (browser traffic, or an agent key with no ``lsui_``
+        marker — those are authenticated by the agent views); or the string
+        ``'invalid'`` when a token was offered but is not usable.
     """
     header = request.headers.get('Authorization', '')
     if not header.startswith(_AUTH_SCHEME):
@@ -79,7 +88,13 @@ class ApiTokenCsrfMiddleware:
 
 
 class ApiTokenUserMiddleware:
-    """Act as the token's owner. Runs just after ``AuthenticationMiddleware``."""
+    """Act as the token's owner.
+
+    Must run immediately after ``AuthenticationMiddleware``, which would
+    otherwise overwrite ``request.user`` with the lazy session user. Touches
+    ``ApiKey.last_used_at`` via ``QuerySet.update`` so ``ApiKey.save()``
+    cannot re-hash the secret.
+    """
 
     def __init__(self, get_response):
         self.get_response = get_response
@@ -97,10 +112,11 @@ class ApiTokenUserMiddleware:
 
 
 class NoAuthMiddleware:
-    """
-    Sandbox middleware: auto-authenticates every request as the first active user.
-    If no users exist, creates a default admin account automatically.
-    Only active when NO_AUTH_MODE is enabled in config. Never use in production.
+    """Sandbox auto-login as the first active user.
+
+    If no users exist, creates a default ``admin`` account with an unusable
+    password. Only active when ``NO_AUTH_MODE`` is enabled. Never use in
+    production.
     """
 
     _no_auth_user_cache = None
@@ -159,9 +175,10 @@ class NoAuthMiddleware:
 
 
 class SecurityHeadersMiddleware:
-    """
-    Middleware to add Content Security Policy and other security headers.
-    Restricts iframe sources to trusted documentation domains.
+    """Attach CSP, ``X-Content-Type-Options``, and ``Referrer-Policy``.
+
+    ``frame-src`` allows Elastic and GitHub documentation iframes;
+    ``frame-ancestors`` is ``'self'`` so this UI cannot be framed elsewhere.
     """
     
     def __init__(self, get_response):

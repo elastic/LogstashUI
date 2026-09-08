@@ -2,6 +2,8 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
+"""In-app Markdown docs renderer with sidebar nav and changelog."""
+
 from django.shortcuts import render
 from django.conf import settings
 from pathlib import Path
@@ -33,9 +35,16 @@ TITLE_OVERRIDES = {
 }
 
 def get_display_title(filename):
-    """
-    Get display title for a file or folder.
-    First checks manual overrides, then applies smart formatting.
+    """Build a display title from a docs file or folder name.
+
+    Checks ``TITLE_OVERRIDES`` first, then title-cases dashes/underscores.
+    ``.yml`` names stay lowercase.
+
+    Args:
+        filename: File or directory name, with or without ``.md``.
+
+    Returns:
+        Title string for the sidebar and page heading.
     """
     # Remove .md extension if present for checking overrides
     name = filename.replace('.md', '')
@@ -56,10 +65,19 @@ def get_display_title(filename):
     return name.replace('-', ' ').replace('_', ' ').title()
 
 def build_nav_tree(base_path, current_path=""):
-    """
-    Recursively build navigation tree from docs directory structure.
-    Returns a list of navigation items with title, url, and children.
-    Uses filename for title (no file reading).
+    """Recursively build the sidebar tree from the docs directory.
+
+    Titles come from filenames; file contents are not read. ``index.md``
+    is omitted as a leaf (it is the folder page). Hidden names, Jekyll
+    ``_`` prefixes, and the ``images`` folder are skipped.
+
+    Args:
+        base_path: Directory to scan.
+        current_path: URL path accumulated from parent folders.
+
+    Returns:
+        List of dicts with ``title``, ``url``, ``children``, and
+        ``is_folder``.
     """
     nav_items = []
     
@@ -128,9 +146,15 @@ def build_nav_tree(base_path, current_path=""):
     return nav_items
 
 def rewrite_image_paths(html_content):
-    """
-    Rewrite any image paths containing /images/ to /static/
-    Handles docs/images/, ../images/, ../../images/, etc.
+    """Rewrite Markdown image URLs that contain ``/images/`` to ``/static/``.
+
+    Handles ``docs/images/``, ``../images/``, and similar relative paths.
+
+    Args:
+        html_content: Rendered HTML.
+
+    Returns:
+        HTML with ``src`` rewritten.
     """
     # Match any path that contains /images/ and extract just the filename
     # This handles: docs/images/file.png, ../images/file.png, ../../images/file.png
@@ -150,8 +174,13 @@ def rewrite_image_paths(html_content):
     return html_content
 
 def convert_github_alerts(html_content):
-    """
-    Convert GitHub-style alerts [!TIP], [!NOTE], [!WARNING], etc. to styled divs
+    """Turn GitHub ``[!TIP]`` / ``[!NOTE]`` / ``[!WARNING]`` blockquotes into styled divs.
+
+    Args:
+        html_content: Rendered HTML.
+
+    Returns:
+        HTML with alert blockquotes replaced.
     """
     alert_types = {
         'TIP': {'icon': '💡', 'color': 'rgba(34, 197, 94, 0.15)', 'border': 'rgba(34, 197, 94, 0.5)'},
@@ -178,12 +207,21 @@ def convert_github_alerts(html_content):
     return html_content
 
 def rewrite_doc_links(html_content):
-    """
-    Rewrite documentation links from .md files to Django URLs
+    """Rewrite ``.md`` hrefs to in-app ``/Documentation/.../`` URLs.
+
+    Preserves ``#anchor`` fragments. Covers absolute ``/docs/docs/`` paths
+    and relative ``docs/docs/`` or ``path/file.md`` links.
+
+    Args:
+        html_content: Rendered HTML.
+
+    Returns:
+        HTML with documentation hrefs rewritten.
+
     Examples:
-    - /docs/docs/logstashui/index.md -> /Documentation/logstashui/
-    - docs/docs/logstashui/index.md -> /Documentation/logstashui/
-    - logstashui/index.md -> /Documentation/logstashui/
+        /docs/docs/logstashui/index.md -> /Documentation/logstashui/
+        docs/docs/logstashui/index.md -> /Documentation/logstashui/
+        logstashui/index.md -> /Documentation/logstashui/
     """
     # All patterns preserve an optional #anchor fragment after the .md extension.
 
@@ -232,6 +270,7 @@ def rewrite_doc_links(html_content):
     return html_content
 
 def documentation_home(request):
+    """Render ``docs/index.md`` as the documentation landing page."""
     index_path = DOCS_DIR / "index.md"
     
     if index_path.exists():
@@ -279,12 +318,20 @@ def documentation_home(request):
     return render(request, 'documentation.html', context)
 
 def render_documentation(request, doc_path):
-    """
-    Render a specific documentation page based on the URL path.
+    """Render a docs page, folder index, or the changelog.
+
+    Resolves ``{doc_path}/index.md``, then ``{doc_path}.md``. The special
+    path ``changelog`` reads ``CHANGELOG.md``.
+
+    Args:
+        doc_path: URL path under ``/Documentation/``.
+
     Examples:
-    - /Documentation/logstashagent/configuration/ -> docs/docs/logstashagent/configuration/index.md
-    - /Documentation/logstashui/general/build/ -> docs/docs/logstashui/general/build.md
-    - /Documentation/changelog/ -> CHANGELOG.md
+        /Documentation/logstashagent/configuration/ ->
+            docs/docs/logstashagent/configuration/index.md
+        /Documentation/logstashui/general/build/ ->
+            docs/docs/logstashui/general/build.md
+        /Documentation/changelog/ -> CHANGELOG.md
     """
     # Special case for CHANGELOG
     if doc_path == "changelog":

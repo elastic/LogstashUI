@@ -2,12 +2,22 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
+"""User roles and singleton site settings."""
+
 from django.db import models
 from django.contrib.auth.models import User
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
 class UserProfile(models.Model):
+    """Per-user role attached to Django ``User``.
+
+    Every ``User`` has exactly one profile (``related_name='profile'``).
+    Role is ``admin`` or ``readonly`` and is what ``require_admin_role``
+    and admin API tokens consult. New users default to ``admin`` via
+    ``create_user_profile``; first-run bootstrap also forces admin.
+    """
+
     ROLE_CHOICES = [
         ('admin', 'Admin'),
         ('readonly', 'Readonly'),
@@ -25,11 +35,22 @@ class UserProfile(models.Model):
 
 @receiver(post_save, sender=User)
 def create_user_profile(sender, instance, created, **kwargs):
-    """Automatically create a UserProfile when a User is created"""
+    """Create a ``UserProfile`` with role ``admin`` when a ``User`` is inserted.
+
+    Args:
+        instance: The saved ``User``.
+        created: True only on insert; updates are ignored.
+    """
     if created:
         UserProfile.objects.create(user=instance, role='admin')
 
 class Settings(models.Model):
+    """Singleton site settings row (always ``pk=1``).
+
+    Created on first ``get_settings()`` call. Field meaning lives on
+    ``help_text``; extra rows are not valid configuration.
+    """
+
     experimental_mode = models.BooleanField(default=False)
     agent_ui_url = models.CharField(
         max_length=512,
@@ -62,6 +83,10 @@ class Settings(models.Model):
     
     @classmethod
     def get_settings(cls):
-        """Get or create the singleton settings instance"""
+        """Return the singleton settings row, creating ``pk=1`` if needed.
+
+        Returns:
+            The ``Settings`` instance with primary key 1.
+        """
         settings, created = cls.objects.get_or_create(pk=1)
         return settings

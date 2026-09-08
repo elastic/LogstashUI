@@ -2,6 +2,8 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
+"""HTTP views for the connections page, inspect flyout, and status SSE."""
+
 from django.shortcuts import render
 from django.http import HttpResponse, StreamingHttpResponse
 
@@ -27,13 +29,15 @@ logger = logging.getLogger(__name__)
 
 
 def _logstash_yml_cpm_enabled(yml):
-    """
-    Determine whether a logstash.yml enables Centralized Pipeline Management
-    (xpack.management.enabled: true).
+    """True when ``logstash.yml`` enables Centralized Pipeline Management.
 
-    Logstash accepts both flat dotted keys and nested YAML for this setting, so
-    we parse the YAML and flatten it to dotted keys before checking. Falls back
-    to a whitespace-tolerant string match if the YAML can't be parsed.
+    Logstash accepts both flat dotted keys and nested YAML for
+    ``xpack.management.enabled``, so YAML is parsed and flattened to dotted
+    keys. Falls back to a whitespace-tolerant string match if the YAML
+    cannot be parsed.
+
+    Args:
+        yml: Policy ``logstash_yml`` text.
     """
     if not yml:
         return False
@@ -65,15 +69,13 @@ def _logstash_yml_cpm_enabled(yml):
 
 @require_admin_role
 def AgentPolicies(request):
-    """
-    View for managing Logstash Agent Policies
-    """
+    """Render the Agent Policies management page."""
     context = {}
     return render(request, "components/pipeline_manager/agent_policies.html", context=context)
 
 
 def PipelineManager(request):
-    """Builds the table of pipelines"""
+    """Render the connections page with grouped pipeline tables."""
     context = {}
     # Refresh sticky embedded row (probe + last_check_in) in the background.
     # The probe is a blocking HTTP call; a daemon thread means the page renders
@@ -219,15 +221,14 @@ def PipelineManager(request):
     return render(request, "pipeline_manager.html", context=context)
 
 def test_connectivity(connection_id):
-    """
-    Test connectivity to an Elasticsearch connection.
-    Pure Python function for programmatic use.
-    
+    """Test connectivity to an Elasticsearch connection.
+
     Args:
-        connection_id: ID of the connection to test
-        
+        connection_id: ``Connection`` primary key.
+
     Returns:
-        tuple: (success: bool, message: str)
+        ``(success, message)`` where ``message`` is cluster info JSON or an
+        error string.
     """
     if not connection_id:
         return (False, "No connection ID provided")
@@ -243,9 +244,10 @@ def test_connectivity(connection_id):
 
 
 def TestConnectivity(request):
-    """
-    Django view to test connectivity to an Elasticsearch connection.
-    Returns HTML response for HTMX.
+    """Test Elasticsearch connectivity and return an htmx HTML snippet.
+
+    Args:
+        test: Connection pk.
     """
     test_id = request.GET.get('test')
     
@@ -287,23 +289,26 @@ def TestConnectivity(request):
 
 
 def _normalize_status_blob_api_status(blob):
-    """
-    Surface the authoritative Logstash status on a status_blob.
+    """Surface the authoritative Logstash status on a status blob.
 
-    The Logstash node-info root ("GET /") aggregates all health indicators and
-    frequently reports status="unknown" even when the instance is perfectly
-    healthy (e.g. immediately after a pipeline reload). The agent also polls the
-    dedicated /_health_report endpoint, which is the authoritative source of the
-    node's status.
+    The Logstash node-info root (``GET /``) aggregates all health indicators
+    and frequently reports ``status="unknown"`` even when the instance is
+    perfectly healthy (e.g. immediately after a pipeline reload). The agent
+    also polls the dedicated ``/_health_report`` endpoint, which is the
+    authoritative source of the node's status.
 
     The inspect card hides API details, the health report, and node stats
-    whenever ``logstash_api.status == 'unknown'``, so a root status of "unknown"
-    leaves the card stuck on the "status hasn't been read yet" warmup message —
-    hiding data the agent already collected. When the root status is unknown but
-    the health report has a real status, adopt it so the full details render.
+    whenever ``logstash_api.status == 'unknown'``, so a root status of
+    "unknown" leaves the card stuck on the "status hasn't been read yet"
+    warmup message — hiding data the agent already collected. When the root
+    status is unknown but the health report has a real status, adopt it so
+    the full details render.
 
-    Mutates the given ``blob`` dict in place (the caller's in-memory copy only;
-    never persisted).
+    Mutates the given ``blob`` dict in place (the caller's in-memory copy
+    only; never persisted).
+
+    Args:
+        blob: Agent ``status_blob`` dict, or a falsey value (no-op).
     """
     if not blob:
         return
@@ -322,7 +327,12 @@ def _normalize_status_blob_api_status(blob):
 
 
 def _normalize_logstash_api_status(connection):
-    """Normalize the Logstash API status on a ConnectionTable instance's blob."""
+    """Normalize the Logstash API status on a ``Connection`` instance's blob.
+
+    Args:
+        connection: Agent ``Connection`` whose in-memory ``status_blob`` is
+            rewritten.
+    """
     blob = connection.status_blob or {}
     _normalize_status_blob_api_status(blob)
     connection.status_blob = blob
@@ -330,11 +340,13 @@ def _normalize_logstash_api_status(connection):
 
 @require_admin_role
 def get_agent_inspect(request, connection_id):
-    """
-    Return fresh rendered HTML for the agent inspect modal.
+    """Return fresh HTML for the agent inspect flyout.
 
-    Called via fetch() each time the user opens the flyout so the data is
-    never stale. Renders agent_inspect_content.html with a live DB query.
+    Called via ``fetch()`` each time the user opens the flyout so the data
+    is never stale.
+
+    Args:
+        connection_id: Agent ``Connection`` primary key.
     """
     try:
         connection = ConnectionTable.objects.select_related('policy').get(
@@ -371,20 +383,20 @@ def get_agent_inspect(request, connection_id):
 
 @require_admin_role
 def agent_status_stream(request):
-    """
-    SSE endpoint — streams agent status for all agent connections every 5 seconds.
+    """Stream agent status for all agent connections every 5 seconds (SSE).
 
-    Each event is a JSON array of objects: {id, name, status, logstash_version}
-    where status is one of: 'restarting' | 'unhealthy' | 'healthy' | 'offline'
-    and logstash_version is the running Logstash version, or null if the agent
-    has never reported one.
+    Each event is a JSON array of objects ``{id, name, status,
+    logstash_version}`` where status is one of ``restarting``,
+    ``unhealthy``, ``healthy``, or ``offline``, and ``logstash_version`` is
+    the running Logstash version or null.
 
-    This mirrors the priority logic in the pipeline_manager.html template so the
-    JS can update badges without a full page reload.
+    This mirrors the priority logic in ``pipeline_manager.html`` so the JS
+    can update badges without a full page reload.
 
-    NOTE: Under standard WSGI each open SSE connection holds one server thread.
-    This is fine for small internal deployments. Move to ASGI/Channels if scale
-    becomes a concern.
+    Note:
+        Under standard WSGI each open SSE connection holds one server
+        thread. Fine for small internal deployments; move to ASGI/Channels
+        if scale becomes a concern.
     """
     def _compute_status(conn):
         blob = conn.get('status_blob') or {}

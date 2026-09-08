@@ -2,6 +2,8 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
+"""Django forms for PipelineManager connections."""
+
 from django import forms
 from django.core.exceptions import ValidationError
 from django.forms import ModelForm
@@ -9,9 +11,10 @@ from PipelineManager.models import Connection
 
 
 class ConnectionForm(ModelForm):
-    """
-    Form for creating and updating Connection instances.
-    Handles both Agent and Centralized connection types with dynamic field requirements.
+    """Create or update a ``Connection`` for Agent or Centralized types.
+
+    Field requirements change with ``connection_type`` and, for CENTRALIZED,
+    with the ``connection_mode`` / ``auth_type`` radios in the POST body.
     """
     # Connection type radio buttons
     connection_type = forms.ChoiceField(
@@ -104,6 +107,12 @@ class ConnectionForm(ModelForm):
         }
 
     def __init__(self, *args, **kwargs):
+        """Bind the form and relax password/API-key requiredness on edit.
+
+        Existing rows do not need credentials re-entered. DaisyUI classes
+        and empty ``label_suffix`` are applied to every field except
+        ``connection_type``.
+        """
         super().__init__(*args, **kwargs)
         # Set initial values for the form
         if self.instance and self.instance.pk:
@@ -134,6 +143,18 @@ class ConnectionForm(ModelForm):
                 field.label_suffix = ''
 
     def clean(self):
+        """Cross-field validation for Agent vs Centralized modes.
+
+        AGENT requires host or Cloud URL. CENTRALIZED zeros the hidden
+        opposing fields (cloud vs URL, basic vs API key) so a stale value
+        from a previously selected radio cannot silently win.
+
+        Returns:
+            The cleaned data dict.
+
+        Raises:
+            ValidationError: Required field for the selected mode is missing.
+        """
         cleaned_data = super().clean()
         connection_type = cleaned_data.get('connection_type')
 
@@ -175,6 +196,14 @@ class ConnectionForm(ModelForm):
         return cleaned_data
 
     def save(self, commit=True):
+        """Persist the connection, keeping existing credentials when left blank.
+
+        Args:
+            commit: If True, save the instance immediately.
+
+        Returns:
+            The unsaved or saved ``Connection`` instance.
+        """
         instance = super().save(commit=False)
         
         # Only update password if a new one was provided

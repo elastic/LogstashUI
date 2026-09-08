@@ -2,6 +2,13 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
+"""LLM-driven Elastic integration factory.
+
+Classifies sample logs, generates ingest pipelines and index templates,
+verifies them, then creates Kibana dashboards. Streams NDJSON progress
+to the browser.
+"""
+
 from django.http import StreamingHttpResponse, JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import csrf_exempt
@@ -19,7 +26,15 @@ logger = logging.getLogger(__name__)
 
 
 def load_system_prompt(filename):
-    """Load a system prompt from the system_prompts directory"""
+    """Load a markdown system prompt from ``system_prompts/``.
+
+    Args:
+        filename: File name inside ``AI/system_prompts``.
+
+    Returns:
+        Prompt text, or a short fallback string if the file is missing
+        or empty.
+    """
     prompt_path = os.path.join(os.path.dirname(__file__), 'system_prompts', filename)
     logger.info(f"Loading system prompt from: {prompt_path}")
     
@@ -47,11 +62,13 @@ def load_system_prompt(filename):
 
 
 def clean_pipeline_json(pipeline):
-    """
-    Clean up common issues in LLM-generated pipeline JSON
-    
-    - Remove empty on_failure arrays
-    - Ensure proper field types
+    """Strip empty ``on_failure`` arrays from LLM-generated pipeline JSON.
+
+    Args:
+        pipeline: Ingest pipeline dict, or any other value (returned as-is).
+
+    Returns:
+        The same object, mutated in place when it is a dict.
     """
     if not isinstance(pipeline, dict):
         return pipeline
@@ -79,11 +96,22 @@ def clean_pipeline_json(pipeline):
 
 
 def generate_pipeline_json(connection_id, inference_id, system_prompt, classification, log_samples, feedback=""):
-    """
-    Generate ingest pipeline JSON from LLM
-    
+    """Ask the LLM for an Elasticsearch ingest pipeline JSON.
+
+    Args:
+        connection_id: CENTRALIZED ``Connection`` pk.
+        inference_id: Elasticsearch inference endpoint id.
+        system_prompt: Pipeline-generator system prompt.
+        classification: Classifier JSON (format, integration name, ...).
+        log_samples: Raw log text sent to the model.
+        feedback: Optional verifier/simulator error text from a prior attempt.
+
     Returns:
-        Dict containing pipeline definition or error
+        Pipeline dict with a ``processors`` list, or
+        ``{"error": ..., "raw_response": ...}`` on parse failure.
+
+    Examples:
+        {"processors": [{"grok": {"field": "message", "patterns": ["%{SYSLOGBASE}"]}}]}
     """
     import re
     import os
@@ -195,11 +223,26 @@ Generate ONLY the ingest pipeline JSON using the processors and patterns listed 
 
 
 def generate_index_template_json(connection_id, inference_id, system_prompt, log_samples, pipeline, pipeline_name):
-    """
-    Generate index template JSON from LLM
-    
+    """Ask the LLM for a data-stream index template that uses ``pipeline``.
+
+    Args:
+        connection_id: CENTRALIZED ``Connection`` pk.
+        inference_id: Elasticsearch inference endpoint id.
+        system_prompt: Template-creator system prompt.
+        log_samples: Parsed log lines used as field examples.
+        pipeline: Generated ingest pipeline dict.
+        pipeline_name: Name written into ``index.default_pipeline``.
+
     Returns:
-        Dict containing index template definition or error
+        Template dict with ``template`` or ``index_patterns``, or an
+        ``error`` dict on parse failure.
+
+    Examples:
+        {
+            "index_patterns": ["logs-nginx-lsui*"],
+            "data_stream": {},
+            "template": {"settings": {"index.default_pipeline": "logs-nginx-lsui"}}
+        }
     """
     import re
     
@@ -271,7 +314,14 @@ Generate an index template for a data stream that uses this pipeline. Return ONL
 
 
 def _extract_field_summary(mappings):
-    """Return field names grouped by ES type from a mappings dict."""
+    """Group mapping field paths by Elasticsearch type.
+
+    Args:
+        mappings: Index template ``mappings`` dict.
+
+    Returns:
+        Dict of type name to list of dotted field paths.
+    """
     result = {
         'keyword': [], 'date': [], 'long': [], 'integer': [],
         'float': [], 'double': [], 'ip': [], 'boolean': [], 'text': [],
@@ -291,11 +341,25 @@ def _extract_field_summary(mappings):
 
 
 def generate_dashboard_json(connection_id, inference_id, system_prompt, data_stream_name, template_json, feedback=""):
-    """
-    Generate Kibana dashboard JSON from LLM
+    """Ask the LLM for a Kibana dashboard saved-object JSON.
+
+    Field-type hints from the index template mappings are included so
+    ES|QL aggregations use the right functions.
+
+    Args:
+        connection_id: CENTRALIZED ``Connection`` pk.
+        inference_id: Elasticsearch inference endpoint id.
+        system_prompt: Dashboard-generator system prompt.
+        data_stream_name: Data stream the dashboard queries.
+        template_json: Index template whose mappings supply field types.
+        feedback: Optional Kibana API error text from a prior attempt.
 
     Returns:
-        Dict containing dashboard definition or error
+        Dashboard dict with a top-level ``title`` or Kibana
+        ``attributes.title``, or an ``error`` dict.
+
+    Examples:
+        {"title": "nginx logs", "panels": []}
     """
     import re
 
@@ -416,11 +480,21 @@ Generate a Kibana dashboard for this data stream. Return ONLY the JSON object.""
 
 
 def verify_pipeline_results(connection_id, inference_id, system_prompt, log_samples, pipeline, simulation_results):
-    """
-    Verify pipeline results using LLM
-    
+    """Ask the LLM whether simulated pipeline output correctly parses the logs.
+
+    Args:
+        connection_id: CENTRALIZED ``Connection`` pk.
+        inference_id: Elasticsearch inference endpoint id.
+        system_prompt: Verifier system prompt.
+        log_samples: Original log lines.
+        pipeline: Ingest pipeline dict that was simulated.
+        simulation_results: Elasticsearch simulate-pipeline response.
+
     Returns:
-        Dict containing verification result
+        Dict with ``is_valid`` (and usually ``message``), or an ``error`` dict.
+
+    Examples:
+        {"is_valid": true, "message": "Fields extracted correctly."}
     """
     import re
     
@@ -494,14 +568,17 @@ Verify if the pipeline is correctly parsing the logs. Return ONLY the JSON verif
 
 @require_http_methods(["GET"])
 def get_models(request):
-    """
-    Get available inference models for a connection
-    
-    Query params:
-        - connection_id: ID of the Elasticsearch connection
-    
+    """List chat-completion inference models for a connection.
+
+    Query params: ``connection_id``.
+
     Returns:
-        JSON list of completion-type inference models
+        JsonResponse ``{"models": [...]}`` or ``{"error": ...}``.
+
+    Examples:
+        GET /AI/IntegrationFactory/models/?connection_id=1
+
+        {"models": [{"inference_id": "openai-completion", "task_type": "chat_completion"}]}
     """
     logger.info("get_models view called")
     try:
@@ -523,17 +600,19 @@ def get_models(request):
 
 @require_http_methods(["POST"])
 def classify_logs(request):
-    """
-    Step 1: Classify log samples to determine if we have an existing integration
-    
-    Accepts:
-        - connection_id: ID of the Elasticsearch connection
-        - inference_id: ID of the inference model to use
-        - log_lines: Pasted log samples (optional)
-        - log_file: Uploaded log file (optional)
-    
+    """Classify log samples and decide whether a Fleet integration already exists.
+
+    POST fields: ``connection_id``, ``inference_id``, optional ``log_lines``
+    or uploaded ``log_file``.
+
     Returns:
-        JSON response with classification result
+        JsonResponse with ``has_integration``, ``integration_name``,
+        ``format``, and ``message``, or ``{"error": ...}``.
+
+    Examples:
+        POST /AI/IntegrationFactory/classify/
+
+        {"has_integration": true, "integration_name": "nginx", "format": "combined", "message": "..."}
     """
     try:
         connection_id = request.POST.get('connection_id')
@@ -650,17 +729,20 @@ Remember: Return ONLY the JSON object with has_integration, integration_name, fo
 
 @require_http_methods(["POST"])
 def generate_integration(request):
-    """
-    Generate and verify an Elasticsearch ingest pipeline using AI
-    
-    Steps:
-    1. Generate pipeline JSON from LLM
-    2. Simulate pipeline on sample logs
-    3. Verify results with LLM
-    4. If invalid, regenerate with feedback (max 3 attempts)
-    
+    """Generate, simulate, and verify an ingest pipeline, then stream asset creation.
+
+    POST fields: ``connection_id``, ``inference_id``, ``log_lines`` or
+    ``log_file``, and optional ``classification`` JSON. Up to five generate
+    / simulate / verify loops run before giving up.
+
     Returns:
-        JSON response with pipeline, verification results, and simulation output
+        ``StreamingHttpResponse`` of NDJSON progress events
+        (``step``, ``attempt``, ``assets``, ...). Validation errors may
+        stream as HTML error snippets.
+
+    Examples:
+        {"step": "generating", "attempt": 1, "max_attempts": 5}
+        {"step": "complete", "assets": {"pipeline_name": "logs-nginx-lsui"}}
     """
     try:
         connection_id = request.POST.get('connection_id')
@@ -854,7 +936,23 @@ Please fix the pipeline and try again."""
 
 
 def create_integration_progress(connection_id, inference_id, pipeline_name, template_name, data_stream_name, pipeline_json, log_samples):
-    """Continue with the rest of the integration creation process"""
+    """Create pipeline, template, data stream, and dashboard after a valid pipeline.
+
+    Yields NDJSON progress events. On failure, includes ``assets`` so the
+    client can clean up what was already created.
+
+    Args:
+        connection_id: CENTRALIZED ``Connection`` pk.
+        inference_id: Elasticsearch inference endpoint id.
+        pipeline_name: Ingest pipeline id to create.
+        template_name: Index template id to create.
+        data_stream_name: Data stream to ingest sample docs into.
+        pipeline_json: Validated ingest pipeline definition.
+        log_samples: Log lines to bulk-ingest.
+
+    Yields:
+        NDJSON strings with a ``step`` key.
+    """
     # Track created assets for cleanup on error
     created_assets = {
         'pipeline_name': None,
@@ -1024,8 +1122,19 @@ Return ONLY the corrected JSON object."""
 @csrf_exempt
 @require_http_methods(["POST"])
 def delete_integration_assets(request):
-    """
-    Delete all assets created during integration generation
+    """Delete pipeline, template, data stream, and dashboard created by generate.
+
+    JSON body: ``connection_id`` and ``assets`` with optional
+    ``pipeline_name``, ``template_name``, ``data_stream_name``,
+    ``dashboard_id``.
+
+    Returns:
+        JsonResponse ``{"success": bool, "results": {"deleted": [...], "failed": [...]}}``.
+
+    Examples:
+        POST /AI/IntegrationFactory/delete/
+
+        {"connection_id": 1, "assets": {"pipeline_name": "logs-nginx-lsui"}}
     """
     try:
         data = json.loads(request.body)
@@ -1098,7 +1207,20 @@ def delete_integration_assets(request):
 @csrf_exempt
 @require_http_methods(["POST"])
 def install_prebuilt_integration(request):
-    """Install a prebuilt Fleet integration package"""
+    """Install a prebuilt Fleet integration and optionally ingest sample logs.
+
+    JSON body: ``connection_id``, ``integration_name``, optional
+    ``log_samples``. Version is resolved from ``integrations_list.json``.
+
+    Returns:
+        JsonResponse with ``success``, ``dashboards``, ``assets``,
+        ``ingested_docs``, and ``data_stream``.
+
+    Examples:
+        POST /AI/IntegrationFactory/install-prebuilt/
+
+        {"connection_id": 1, "integration_name": "nginx", "log_samples": ["..."]}
+    """
     try:
         data = json.loads(request.body)
         connection_id = data.get('connection_id')
