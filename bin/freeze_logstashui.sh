@@ -5,7 +5,7 @@
 
 # Optional air-gapped freeze. Default `uv build` is unchanged.
 # Usage:
-#   ./bin/freeze_logstashui.sh [--wheels] [--docker] [--standalone] [--all]
+#   ./bin/freeze_logstashui.sh [--wheels] [--docker] [--all]
 #                              [--output DIR] [--image NAME]
 # No artifact flags → --all.
 
@@ -15,22 +15,19 @@ ROOT=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 TEMPLATES="$ROOT/packaging/offline"
 DO_WHEELS=0
 DO_DOCKER=0
-DO_STANDALONE=0
-EXPLICIT_STANDALONE=0
 OUT=""
 IMAGE_OVERRIDE=""
 
 usage() {
     cat <<'EOF'
-Usage: freeze_logstashui.sh [--wheels] [--docker] [--standalone] [--all]
+Usage: freeze_logstashui.sh [--wheels] [--docker] [--all]
                             [--output DIR] [--image NAME]
 
 Connected-builder freeze for air-gapped hosts. Default uv build is unchanged.
 
   --wheels       CPython 3.12 manylinux x86_64 wheelhouse zip
   --docker       docker save of a local image (never docker pull)
-  --standalone   experimental PyInstaller onedir (Linux x86_64 only)
-  --all          all three (default if no artifact flags)
+  --all          both wheels & docker (default if no artifact flags)
   --output DIR   default: <repo>/dist/offline
   --image NAME   docker save this local tag instead of building
 
@@ -42,8 +39,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --wheels) DO_WHEELS=1 ;;
         --docker) DO_DOCKER=1 ;;
-        --standalone) DO_STANDALONE=1; EXPLICIT_STANDALONE=1 ;;
-        --all) DO_WHEELS=1; DO_DOCKER=1; DO_STANDALONE=1 ;;
+        --all) DO_WHEELS=1; DO_DOCKER=1; ;;
         --output)
             OUT="${2:?--output requires a directory}"
             shift
@@ -65,10 +61,9 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
-if [[ $DO_WHEELS -eq 0 && $DO_DOCKER -eq 0 && $DO_STANDALONE -eq 0 ]]; then
+if [[ $DO_WHEELS -eq 0 && $DO_DOCKER -eq 0 ]]; then
     DO_WHEELS=1
     DO_DOCKER=1
-    DO_STANDALONE=1
 fi
 
 OUT="${OUT:-$ROOT/dist/offline}"
@@ -220,47 +215,6 @@ freeze_docker() {
     echo "Wrote $zip"
 }
 
-freeze_standalone() {
-    if ! linux_x86_64; then
-        if [[ "$EXPLICIT_STANDALONE" -eq 1 ]]; then
-            die "standalone freeze requires Linux x86_64 (PyInstaller binary is per-OS)"
-        fi
-        echo "WARNING: skipping --standalone (not Linux x86_64)" >&2
-        return 0
-    fi
-
-    local venv="$OUT/.standalone-venv"
-    local work="$OUT/pyinstaller-work"
-    local dist="$OUT/pyinstaller-dist"
-    local stage="$OUT/logstashui-${VERSION}-offline-standalone-linux-x86_64"
-    local zip="$OUT/logstashui-${VERSION}-offline-standalone-linux-x86_64.zip"
-    echo "==> throwaway venv + PyInstaller (not a project dependency)"
-    rm -rf "$venv" "$work" "$dist"
-    uv venv --python 3.12 "$venv"
-    (cd "$ROOT" && uv pip install --python "$venv" ".[databases,otel]")
-    uv pip install --python "$venv" pyinstaller
-    "$venv/bin/pyinstaller" \
-        --noconfirm \
-        --clean \
-        --workpath "$work" \
-        --distpath "$dist" \
-        "$TEMPLATES/logstashui.spec"
-
-    [[ -x "$dist/logstashui/logstashui" ]] || die "PyInstaller did not produce $dist/logstashui/logstashui"
-
-    rm -rf "$stage"
-    mkdir -p "$stage"
-    cp -a "$dist/logstashui" "$stage/logstashui"
-    subst "$TEMPLATES/standalone-run.sh" "$stage/run.sh"
-    subst "$TEMPLATES/standalone-README.md" "$stage/README.md"
-    chmod +x "$stage/run.sh"
-    cp "$ROOT/LICENSE.txt" "$stage/LICENSE.txt"
-    cp "$ROOT/NOTICE.txt" "$stage/NOTICE.txt"
-    sha256_tree "$stage" "$stage/SHA256SUMS.txt"
-    zip_dir "$stage" "$zip"
-    echo "Wrote $zip"
-}
-
 VERSION=$(version_from_pyproject)
 [[ -n "$VERSION" ]] || die "could not read version from pyproject.toml"
 GIT_SHA=$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)
@@ -276,7 +230,4 @@ if [[ $DO_WHEELS -eq 1 ]]; then
 fi
 if [[ $DO_DOCKER -eq 1 ]]; then
     freeze_docker
-fi
-if [[ $DO_STANDALONE -eq 1 ]]; then
-    freeze_standalone
 fi

@@ -14,7 +14,7 @@ services:
     ports:
       - "8443:8443"
     volumes:
-      - logstashui_data:/var/lib/logstashui
+      - ${LOCAL_LOGSTASHUI_DATA_DIR:-./logstashui_data}:/var/lib/logstashui
     environment:
       DEBUG: "False"
       LOGSTASHUI_DATA_DIR: /var/lib/logstashui
@@ -33,6 +33,3 @@ services:
       PUID: ${PUID:-}
       PGID: ${PGID:-}
     restart: unless-stopped
-
-volumes:
-  logstashui_data:
