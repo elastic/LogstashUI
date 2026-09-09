@@ -3951,6 +3951,21 @@ window.toggleFilePathInput = function(inputId, isIgnored) {
     }
 };
 
+/**
+ * Independently collapse or expand one of the main pipeline sections.
+ */
+window.togglePipelineSection = function togglePipelineSection(sectionId) {
+    const section = document.getElementById(sectionId);
+    const header = section && section.querySelector('.pipeline-section-header');
+    const contentId = header && header.getAttribute('aria-controls');
+    const content = contentId && document.getElementById(contentId);
+    if (!section || !header || !content) return;
+
+    const willCollapse = header.getAttribute('aria-expanded') === 'true';
+    header.setAttribute('aria-expanded', String(!willCollapse));
+    content.classList.toggle('hidden', willCollapse);
+};
+
 // Browse file path for simulation and upload the file
 window.browseFilePathForSimulation = function(inputId) {
     // Create a hidden file input
