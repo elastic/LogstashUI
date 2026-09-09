@@ -856,12 +856,12 @@
             </a>
             {% elif es_id and connection_name %}
             <span class="text-gray-500 text-2xl font-thin select-none">/</span>
-            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-900/40 border border-blue-500/50">
-                <svg class="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-900/40 border border-blue-500/50">
+                <svg class="w-3 h-3 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M12 5l7 7-7 7"/>
                 </svg>
-                <span class="text-xs text-blue-300 font-medium uppercase tracking-wide">Connection</span>
-                <span class="text-sm text-blue-100 font-semibold">{{ connection_name }}</span>
+                <span class="text-[11px] text-blue-300 font-medium uppercase tracking-wide">Connection</span>
+                <span class="text-[13px] text-blue-100 font-semibold">{{ connection_name }}</span>
             </span>
             {% endif %}
         </div>
@@ -911,7 +911,7 @@
                             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
-                        <span class="text-xs text-gray-200">Agent</span>
+                        <span class="simulation-status-label text-xs text-gray-200">Agent</span>
                         <span id="agentStatusMessage" class="sr-only">Checking agent…</span>
                     </div>
                     <span id="agentStatusDetail" class="simulation-status-tooltip" role="tooltip"></span>
@@ -928,7 +928,7 @@
                             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
-                        <span class="text-xs text-gray-200">Logstash</span>
+                        <span class="simulation-status-label text-xs text-gray-200">Logstash</span>
                         <span id="logstashStateMessage" class="sr-only">Checking Logstash health…</span>
                     </div>
                     <span id="logstashStateDetail" class="simulation-status-tooltip" role="tooltip"></span>
@@ -957,28 +957,28 @@
             
             <!-- Center: Presentation Mode Toggle (no absolute positioning) -->
             <div class="editor-mode-switcher flex items-center justify-center gap-1 bg-gray-700 rounded-lg p-1 w-fit mx-auto xl:mx-0">
-                <button id="uiModeBtn" class="w-16 py-2 rounded-md font-medium transition-all bg-green-600 text-white mode-toggle-active" onclick="switchToUIMode()">
+                <button id="uiModeBtn" class="w-16 py-2 rounded-md font-medium transition-all bg-green-600 text-white mode-toggle-active" onclick="switchToUIMode()" aria-label="UI mode" title="UI mode">
                     <svg class="editor-mode-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                         <rect x="4" y="4" width="16" height="16" rx="2" stroke-width="1.8"/>
                         <path stroke-linecap="round" stroke-width="1.8" d="M8 9h8M8 15h5"/>
                         <circle cx="16.5" cy="15" r="1.5" stroke-width="1.5"/>
                     </svg>
-                    <span>UI</span>
+                    <span class="editor-mode-label">UI</span>
                 </button>
-                <button id="textModeBtn" class="w-16 py-2 rounded-md font-medium transition-all text-gray-300 hover:bg-gray-600" onclick="switchToTextMode()">
+                <button id="textModeBtn" class="w-16 py-2 rounded-md font-medium transition-all text-gray-300 hover:bg-gray-600" onclick="switchToTextMode()" aria-label="Text mode" title="Text mode">
                     <svg class="editor-mode-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m9 7-5 5 5 5M15 7l5 5-5 5M13 5l-2 14"/>
                     </svg>
-                    <span>Text</span>
+                    <span class="editor-mode-label">Text</span>
                 </button>
-                <button id="graphModeBtn" class="w-16 py-2 rounded-md font-medium transition-all text-gray-300 hover:bg-gray-600" onclick="switchToGraphMode()">
+                <button id="graphModeBtn" class="w-16 py-2 rounded-md font-medium transition-all text-gray-300 hover:bg-gray-600" onclick="switchToGraphMode()" aria-label="Graph mode" title="Graph mode">
                     <svg class="editor-mode-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                         <circle cx="12" cy="5" r="2.25" stroke-width="1.8"/>
                         <circle cx="5" cy="18" r="2.25" stroke-width="1.8"/>
                         <circle cx="19" cy="18" r="2.25" stroke-width="1.8"/>
                         <path stroke-width="1.8" d="m10.9 7-4.8 8.9M13.1 7l4.8 8.9M7.25 18h9.5"/>
                     </svg>
-                    <span>Graph</span>
+                    <span class="editor-mode-label">Graph</span>
                 </button>
             </div>
             
@@ -991,29 +991,32 @@
                     <button type="button"
                             id="viewCode"
                             class="w-36 py-2 inline-flex items-center justify-center gap-2 bg-gray-700 text-gray-200 rounded-md hover:bg-gray-600 transition-colors text-sm font-medium"
+                            aria-label="View code" title="View code"
                             onclick="viewGeneratedCode()">
                         <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-6-6Z"/>
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M14 3v6h6M9 13l-2 2 2 2M15 13l2 2-2 2M13 12l-2 6"/>
                         </svg>
-                        <span>View Code</span>
+                        <span class="editor-action-label">View Code</span>
                     </button>
                     
                     <!-- Secondary Button: Simulate -->
                     <button type="button"
                             id="simulatePipeline"
                             class="w-36 py-2 inline-flex items-center justify-center gap-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors text-sm font-medium"
+                            aria-label="Simulate pipeline" title="Simulate pipeline"
                             onclick="openSimulateModal()">
                         <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m8 5 11 7-11 7V5Z"/>
                         </svg>
-                        <span>Simulate</span>
+                        <span class="editor-action-label">Simulate</span>
                     </button>
                     
                     <!-- Primary Button: Save -->
                     <button type="button"
                             id="savePipeline"
                             class="w-36 py-2 inline-flex items-center justify-center gap-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm font-medium shadow-sm"
+                            aria-label="Save pipeline" title="Save pipeline"
                             hx-post="/ConnectionManager/SavePipeline/"
                             hx-include="#pipelineForm"
                             hx-trigger="none"
@@ -1024,7 +1027,7 @@
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M5 3h12l3 3v15H4V4a1 1 0 0 1 1-1Z"/>
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M8 3v6h8V3M8 21v-7h8v7"/>
                         </svg>
-                        <span>Save Pipeline</span>
+                        <span class="editor-action-label">Save Pipeline</span>
                     </button>
                 </form>
             </div>
@@ -1406,7 +1409,7 @@
   .simulation-target-fields label {
     color: #a9bacb; font-size: 9px; font-weight: 500; line-height: 10px; white-space: nowrap;
   }
-  #simTargetSelect { min-width: 6.5rem; max-width: 7rem; height: 23px; padding: 1px 5px; }
+  #simTargetSelect { width: 10.5rem; min-width: 0; max-width: 10.5rem; height: 23px; padding: 1px 5px; }
   .simulation-status-detail { position: relative; min-width: 0; border-radius: 5px; }
   .simulation-status-detail:focus-visible { outline: 2px solid #60a5fa; outline-offset: 2px; }
   #pipelineLoadStatus { border-radius: 5px; max-width: 100%; height: 28px; padding: 3px 5px; }
@@ -1422,6 +1425,7 @@
   .simulation-status-detail.sim-detail-dismissed .simulation-status-tooltip { display: none; }
   .simulation-logs { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; }
   .editor-toolbar {
+    container: editor-toolbar / inline-size;
     column-gap: 24px; row-gap: 8px; width: 100%; padding: 6px 0;
   }
   .editor-mode-switcher { height: 44px; }
@@ -1449,15 +1453,39 @@
     border: 1px solid rgba(74, 222, 128, 0.6);
     box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.18), 0 3px 10px rgba(0, 0, 0, 0.28);
   }
+  @container editor-toolbar (max-width: 1050px) {
+    .simulation-status-label,
+    #pipelineStatusMessage,
+    .editor-mode-label,
+    .editor-action-label { display: none; }
+    #agentStatus,
+    #logstashState,
+    #pipelineLoadStatus {
+      justify-content: center; width: 28px; min-width: 28px; padding-left: 0; padding-right: 0; gap: 0;
+    }
+    #uiModeBtn,
+    #textModeBtn,
+    #graphModeBtn,
+    #viewCode,
+    #simulatePipeline,
+    #savePipeline { width: 36px; padding-left: 0; padding-right: 0; gap: 0; }
+    .editor-mode-switcher,
+    .editor-action-form { gap: 4px; }
+  }
   @media (max-width: 1279px) {
-    .editor-toolbar { justify-items: center; padding: 10px; }
+    .editor-toolbar {
+      grid-template-columns: minmax(0, 1fr) auto auto;
+    }
+  }
+  @media (max-width: 760px) {
+    .editor-toolbar { grid-template-columns: 1fr; justify-items: center; padding: 10px 0; }
     .editor-actions { height: auto; }
   }
   @media (max-width: 480px) {
     .simulation-panel { gap: 3px; padding-inline: 4px; }
     .simulation-target-wrap { gap: 4px; padding-right: 4px; }
     .simulation-target-icon { width: 26px; height: 26px; }
-    #simTargetSelect { max-width: 5.5rem; }
+    #simTargetSelect { width: 8.5rem; max-width: 8.5rem; }
   }
   /* Screen-reader-only status text (icon lights use title tooltips) */
   .sr-only {
