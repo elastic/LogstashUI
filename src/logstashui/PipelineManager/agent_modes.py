@@ -27,7 +27,10 @@ _LEGACY_OPT_ROOT = "/opt/LogstashAgent"
 
 
 def normalize_agent_opt_path(path: str | None) -> str:
-    """Map /opt/LogstashAgent/... → /opt/logstash-agent/... (and leave other paths alone)."""
+    """Map ``/opt/LogstashAgent/...`` to ``/opt/logstash-agent/...``.
+
+    Other paths are left unchanged. Empty/None becomes ``""``.
+    """
     if not path:
         return ""
     p = str(path)
@@ -37,7 +40,11 @@ def normalize_agent_opt_path(path: str | None) -> str:
 
 
 def normalize_policy_type(policy_type: str | None) -> str:
-    """Map legacy DEFAULT → PACKAGED; uppercase."""
+    """Map legacy ``DEFAULT`` to ``PACKAGED`` and uppercase the rest.
+
+    Args:
+        policy_type: Stored policy type, or None for PACKAGED.
+    """
     pt = (policy_type or Policy.PolicyType.PACKAGED).upper()
     if pt == "DEFAULT":
         return Policy.PolicyType.PACKAGED
@@ -45,7 +52,7 @@ def normalize_policy_type(policy_type: str | None) -> str:
 
 
 def next_simulate_instance_id() -> int:
-    """Allocate next free global simulate instance id (1-based)."""
+    """Allocate the next free global simulate instance id (1-based)."""
     used = set(
         Connection.objects.filter(
             connection_type=Connection.ConnectionType.AGENT,
@@ -60,7 +67,7 @@ def next_simulate_instance_id() -> int:
 
 
 def next_managed_instance_id() -> int:
-    """Allocate next free managed instance id (1-based), separate from simulate."""
+    """Allocate the next free managed instance id (1-based), separate from simulate."""
     used = set(
         Connection.objects.filter(
             connection_type=Connection.ConnectionType.AGENT,
@@ -76,6 +83,15 @@ def next_managed_instance_id() -> int:
 
 
 def simulate_paths(instance_id: int) -> dict:
+    """Return isolated path bundle for simulate instance ``N``.
+
+    Args:
+        instance_id: 1-based simulate instance number.
+
+    Returns:
+        Dict with ``settings_path``, ``config_path``, ``logs_path``,
+        ``data_path``, ``keystore_env_file``, ``path_root``, ``deployment_id``.
+    """
     root = f"{SIMULATE_ROOT}/simulate-{instance_id}"
     return {
         "settings_path": f"{root}/settings",
@@ -89,6 +105,15 @@ def simulate_paths(instance_id: int) -> dict:
 
 
 def managed_paths(instance_id: int) -> dict:
+    """Return isolated path bundle for managed instance ``N``.
+
+    Args:
+        instance_id: 1-based managed instance number.
+
+    Returns:
+        Dict with ``settings_path``, ``config_path``, ``logs_path``,
+        ``data_path``, ``keystore_env_file``, ``path_root``, ``deployment_id``.
+    """
     root = f"{MANAGED_ROOT}/managed-{instance_id}"
     return {
         "settings_path": f"{root}/settings",
@@ -102,6 +127,12 @@ def managed_paths(instance_id: int) -> dict:
 
 
 def simulate_ports(instance_id: int, policy: Policy | None = None) -> tuple[int, int]:
+    """Return ``(agent_api_port, logstash_api_port)`` for simulate instance ``N``.
+
+    Args:
+        instance_id: 1-based simulate instance number.
+        policy: Optional policy whose base ports override the defaults.
+    """
     agent_base = SIMULATE_AGENT_API_BASE
     ls_base = SIMULATE_LOGSTASH_API_BASE
     if policy is not None:
@@ -113,6 +144,12 @@ def simulate_ports(instance_id: int, policy: Policy | None = None) -> tuple[int,
 
 
 def managed_ports(instance_id: int, policy: Policy | None = None) -> tuple[int, int]:
+    """Return ``(agent_api_port, logstash_api_port)`` for managed instance ``N``.
+
+    Args:
+        instance_id: 1-based managed instance number.
+        policy: Optional policy whose base ports override the defaults.
+    """
     agent_base = MANAGED_AGENT_API_BASE
     ls_base = MANAGED_LOGSTASH_API_BASE
     if policy is not None:
@@ -124,11 +161,14 @@ def managed_ports(instance_id: int, policy: Policy | None = None) -> tuple[int, 
 
 
 def apply_managed_path_bundle(policy: Policy, instance_id: int | None = None) -> None:
-    """
-    Write managed path scheme onto a Policy (used when cloning Packaged → Managed).
+    """Write the managed path scheme onto a Policy (Packaged → Managed clone).
 
-    When instance_id is None, stores template placeholders (enroll allocates N).
-    When set, stores concrete managed-N paths (tests / display).
+    When ``instance_id`` is None, stores template placeholders (enroll
+    allocates N). When set, stores concrete managed-N paths (tests / display).
+
+    Args:
+        policy: Policy row to mutate (not saved).
+        instance_id: Concrete instance number, or None for templates.
     """
     if instance_id is None:
         root = f"{MANAGED_ROOT}/managed-{{instance_id}}"
@@ -154,11 +194,14 @@ def apply_managed_path_bundle(policy: Policy, instance_id: int | None = None) ->
 
 
 def apply_simulate_path_bundle(policy: Policy, instance_id: int | None = None) -> None:
-    """
-    Write simulate path scheme onto a Policy (used when creating a SIMULATE policy).
+    """Write the simulate path scheme onto a Policy.
 
-    When instance_id is None, stores template placeholders (enroll allocates N).
-    When set, stores concrete simulate-N paths (tests / display).
+    When ``instance_id`` is None, stores template placeholders (enroll
+    allocates N). When set, stores concrete simulate-N paths (tests / display).
+
+    Args:
+        policy: Policy row to mutate (not saved).
+        instance_id: Concrete instance number, or None for templates.
     """
     if instance_id is None:
         root = f"{SIMULATE_ROOT}/simulate-{{instance_id}}"
@@ -184,7 +227,11 @@ def apply_simulate_path_bundle(policy: Policy, instance_id: int | None = None) -
 
 
 def uses_packaged_default_paths(policy: Policy) -> bool:
-    """True when settings/logs still look like distro Packaged defaults (or empty)."""
+    """True when settings/logs still look like distro Packaged defaults (or empty).
+
+    Args:
+        policy: Policy whose ``settings_path`` and ``logs_path`` are inspected.
+    """
     settings = (policy.settings_path or "").rstrip("/")
     logs = (policy.logs_path or "").rstrip("/")
     return settings in ("", "/etc/logstash") and logs in ("", "/var/log/logstash")
@@ -200,9 +247,16 @@ CREATABLE_POLICY_TYPES = frozenset(
 
 
 def parse_creatable_policy_type(raw) -> tuple[str | None, str | None]:
-    """
-    Return (policy_type, error). Empty/missing defaults to PACKAGED.
-    EMBEDDED, DEFAULT, and unknown values are rejected.
+    """Parse a user-supplied policy type for create/clone.
+
+    Empty/missing defaults to PACKAGED. EMBEDDED, DEFAULT, and unknown
+    values are rejected.
+
+    Args:
+        raw: Request body ``policy_type``, or None.
+
+    Returns:
+        ``(policy_type, None)`` on success, or ``(None, error)``.
     """
     if raw is None or str(raw).strip() == "":
         return Policy.PolicyType.PACKAGED, None
@@ -222,12 +276,20 @@ def materialize_simulate_logstash_yml(
     *,
     instance_id: int | None = None,
 ) -> str:
-    """
-    Ensure Logstash API port matches the instance and expand ``{instance_id}``.
+    """Ensure Logstash API port matches the instance and expand ``{instance_id}``.
 
     Policy editor stores nested YAML (``api: { http: { port: N } }``). Older
-    seeds use flat ``api.http.port:``. Both must be rewritten; a naive flat-only
-    replace left nested ``port: 9560`` in place while agent expected 9560+N.
+    seeds use flat ``api.http.port:``. Both must be rewritten; a naive
+    flat-only replace left nested ``port: 9560`` in place while the agent
+    expected 9560+N.
+
+    Args:
+        template: Policy ``logstash_yml`` text.
+        logstash_api_port: Instance-specific HTTP API port.
+        instance_id: Optional instance number for ``{instance_id}`` paths.
+
+    Returns:
+        YAML (or line-rewritten fallback) ending in a newline.
     """
     text = template or ""
     if instance_id is not None:
@@ -291,6 +353,9 @@ def logstash_via_ui(policy: Policy) -> bool:
     so neither ever downloads a tarball. Normalizing here rather than at each
     call site means a stale True left behind by a policy-type change cannot leak
     out to an agent.
+
+    Args:
+        policy: Policy whose ``logstash_via_ui`` / source / type are inspected.
     """
     if not getattr(policy, "logstash_via_ui", False):
         return False
@@ -303,10 +368,20 @@ def logstash_via_ui(policy: Policy) -> bool:
 
 
 def build_policy_config(policy: Policy, *, instance_id: int | None = None) -> dict:
-    """
-    Build enrollment / apply policy_config payload.
+    """Build the enrollment / apply ``policy_config`` payload.
 
-    For SIMULATE and MANAGED, instance_id is required and paths/ports are instance-specific.
+    For SIMULATE and MANAGED, ``instance_id`` is required and paths/ports
+    are instance-specific.
+
+    Args:
+        policy: Source policy.
+        instance_id: Required for SIMULATE and MANAGED.
+
+    Returns:
+        Dict of paths, ports, units, and config file contents for the agent.
+
+    Raises:
+        ValueError: ``instance_id`` missing for SIMULATE or MANAGED.
     """
     ptype = normalize_policy_type(policy.policy_type)
 
@@ -442,11 +517,13 @@ def embedded_agent_base_url() -> str:
 
 
 def probe_embedded_agent_online(timeout: float = 2.0) -> bool:
-    """
-    Live probe of the embedded agent (no enrollment/check-in).
+    """Live-probe the embedded agent (no enrollment/check-in).
 
-    Embedded agents never POST CheckIn, so Connection.last_check_in stays empty
-    unless we touch it after a successful probe.
+    Embedded agents never POST CheckIn, so ``Connection.last_check_in`` stays
+    empty unless we touch it after a successful probe.
+
+    Args:
+        timeout: HTTP timeout in seconds.
     """
     import logging
 
@@ -467,17 +544,24 @@ def probe_embedded_agent_online(timeout: float = 2.0) -> bool:
 
 
 def ensure_embedded_connection(*, probe: bool = True) -> Connection | None:
-    """
-    Ensure a pseudo Connection exists for the system Embedded Policy so the
-    editor picker can list docker/local embedded agent without enrollment.
+    """Ensure a pseudo Connection exists for the system Embedded Policy.
 
-    Host/port derived from settings.LOGSTASH_AGENT_URL when possible.
+    Lets the editor picker list the docker/local embedded agent without
+    enrollment. Host/port are derived from ``settings.LOGSTASH_AGENT_URL``
+    when possible.
 
-    When probe=True (default), performs a live HTTP probe and updates
-    last_check_in/status_blob so Connection Manager and is_embedded_discovered
-    reflect current online state. Page-render paths that only need the sticky
-    row to exist should pass probe=False; the background thread started by
-    refresh_embedded_connection_async keeps the DB warm.
+    When ``probe=True`` (default), performs a live HTTP probe and updates
+    ``last_check_in`` / ``status_blob`` so Connection Manager and
+    ``is_embedded_discovered`` reflect current online state. Page-render
+    paths that only need the sticky row to exist should pass ``probe=False``;
+    the background thread started by ``refresh_embedded_connection_async``
+    keeps the DB warm.
+
+    Args:
+        probe: If True, HTTP-probe the embedded agent.
+
+    Returns:
+        The embedded ``Connection`` row, or None if the policy is missing.
     """
     try:
         from datetime import datetime, timezone
@@ -567,7 +651,7 @@ def ensure_embedded_connection(*, probe: bool = True) -> Connection | None:
 
 
 def refresh_embedded_connection_async() -> None:
-    """Probe the embedded agent and update last_check_in without blocking the caller."""
+    """Probe the embedded agent and update ``last_check_in`` without blocking the caller."""
     try:
         import threading
 
@@ -577,7 +661,12 @@ def refresh_embedded_connection_async() -> None:
 
 
 def is_embedded_discovered(conn) -> bool:
-    """True when the docker/local embedded agent has been successfully probed."""
+    """True when the docker/local embedded agent has been successfully probed.
+
+    Args:
+        conn: ``Connection`` instance or a values-dict with ``status_blob``
+            and ``last_check_in``.
+    """
     if conn is None:
         return False
     if isinstance(conn, dict):
@@ -604,6 +693,9 @@ def embedded_probe_failed(conn) -> bool:
 
     A row that has never been probed carries no ``online`` key — that is
     unknown, not failed, and the sticky picker row stays visible.
+
+    Args:
+        conn: ``Connection`` instance or a values-dict with ``status_blob``.
     """
     if conn is None:
         return False
@@ -615,7 +707,12 @@ def embedded_probe_failed(conn) -> bool:
 
 
 def is_embedded_connection(conn) -> bool:
-    """True for the docker/local pseudo agent (dict or model)."""
+    """True for the docker/local pseudo agent (dict or model).
+
+    Args:
+        conn: ``Connection`` instance or a values-dict with ``agent_id`` /
+            ``policy__policy_type``.
+    """
     if conn is None:
         return False
     if isinstance(conn, dict):
@@ -632,8 +729,16 @@ def is_embedded_connection(conn) -> bool:
 
 
 def list_simulation_targets(active_only: bool = True, *, ensure_embedded: bool = True):
-    """
-    Return list of dicts describing simulate-capable connections for the editor.
+    """Return simulate-capable connections for the editor picker.
+
+    Dedicated simulate-N rows first; embedded last when discovered.
+
+    Args:
+        active_only: If True, skip inactive connections.
+        ensure_embedded: If True, create the sticky embedded row without probing.
+
+    Returns:
+        List of target dicts (``connection_id``, ``label``, ``base_url``, …).
     """
     from LogstashUI.insecure_http import force_http_url
 
@@ -727,13 +832,17 @@ def list_simulation_targets(active_only: bool = True, *, ensure_embedded: bool =
 
 
 def resolve_simulation_target(connection_id=None, session=None):
-    """
-    Pick a simulation target connection.
+    """Pick a simulation target connection.
 
-    - Explicit connection_id wins
-    - Single target auto-selected
-    - Multiple: session sticky id, else first
-    Returns (target_dict | None, error_message | None)
+    Explicit ``connection_id`` wins; a single target is auto-selected;
+    otherwise the session sticky id is used, else the first target.
+
+    Args:
+        connection_id: Explicit connection pk, or None.
+        session: Optional Django session for sticky ``sim_connection_id``.
+
+    Returns:
+        ``(target_dict, None)`` or ``(None, error_message)``.
     """
     targets = list_simulation_targets()
     if not targets:

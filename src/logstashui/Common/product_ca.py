@@ -2,13 +2,12 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
-"""
-Product CA for LogstashUI.
+"""Manage the LogstashUI product CA.
 
-- Generated once on first use and stored under DATA_DIR/tls/
-- Serves the public CA cert at /.well-known/logstashui/ca.crt
-- Fingerprint (SHA-256 of DER, lowercase hex) is embedded in enrollment tokens
-  when agent.include_ca_fingerprint is true (default)
+Generated once on first use and stored under DATA_DIR/tls/. Serves the public
+CA cert at /.well-known/logstashui/ca.crt. The SHA-256 fingerprint of the DER
+encoding (lowercase hex) is embedded in enrollment tokens when
+agent.include_ca_fingerprint is true (default).
 """
 
 from __future__ import annotations
@@ -52,6 +51,7 @@ WELL_KNOWN_CA_PATH = "/.well-known/logstashui/ca.crt"
 
 
 def tls_data_dir() -> Path:
+    """Return the DATA_DIR/tls directory, creating it if needed."""
     data = getattr(settings, "DATA_DIR", None)
     if data:
         d = Path(data) / "tls"
@@ -62,20 +62,22 @@ def tls_data_dir() -> Path:
 
 
 def ca_cert_path() -> Path:
+    """Return the path to the product CA certificate PEM."""
     return tls_data_dir() / "product-ca.crt"
 
 
 def ca_key_path() -> Path:
+    """Return the path to the product CA private key PEM."""
     return tls_data_dir() / "product-ca.key"
 
 
 def fingerprint_sha256_der(cert: x509.Certificate) -> str:
-    """SHA-256 of the certificate DER encoding, lowercase hex."""
+    """Return the SHA-256 of the certificate DER encoding as lowercase hex."""
     return hashlib.sha256(cert.public_bytes(serialization.Encoding.DER)).hexdigest()
 
 
 def _generate_ca() -> Tuple[bytes, bytes, str]:
-    """Create a new product CA; return (cert_pem, key_pem, fingerprint_hex)."""
+    """Create a new product CA and return (cert_pem, key_pem, fingerprint_hex)."""
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     subject = issuer = x509.Name([
         x509.NameAttribute(NameOID.ORGANIZATION_NAME, "LogstashUI"),
@@ -118,8 +120,20 @@ def _generate_ca() -> Tuple[bytes, bytes, str]:
 
 
 def ensure_product_ca() -> Tuple[bytes, str]:
-    """
-    Ensure product CA exists on disk; return (cert_pem_bytes, fingerprint_hex).
+    """Ensure the product CA exists on disk and return its PEM and fingerprint.
+
+    Loads an existing CA from DATA_DIR/tls/ or generates a new one on first use.
+    Results are cached process-wide.
+
+    Returns:
+        Tuple of (cert_pem_bytes, fingerprint_hex).
+
+    Raises:
+        ProductCADisabled: If LOGSTASHUI_INSECURE_HTTP is true.
+
+    Examples:
+        cert_pem, fingerprint = ensure_product_ca()
+        # fingerprint is SHA-256 of the DER encoding, lowercase hex
     """
     _raise_if_insecure_http()
     global _cached_cert_pem, _cached_fingerprint
@@ -155,22 +169,33 @@ def ensure_product_ca() -> Tuple[bytes, str]:
 
 
 def get_ca_pem() -> bytes:
+    """Return the product CA certificate as PEM bytes."""
     cert_pem, _ = ensure_product_ca()
     return cert_pem
 
 
 def get_ca_fingerprint() -> str:
+    """Return the product CA SHA-256 fingerprint as lowercase hex."""
     _, fp = ensure_product_ca()
     return fp
 
 
 def build_enrollment_token_payload(raw_token: str) -> dict:
-    """
-    Build v2 enrollment token payload for base64 encoding.
+    """Build a v2 enrollment token payload for base64 encoding.
 
-    Always includes enrollment_token and token_version.
-    Includes fingerprint when agent.include_ca_fingerprint is true (default).
-    Does not include ui_url (CLI --logstash-ui-url).
+    Always includes enrollment_token and token_version. Includes fingerprint
+    when agent.include_ca_fingerprint is true (default). Does not include
+    ui_url (CLI --logstash-ui-url).
+
+    Args:
+        raw_token: Unencoded enrollment token string.
+
+    Returns:
+        Dict with enrollment_token, token_version, and optionally fingerprint.
+
+    Examples:
+        payload = build_enrollment_token_payload(raw_token)
+        # payload['token_version'] == 2; fingerprint present unless disabled
     """
     from LogstashUI.insecure_http import insecure_http
 
@@ -192,12 +217,13 @@ def build_enrollment_token_payload(raw_token: str) -> dict:
 
 
 def get_agent_ui_url_default() -> str:
-    """
-    Global default for generated --logstash-ui-url in enroll commands.
+    """Return the global default for generated --logstash-ui-url in enroll commands.
 
-    Precedence:
-      1. Management Settings.agent_ui_url (UI-editable)
-      2. logstashui.yml agent.ui_url
+    Precedence is Management Settings.agent_ui_url (UI-editable), then
+    logstashui.yml agent.ui_url.
+
+    Returns:
+        Callback URL with a trailing slash stripped, or empty string.
     """
     try:
         from Management.models import Settings as AppSettings
@@ -228,23 +254,27 @@ UI_SERVER_MODE = "ui-server.mode"  # "product" | "custom"
 
 
 def ui_server_cert_path() -> Path:
+    """Return the path to the UI server leaf certificate."""
     return tls_data_dir() / UI_SERVER_CERT
 
 
 def ui_server_key_path() -> Path:
+    """Return the path to the UI server private key."""
     return tls_data_dir() / UI_SERVER_KEY
 
 
 def ui_server_chain_path() -> Path:
+    """Return the path to the optional UI server certificate chain."""
     return tls_data_dir() / UI_SERVER_CHAIN
 
 
 def ui_server_mode_path() -> Path:
+    """Return the path to the UI server mode marker file."""
     return tls_data_dir() / UI_SERVER_MODE
 
 
 def get_ui_server_mode() -> str:
-    """Return 'custom' if operator uploaded a cert, else 'product'."""
+    """Return 'custom' if an operator uploaded a cert, else 'product'."""
     mode_file = ui_server_mode_path()
     if mode_file.is_file():
         mode = mode_file.read_text(encoding="utf-8").strip().lower()
@@ -301,7 +331,7 @@ def _cert_info(cert: x509.Certificate) -> dict:
 
 
 def _parse_san_token(token: str) -> Tuple[Optional[str], Optional[Union[ipaddress.IPv4Address, ipaddress.IPv6Address]]]:
-    """Return (dns_name, ip_address) for a token; one side set."""
+    """Return (dns_name, ip_address) for a SAN token; one side is set."""
     t = (token or "").strip()
     if not t:
         return None, None
@@ -344,7 +374,7 @@ _RESERVED_SHORT_DNS = frozenset({"localhost", "logstashui"})
 
 
 def _is_fqdn(name: str) -> bool:
-    """Multi-label DNS name suitable as a browser-facing SAN."""
+    """Return True if name is a multi-label DNS name suitable as a browser-facing SAN."""
     n = (name or "").strip().rstrip(".")
     if not n or "." not in n:
         return False
@@ -356,12 +386,15 @@ def _is_fqdn(name: str) -> bool:
 
 
 def _reverse_lookup_fqdns(ip_str: str, timeout: float = 1.0) -> List[str]:
-    """
-    Best-effort PTR lookup for *ip_str*.
+    """Best-effort PTR lookup for ip_str.
 
-    Returns multi-label names only (real FQDNs). Empty on failure / NXDOMAIN /
-    short single-label results. Short timeout so cert issuance is not blocked
+    Returns multi-label names only (real FQDNs). Empty on failure, NXDOMAIN,
+    or short single-label results. Short timeout so cert issuance is not blocked
     when reverse DNS is slow or unavailable.
+
+    Args:
+        ip_str: IP address to look up.
+        timeout: Socket timeout in seconds.
     """
     names: List[str] = []
     old_timeout = socket.getdefaulttimeout()
@@ -384,12 +417,15 @@ def _prefer_ptr_fqdns_over_short_hostnames(
     dns_names: List[str],
     ip_addrs: List[Union[ipaddress.IPv4Address, ipaddress.IPv6Address]],
 ) -> None:
-    """
-    Reverse-lookup non-loopback IPs and add PTR FQDNs as DNS SANs.
+    """Reverse-lookup non-loopback IPs and add PTR FQDNs as DNS SANs.
 
     When at least one PTR FQDN is found, drop non-reserved single-label hostnames
     (e.g. bare ``Palpatine`` from ``hostname``) so the leaf prefers real FQDNs.
-    Mutates *dns_names* in place.
+    Mutates dns_names in place.
+
+    Args:
+        dns_names: Mutable list of DNS SAN names.
+        ip_addrs: IP addresses to reverse-lookup.
     """
     found_ptr = False
     for ip in list(ip_addrs):
@@ -414,8 +450,7 @@ def _prefer_ptr_fqdns_over_short_hostnames(
 def collect_desired_ui_sans(
     extra_dns: Optional[Iterable[str]] = None,
 ) -> Tuple[List[str], List[Union[ipaddress.IPv4Address, ipaddress.IPv6Address]]]:
-    """
-    Build desired DNS names and IPs for the product UI server leaf.
+    """Build desired DNS names and IPs for the product UI server leaf.
 
     Sources (merged):
       - Always: localhost, logstashui, 127.0.0.1, ::1
@@ -426,6 +461,12 @@ def collect_desired_ui_sans(
       - extra_dns argument
       - Best-effort local non-loopback interface addresses (container or host)
       - PTR reverse lookups on non-loopback IPs (FQDNs preferred over bare hostnames)
+
+    Args:
+        extra_dns: Additional DNS names or IPs to include.
+
+    Returns:
+        Tuple of (dns_names, ip_addrs).
     """
     dns_names: List[str] = ["localhost", "logstashui"]
     ip_addrs: List[Union[ipaddress.IPv4Address, ipaddress.IPv6Address]] = [
@@ -509,7 +550,7 @@ def collect_desired_ui_sans(
 def desired_ui_san_keyset(
     extra_dns: Optional[Iterable[str]] = None,
 ) -> Set[str]:
-    """Normalized set like {'dns:localhost', 'ip:10.0.0.5'} for comparison."""
+    """Return a normalized SAN set like {'dns:localhost', 'ip:10.0.0.5'} for comparison."""
     dns_names, ip_addrs = collect_desired_ui_sans(extra_dns)
     keys: Set[str] = {f"dns:{n.lower()}" for n in dns_names}
     for ip in ip_addrs:
@@ -518,6 +559,7 @@ def desired_ui_san_keyset(
 
 
 def leaf_san_keyset(cert: x509.Certificate) -> Set[str]:
+    """Return the SAN keyset of a leaf certificate for comparison with desired_ui_san_keyset."""
     keys: Set[str] = set()
     try:
         ext = cert.extensions.get_extension_for_class(x509.SubjectAlternativeName)
@@ -532,10 +574,15 @@ def leaf_san_keyset(cert: x509.Certificate) -> Set[str]:
 
 
 def product_ui_cert_needs_reissue(extra_dns: Optional[Iterable[str]] = None) -> bool:
-    """
-    True if product leaf is missing, unreadable, or SANs don't cover the desired set.
+    """Return True if the product leaf is missing, unreadable, or missing desired SANs.
 
     Custom uploaded certs are never auto-reissued here.
+
+    Args:
+        extra_dns: Extra SAN tokens considered part of the desired set.
+
+    Returns:
+        True when a product-mode leaf should be re-issued.
     """
     if get_ui_server_mode() == "custom":
         return False
@@ -570,12 +617,25 @@ def ensure_default_ui_server_cert(
     *,
     force: bool = False,
 ) -> Tuple[Path, Path]:
-    """
-    Ensure a product-CA-signed UI server leaf exists (OOTB path).
+    """Ensure a product-CA-signed UI server leaf exists (OOTB path).
 
-    Does not overwrite custom uploads (mode=custom).
-    Re-issues when force=True or when desired SANs (host hostname/IPs, callback URL,
-    LOGSTASHUI_TLS_SANS, etc.) are not all present on the current leaf.
+    Does not overwrite custom uploads (mode=custom). Re-issues when force=True
+    or when desired SANs (host hostname/IPs, callback URL, LOGSTASHUI_TLS_SANS,
+    etc.) are not all present on the current leaf.
+
+    Args:
+        extra_dns: Additional DNS names or IPs to include in the leaf SANs.
+        force: If True, re-issue even when the current leaf covers the desired SANs.
+
+    Returns:
+        Tuple of (cert_path, key_path).
+
+    Raises:
+        ProductCADisabled: If LOGSTASHUI_INSECURE_HTTP is true.
+
+    Examples:
+        cert_path, key_path = ensure_default_ui_server_cert()
+        # cert_path is DATA_DIR/tls/ui-server.crt unless mode=custom
     """
     _raise_if_insecure_http()
     if get_ui_server_mode() == "custom" and ui_server_cert_path().is_file():
@@ -667,10 +727,21 @@ def save_custom_ui_certificate(
     key_pem: bytes,
     chain_pem: Optional[bytes] = None,
 ) -> dict:
-    """
-    Install a customer-provided UI server certificate (public CA or other).
+    """Install a customer-provided UI server certificate (public CA or other).
 
-    Does not replace the product CA. Validates that key matches leaf cert.
+    Does not replace the product CA. Validates that the key matches the leaf cert.
+
+    Args:
+        cert_pem: Leaf certificate PEM; extra certs in the same PEM go to the chain.
+        key_pem: Matching private key PEM.
+        chain_pem: Optional extra chain PEM.
+
+    Returns:
+        Status dict with mode, certificate info, and display paths.
+
+    Raises:
+        ProductCADisabled: If LOGSTASHUI_INSECURE_HTTP is true.
+        ValueError: If PEM is missing, unparsable, or the key does not match the leaf.
     """
     _raise_if_insecure_http()
     if not cert_pem or not key_pem:
@@ -750,7 +821,7 @@ def save_custom_ui_certificate(
 
 
 def revert_ui_certificate_to_product_default() -> dict:
-    """Remove custom cert and regenerate product-CA-signed leaf."""
+    """Remove a custom cert and regenerate a product-CA-signed leaf."""
     _raise_if_insecure_http()
     for p in (ui_server_cert_path(), ui_server_key_path(), ui_server_chain_path(), ui_server_mode_path()):
         try:
@@ -763,6 +834,7 @@ def revert_ui_certificate_to_product_default() -> dict:
 
 
 def ui_tls_paths_for_display() -> dict:
+    """Return filesystem and well-known paths for the UI TLS materials."""
     return {
         "cert": str(ui_server_cert_path()),
         "key": str(ui_server_key_path()),
@@ -773,7 +845,7 @@ def ui_tls_paths_for_display() -> dict:
 
 
 def get_ui_tls_status() -> dict:
-    """Status blob for Management → Settings."""
+    """Return the TLS status blob for Management → Settings."""
     from LogstashUI.insecure_http import INSECURE_HTTP_WARNING, insecure_http
 
     if insecure_http():
@@ -835,11 +907,26 @@ def sign_agent_csr(
     validity_days: int = 825,
     extra_dns: Optional[list] = None,
 ) -> dict:
-    """
-    Sign an agent certificate signing request with the product CA.
+    """Sign an agent certificate signing request with the product CA.
 
-    Returns dict with certificate_pem (str), ca_pem (str), fingerprint_sha256,
-    and subject/SAN info. Private key never leaves the agent.
+    The private key never leaves the agent.
+
+    Args:
+        csr_pem: CSR PEM bytes or str.
+        validity_days: Leaf validity period.
+        extra_dns: Additional DNS names to add to the leaf SANs.
+
+    Returns:
+        Dict with certificate_pem, ca_pem, fingerprint_sha256, and subject/SAN info.
+
+    Raises:
+        ProductCADisabled: If LOGSTASHUI_INSECURE_HTTP is true.
+        ValueError: If the CSR is missing, unparsable, has an invalid signature,
+            or has no CN/SAN.
+
+    Examples:
+        result = sign_agent_csr(csr_pem)
+        # result['certificate_pem'] is the signed leaf; key stays on the agent
     """
     if not csr_pem:
         raise ValueError("CSR PEM is required")
@@ -959,15 +1046,18 @@ _agent_verify_bundle_mtime: Optional[float] = None
 
 
 def agent_requests_verify() -> Union[bool, str]:
-    """
-    Value for requests ``verify=`` when the UI calls agents over HTTPS.
+    """Return the value for requests ``verify=`` when the UI calls agents over HTTPS.
 
-    Uses system CAs ∪ product CA so product-issued agent leaves verify, while
-    custom public agent certs still work if operators use them later.
+    Uses system CAs union the product CA so product-issued agent leaves verify,
+    while custom public agent certs still work if operators use them later.
 
     Writes the combined PEM **atomically** and caches the path. Concurrent
     gevent/gunicorn requests used to call write_text on the same file, producing
     truncated PEMs and intermittent ``[X509] PEM lib`` SSL failures mid-sim.
+
+    Returns:
+        False when insecure HTTP is enabled, a PEM bundle path when the product
+        CA is available, or True to fall back to system CAs.
     """
     global _agent_verify_bundle_path, _agent_verify_bundle_mtime
     from LogstashUI.insecure_http import insecure_http

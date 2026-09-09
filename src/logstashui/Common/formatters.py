@@ -2,13 +2,14 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
+"""Display-name and numeric helpers for monitoring and SNMP labels."""
+
 import re
 
 def _safe_get_numeric(data, default=0):
-    """
-    Safely extract a numeric value from data.
-    Handles cases where data might be a list, None, or invalid.
-    Returns default if value cannot be converted to a number.
+    """Coerce ``data`` to int or float, using ``default`` on failure.
+
+    Lists yield the first element. Non-numeric values return ``default``.
     """
     if data is None:
         return default
@@ -29,9 +30,9 @@ def _safe_get_numeric(data, default=0):
 
 
 def _safe_extract_value(data, default=0):
-    """
-    Safely extract a value from pipeline data.
-    Returns default if value is None, empty list, or invalid.
+    """Unwrap a monitoring field that may be a list or null.
+
+    Returns the first non-empty list element, ``data`` itself, or ``default``.
     """
     if data is None:
         return default
@@ -48,7 +49,7 @@ def _safe_extract_value(data, default=0):
 
 
 def _format_uptime(milliseconds):
-    """Format uptime from milliseconds to human-readable string"""
+    """Format an uptime in milliseconds as ``Xd Yh``, ``Xh Ym``, or similar."""
     seconds = milliseconds // 1000
     minutes = seconds // 60
     hours = minutes // 60
@@ -65,13 +66,20 @@ def _format_uptime(milliseconds):
 
 
 def format_display_name(name):
-    """
-    Convert a slug-style identifier (e.g. 'dell_x1026', 'generic_interfaces.json')
-    into a human-friendly display label (e.g. 'Dell X1026', 'Generic Interfaces').
+    """Turn a slug (``dell_x1026``, ``generic_interfaces.json``) into a label.
 
-    This is used for SNMP device templates and profiles, whose `name` field is a
-    stable slug/key (referenced by pipelines, Elasticsearch fields, and the
-    official catalog) that should never be shown to end users as-is.
+    SNMP template and profile ``name`` fields are stable keys used in
+    pipelines and the official catalog; they should not be shown as-is.
+
+    Args:
+        name: Slug or filename.
+
+    Returns:
+        Title-cased label, or ``''`` if ``name`` is empty.
+
+    Examples:
+        format_display_name("dell_x1026")  # "Dell X1026"
+        format_display_name("generic_interfaces.json")  # "Generic Interfaces"
     """
     if not name:
         return ''
@@ -84,10 +92,10 @@ def format_display_name(name):
 
 
 def _sanitize_pipeline_name_component(name):
-    """
-    Sanitize a name component for use in pipeline names.
-    Only allows letters, numbers, underscores, and hyphens.
-    Replaces any other characters with underscores.
+    """Lowercase a name for use in an ES pipeline id.
+
+    Non ``[A-Za-z0-9_-]`` characters become underscores; runs of underscores
+    collapse; leading/trailing underscores are stripped.
     """
     # Replace any character that isn't a letter, number, underscore, or hyphen with underscore
     sanitized = re.sub(r'[^a-zA-Z0-9_-]', '_', name)

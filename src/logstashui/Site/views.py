@@ -2,6 +2,8 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
+"""Site home, liveness probe, and Docker Hub update-check helpers."""
+
 from django.core.cache import cache
 from django.conf import settings
 from django.http import JsonResponse
@@ -17,9 +19,12 @@ logger = logging.getLogger(__name__)
 
 
 def health_check(request):
-    """
-    Health check endpoint for monitoring and container orchestration.
-    Returns 200 OK if the application is running.
+    """Return 200 if the process is up.
+
+    Used by container orchestrators. Does not check Elasticsearch or the DB.
+
+    Returns:
+        JsonResponse ``{"status": "healthy", "service": "logstashui"}``.
     """
     return JsonResponse({
         'status': 'healthy',
@@ -27,7 +32,7 @@ def health_check(request):
     })
 
 def Home(request):
-    """New home page with app information and useful links"""
+    """Render the product home page with app info and links."""
     return render(request, "home.html")
 
 
@@ -43,9 +48,14 @@ LOCK_TIMEOUT = 30
 
 
 def parse_version_tag(tag_name):
-    """
-    Parse a Docker tag name to extract semantic version.
-    Returns None if tag is not a valid semantic version.
+    """Parse a Docker tag into a packaging version.
+
+    Args:
+        tag_name: Tag string, with or without a leading ``v``.
+
+    Returns:
+        A ``packaging.version.Version``, or ``None`` if the tag is not
+        a semantic version.
     """
     try:
         tag_name = tag_name.strip()
@@ -57,9 +67,10 @@ def parse_version_tag(tag_name):
 
 
 def fetch_latest_version_from_docker_hub():
-    """
-    Fetch the latest version from Docker Hub API.
-    Returns version string or None if failed.
+    """Return the newest non-prerelease tag from the LogstashUI Docker Hub repo.
+
+    Returns:
+        Version string without a leading ``v``, or ``None`` on failure.
     """
     logger.debug("Fetching latest version from Docker Hub API")
     try:
@@ -104,10 +115,9 @@ def fetch_latest_version_from_docker_hub():
 
 
 def update_latest_version_cache():
-    """
-    Background task to update the cached latest version.
-    This runs in a separate thread to avoid blocking.
-    Releases the lock after completion to allow future updates.
+    """Refresh the cached latest version in a background thread.
+
+    Always releases the fetch lock, even when Docker Hub fails.
     """
     try:
         latest = fetch_latest_version_from_docker_hub()
@@ -123,12 +133,13 @@ def update_latest_version_cache():
 
 
 def get_latest_version():
-    """
-    Get the latest version from cache, or trigger a background update.
-    Returns cached version or None.
-    
-    Uses cache-based locking to prevent cache stampede - only one thread
-    will fetch from Docker Hub even under high concurrent load.
+    """Return the cached latest version, or start a background fetch.
+
+    Uses ``cache.add`` as a lock so only one thread hits Docker Hub
+    under concurrent cache misses.
+
+    Returns:
+        Cached version string, or ``None`` on a cold cache.
     """
     cached_version = cache.get(CACHE_KEY)
 
@@ -152,9 +163,12 @@ def get_latest_version():
 
 
 def check_for_update():
-    """
-    Check if there's a newer version available.
-    Returns dict with update info or None if no update available.
+    """Compare the running version to the cached Docker Hub latest.
+
+    Returns:
+        Dict with ``current_version``, ``latest_version``,
+        ``update_available``, and ``release_url`` when an update exists;
+        otherwise ``None``.
     """
     current_version_str = getattr(settings, '__VERSION__', None)
     if not current_version_str:

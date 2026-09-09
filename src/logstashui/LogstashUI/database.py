@@ -2,7 +2,7 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
-"""Build Django DATABASES from discrete LOGSTASHUI_DB_* environment variables."""
+"""Build Django ``DATABASES`` from discrete ``LOGSTASHUI_DB_*`` environment variables."""
 
 from __future__ import annotations
 
@@ -26,6 +26,20 @@ _CANONICAL = ("sqlite", "postgresql", "mysql")
 
 
 def canonical_engine(raw: str | None) -> str:
+    """Map an engine alias to ``sqlite``, ``postgresql``, or ``mysql``.
+
+    Accepts empty/None (sqlite), ``sqlite3``, ``postgres``, ``mariadb``, and
+    ``my``.
+
+    Args:
+        raw: ``LOGSTASHUI_DB_ENGINE`` value or equivalent.
+
+    Returns:
+        Canonical engine name.
+
+    Raises:
+        RuntimeError: If ``raw`` is not a known alias.
+    """
     key = (raw or "").strip().lower()
     if key not in _ENGINE_ALIASES:
         supported = "sqlite, postgresql, mysql (aliases: sqlite3, postgres, mariadb, my)"
@@ -71,6 +85,27 @@ def _require(names: list[str]) -> None:
 
 
 def build_databases(data_dir: Path) -> dict:
+    """Build the Django ``DATABASES`` dict from ``LOGSTASHUI_DB_*`` env vars.
+
+    SQLite (default) stores ``db.sqlite3`` under ``data_dir`` unless
+    ``LOGSTASHUI_DB_NAME`` is set, and enables WAL plus ``busy_timeout=20000``.
+    PostgreSQL requires host and user; ``sslmode`` defaults to ``prefer``.
+    MySQL/MariaDB uses the PyMySQL shim (version spoofed for Django 6) with
+    utf8mb4. ``CONN_MAX_AGE`` defaults to 60; health checks default on.
+
+    Args:
+        data_dir: Runtime data root used for the default SQLite path.
+
+    Returns:
+        ``{"default": {...}}`` suitable for Django ``DATABASES``.
+
+    Raises:
+        RuntimeError: Unknown engine, missing required env vars, or missing extra.
+
+    Examples:
+        os.environ["LOGSTASHUI_DB_ENGINE"] = "sqlite"
+        DATABASES = build_databases(Path("/var/lib/logstashui"))
+    """
     engine = canonical_engine(os.environ.get("LOGSTASHUI_DB_ENGINE"))
     conn_max_age = _env_int("LOGSTASHUI_DB_CONN_MAX_AGE", 60)
     health = env_bool("LOGSTASHUI_DB_CONN_HEALTH_CHECKS", True)
@@ -153,7 +188,16 @@ def build_databases(data_dir: Path) -> dict:
 
 
 def check_server_version(connection) -> None:
-    """Fail-fast if the server is below documented floors. No-op for SQLite."""
+    """Fail fast if the server is below documented version floors.
+
+    No-op for SQLite. PostgreSQL must be 14+, MariaDB 10.6+, MySQL 8.0+.
+
+    Args:
+        connection: Django database connection (vendor and version attributes).
+
+    Raises:
+        RuntimeError: If the server version is below the floor.
+    """
     vendor = getattr(connection, "vendor", "")
     if vendor == "postgresql":
         pg_version = int(getattr(connection, "pg_version", 0) or 0)
@@ -184,10 +228,17 @@ def check_server_version(connection) -> None:
 
 
 def ensure_psycopg_gevent(waiting_module=None):
-    """Use psycopg wait_select so gunicorn gevent's patched select is cooperative.
+    """Use psycopg ``wait_select`` so gunicorn gevent's patched select is cooperative.
 
-    gunicorn --worker-class gevent monkey-patches select before loading WSGI.
-    psycopg 3.1.14+ also auto-detects that; assigning wait_select makes it explicit.
+    gunicorn ``--worker-class gevent`` monkey-patches select before loading WSGI.
+    psycopg 3.1.14+ also auto-detects that; assigning ``wait_select`` makes it
+    explicit.
+
+    Args:
+        waiting_module: ``psycopg.waiting`` or a test double. Imported when omitted.
+
+    Returns:
+        The waiting module after assignment, or None if psycopg is not installed.
     """
     waiting = waiting_module
     if waiting is None:

@@ -2,10 +2,9 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
-"""
-Django management command to unload test SNMP data
+"""Delete `test_`-prefixed SNMP networks and devices.
 
-Usage:
+Examples:
     python manage.py unload_test_snmp_data
     python manage.py unload_test_snmp_data --confirm
 """
@@ -15,9 +14,11 @@ from SNMP.models import Network, Device
 
 
 class Command(BaseCommand):
+    """Remove synthetic SNMP test data without touching non-`test_` rows."""
     help = 'Remove all test SNMP data (networks and devices)'
 
     def add_arguments(self, parser):
+        """Add `--confirm` to skip the interactive prompt."""
         parser.add_argument(
             '--confirm',
             action='store_true',
@@ -25,6 +26,7 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        """Delete `test_` devices then `test_` networks after confirmation."""
         # Count existing test data (only test_ prefixed items)
         test_devices = Device.objects.filter(name__startswith='test_')
         test_networks = Network.objects.filter(name__startswith='test_')

@@ -2,6 +2,8 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
+"""Grok debugger: load patterns and simulate matches against sample logs."""
+
 from django.shortcuts import render
 from django.http import JsonResponse, HttpResponse
 
@@ -18,10 +20,15 @@ logger = logging.getLogger(__name__)
 
 
 def GrokDebugger(request):
+    """Render the grok debugger page."""
     return render(request, 'grok_debugger.html')
 
 def get_grok_patterns(request):
-    """Load grok patterns from file and return as JSON"""
+    """Load bundled grok patterns and return them as JSON.
+
+    Returns:
+        JsonResponse ``{"patterns": {name: definition, ...}}``.
+    """
     patterns = {}
     patterns_file = os.path.join(os.path.dirname(__file__), 'data', 'grok-patterns.txt')
     
@@ -46,6 +53,15 @@ def get_grok_patterns(request):
     return JsonResponse({'patterns': patterns})
 
 def simulate_grok(request):
+    """Match grok patterns against sample lines and return an HTML fragment.
+
+    POST fields: ``sample_data``, ``grok_pattern``, ``custom_patterns``,
+    ``multiline_mode``. Dot-notation capture names are nested in the
+    extracted fields (Logstash-style). Non-POST returns an error snippet.
+
+    Note:
+        Response is HTML for htmx, not JSON.
+    """
     if request.method == 'POST':
         sample_data = request.POST.get('sample_data', '')
         grok_pattern = request.POST.get('grok_pattern', '')
@@ -195,7 +211,14 @@ def simulate_grok(request):
     return HttpResponse('<p class="text-error">Invalid request method</p>')
 
 def generate_results_html(results):
-    """Generate HTML for the grok results"""
+    """Render match/fail cards for each pattern and sample line.
+
+    Args:
+        results: List of pattern dicts with ``matches`` entries.
+
+    Returns:
+        HTML string.
+    """
     html_parts = []
     
     for result in results:

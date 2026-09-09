@@ -2,6 +2,8 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
+"""PipelineManager data models: policies, connections, pipelines, and artifacts."""
+
 from django.conf import settings
 from django.db import models
 from Common.encryption import encrypt_credential, decrypt_credential
@@ -16,15 +18,15 @@ from Common import logstash_config_parse
 
 
 class Policy(models.Model):
-    """
-    Represents a Logstash Agent policy configuration.
+    """A Logstash Agent policy: settings, pipelines, and keystore for a role.
 
-    policy_type:
-      PACKAGED — distro Logstash (system unit ``logstash``); one system seed
-      MANAGED  — agent-owned isolated Logstash tree(s); multi-instance
-      SIMULATE — simulation agents with isolated paths
-      EMBEDDED — Docker compose sim (no enroll)
-      DEFAULT  — legacy alias for PACKAGED (pre-release DB rows)
+    ``policy_type``:
+
+      PACKAGED — distro Logstash (system unit ``logstash``); one system seed.
+      MANAGED  — agent-owned isolated Logstash tree(s); multi-instance.
+      SIMULATE — simulation agents with isolated paths.
+      EMBEDDED — Docker compose sim (no enroll).
+      DEFAULT  — legacy alias for PACKAGED (pre-release DB rows).
     """
 
     class PolicyType(models.TextChoices):
@@ -192,8 +194,11 @@ class Policy(models.Model):
         verbose_name_plural = 'Policies'
     
     def save(self, *args, **kwargs):
-        """
-        Override save to auto-compute hashes of configuration files
+        """Compute config hashes, encrypt the keystore password, and persist.
+
+        SHA-256 hashes of ``logstash_yml``, ``jvm_options``, and
+        ``log4j2_properties`` are stored for agent change detection. A
+        plaintext keystore password is hashed then Fernet-encrypted.
         """
         # Compute hashes from configuration file contents
         self.logstash_yml_hash = hashlib.sha256(self.logstash_yml.encode('utf-8')).hexdigest()
@@ -212,15 +217,16 @@ class Policy(models.Model):
         super().save(*args, **kwargs)
 
     def _is_encrypted(self, value):
-        """Check if a value is already encrypted (Fernet tokens start with 'gAAAAA')"""
+        """Return True when ``value`` is already a Fernet token (``gAAAAA`` prefix)."""
         return value and value.startswith('gAAAAA')
 
     def get_keystore_password(self):
-        """Get decrypted keystore password"""
+        """Return the decrypted keystore password, or None if unset."""
         return decrypt_credential(self.keystore_password) if self.keystore_password else None
 
     @property
     def is_simulate_capable(self):
+        """True when this policy can be used as a simulation target."""
         return self.policy_type in (self.PolicyType.SIMULATE, self.PolicyType.EMBEDDED)
 
     def __str__(self):
@@ -228,8 +234,11 @@ class Policy(models.Model):
 
 
 class Connection(models.Model):
-    """
-    Represents a connection to either a Logstash Agent or a centralized management service.
+    """A Logstash Agent row or a Centralized Pipeline Management ES connection.
+
+    AGENT connections enroll via token, hold an ``ApiKey``, and attach to a
+    ``Policy``. CENTRALIZED connections store Elasticsearch credentials
+    (encrypted at rest) and have no agent check-in.
     """
 
     class ConnectionType(models.TextChoices):
@@ -375,8 +384,10 @@ class Connection(models.Model):
         return f"{self.name} ({self.get_connection_type_display()})"
 
     def clean(self):
-        """
-        Validate that the required fields are provided based on the connection type.
+        """Validate required fields for the connection type.
+
+        AGENT rows need ``host``. CENTRALIZED rows need Cloud ID or host,
+        plus either an API key or username/password.
         """
         if self.connection_type == self.ConnectionType.AGENT:
             if not self.host:
@@ -393,6 +404,11 @@ class Connection(models.Model):
                 )
 
     def save(self, *args, **kwargs):
+        """Validate, encrypt credentials, and persist the connection.
+
+        Encrypts ``password``, ``ssh_key``, and ``api_key`` when they are
+        still plaintext (Fernet tokens start with ``gAAAAA``).
+        """
         self.full_clean()
 
         # Encrypt sensitive fields before saving
@@ -406,15 +422,15 @@ class Connection(models.Model):
         super().save(*args, **kwargs)
 
     def _is_encrypted(self, value):
-        """Check if a value is already encrypted (Fernet tokens start with 'gAAAAA')"""
+        """Return True when ``value`` is already a Fernet token (``gAAAAA`` prefix)."""
         return value and value.startswith('gAAAAA')
 
     def get_password(self):
-        """Get decrypted password"""
+        """Return the decrypted password, or None if unset."""
         return decrypt_credential(self.password) if self.password else None
 
     def get_api_key(self):
-        """Get decrypted API key"""
+        """Return the decrypted API key, or None if unset."""
         return decrypt_credential(self.api_key) if self.api_key else None
 
 
@@ -426,9 +442,11 @@ MANAGED_BY_CHOICES = [
 
 
 class Pipeline(models.Model):
-    """
-    Represents a Logstash pipeline configuration within a policy.
-    Pipeline names must be unique within a policy, but can be reused across different policies.
+    """A Logstash pipeline configuration belonging to a policy.
+
+    Names are unique within a policy and may be reused across policies.
+    ``managed_by`` distinguishes user-authored pipelines from SNMP/library
+    ones; only user pipelines enter policy revisions.
     """
     policy = models.ForeignKey(
         Policy,
@@ -523,6 +541,12 @@ class Pipeline(models.Model):
         ]
 
     def save(self, *args, **kwargs):
+        """Recompute ``pipeline_hash`` and analysis flags, then persist.
+
+        ``pipeline_hash`` is SHA-256 of name, LSCL, and all pipeline settings.
+        ``no_input`` and ``non_reloadable`` are derived from the parsed LSCL;
+        a parse failure leaves existing flags unchanged.
+        """
         hash_input = (
             f"{self.name}{self.lscl}{self.pipeline_workers}{self.pipeline_batch_size}"
             f"{self.pipeline_batch_delay}{self.queue_type}{self.queue_max_bytes}"
@@ -559,9 +583,10 @@ class Pipeline(models.Model):
 
 
 class Keystore(models.Model):
-    """
-    Represents encrypted key-value pairs stored in a policy's keystore.
-    Key names must be unique within a policy, but can be reused across different policies.
+    """An encrypted key-value entry in a policy's Logstash keystore.
+
+    Key names are unique within a policy and may be reused across policies.
+    ``kv_hash`` is SHA-256 of plaintext ``key_name`` + ``key_value``.
     """
     policy = models.ForeignKey(
         Policy,
@@ -608,8 +633,12 @@ class Keystore(models.Model):
         ]
     
     def save(self, *args, **kwargs):
-        """
-        Override save to encrypt key_value and auto-compute hash of key_name + key_value
+        """Encrypt ``key_value`` and recompute ``kv_hash`` from plaintext.
+
+        Hashing happens before encryption so the same key-value pair always
+        yields the same hash. An already-encrypted value cannot be rehashed
+        from plaintext; the existing hash is kept, or a hash of the
+        ciphertext is stored if none exists.
         """
         # Compute hash from plaintext key_name + key_value BEFORE encryption
         # This ensures the hash is consistent for the same key-value pair
@@ -632,18 +661,20 @@ class Keystore(models.Model):
         return f"{self.policy.name} - {self.key_name}"
     
     def _is_encrypted(self, value):
-        """Check if a value is already encrypted (Fernet tokens start with 'gAAAAA')"""
+        """Return True when ``value`` is already a Fernet token (``gAAAAA`` prefix)."""
         return value and value.startswith('gAAAAA')
     
     def get_key_value(self):
-        """Get decrypted key value"""
+        """Return the decrypted key value, or None if unset."""
         return decrypt_credential(self.key_value) if self.key_value else None
 
 
 class Revision(models.Model):
-    """
-    Represents a deployed revision (version) of a policy.
-    Each revision stores a complete snapshot of the policy state at deployment time.
+    """A deployed snapshot of a policy.
+
+    Each revision stores the complete policy state at deploy time (config
+    files, user pipelines, user keystore entries). SNMP artifacts are never
+    recorded here.
     """
     revision_number = models.IntegerField(
         help_text="Revision number for this deployment"
@@ -679,9 +710,10 @@ class Revision(models.Model):
 
 
 class EnrollmentToken(models.Model):
-    """
-    Represents an enrollment token used during initial agent enrollment.
-    Each token belongs to a specific policy.
+    """An enrollment token used during initial agent enrollment.
+
+    Each token belongs to a specific policy. The agent presents a base64
+    JSON payload containing this token's raw value.
     """
     policy = models.ForeignKey(
         Policy,
@@ -720,8 +752,7 @@ API_TOKEN_SCHEME = 'lsui'
 
 
 class ApiKey(models.Model):
-    """
-    A hashed bearer credential. Two flavours share this table:
+    """A hashed bearer credential. Two flavours share this table.
 
     * **Agent keys** — issued at enrollment, scoped to a ``connection``. The
       agent sends ``connection_id`` in the request body, so the row is found
@@ -784,17 +815,23 @@ class ApiKey(models.Model):
         return f"{self.name or 'unnamed'} - API Token"
 
     def clean(self):
-        # Not a DB CheckConstraint: constraint enforcement is uneven across the
-        # MySQL 8.0 floor, and this is only ever violated by our own code.
+        """Require exactly one of ``connection`` or ``user``.
+
+        Not a DB CheckConstraint: constraint enforcement is uneven across the
+        MySQL 8.0 floor, and this is only ever violated by our own code.
+        """
         if bool(self.connection_id) == bool(self.user_id):
             raise ValidationError(
                 "An ApiKey must belong to exactly one of connection or user."
             )
 
     def save(self, *args, **kwargs):
-        # Hash on the way in, but only once. Renaming or revoking a token
-        # re-saves the row, and re-running make_password on a stored hash
-        # would silently invalidate the credential.
+        """Persist the key, hashing ``api_key`` only when it is still plaintext.
+
+        Renaming or revoking re-saves the row. Re-running ``make_password`` on a
+        stored hash would silently invalidate the credential, so hashing is
+        guarded by ``_is_hashed``.
+        """
         if self.api_key and not self._is_hashed(self.api_key):
             self.api_key = make_password(self.api_key)
         super().save(*args, **kwargs)
@@ -808,17 +845,31 @@ class ApiKey(models.Model):
         return True
 
     def verify_api_key(self, raw_api_key):
-        """Verify a raw API key against the stored hash"""
+        """Return True if ``raw_api_key`` matches the stored PBKDF2 hash.
+
+        Args:
+            raw_api_key: Plaintext secret from the ``Authorization`` header.
+        """
         return check_password(raw_api_key, self.api_key)
 
     # -- admin API tokens ---------------------------------------------------
 
     @classmethod
     def issue_for_user(cls, user, name='', expires_at=None):
-        """Mint an admin API token. Returns ``(instance, raw_token)``.
+        """Mint an admin API token.
 
         The raw token is the only time the secret exists in plaintext — it is
-        not recoverable afterwards.
+        not recoverable afterwards. The prefix is ``token_hex`` (no ``_``) so
+        ``split('_', 2)`` on the wire format is unambiguous.
+
+        Args:
+            user: Owner the token will act as.
+            name: Human-readable label.
+            expires_at: Optional expiry; ``None`` means no expiry.
+
+        Returns:
+            ``(instance, raw_token)`` where ``raw_token`` is
+            ``lsui_<prefix>_<secret>``.
         """
         # token_hex, not token_urlsafe: the prefix must contain no '_' so that
         # split('_', 2) on the wire format is unambiguous.
@@ -841,6 +892,13 @@ class ApiKey(models.Model):
 
         Returns ``(None, None)`` for anything that is not an admin token,
         including agent keys, which carry no scheme marker.
+
+        Args:
+            raw: Header value after the ``ApiKey `` scheme, or the full token.
+
+        Returns:
+            ``(prefix, secret)`` for ``lsui_<prefix>_<secret>``;
+            ``(None, None)`` otherwise.
         """
         parts = (raw or '').split('_', 2)
         if len(parts) != 3 or parts[0] != API_TOKEN_SCHEME:
@@ -851,15 +909,17 @@ class ApiKey(models.Model):
 
     @property
     def masked(self):
-        """Display form for the token list — prefix only, never the secret."""
+        """Return the display form for the token list — prefix only, never the secret."""
         return f"{API_TOKEN_SCHEME}_{self.prefix}_…" if self.prefix else ''
 
     @property
     def is_expired(self):
+        """True when ``expires_at`` is set and in the past."""
         return self.expires_at is not None and self.expires_at <= timezone.now()
 
     @property
     def is_active(self):
+        """True when the token is neither revoked nor expired."""
         return self.revoked_at is None and not self.is_expired
 
 
@@ -879,13 +939,16 @@ SMALL_FILE_BYTES = 1024 * 1024
 
 
 def parse_artifact_filename(filename):
-    """Validate a requested filename.
+    """Validate a requested artifact filename against ``ARTIFACT_FILENAME_RE``.
 
-    Returns ``(tarball_name, version, arch, is_checksum)``, where ``tarball_name``
-    is the ``.tar.gz`` even when the checksum sidecar was requested — both files
-    belong to one :class:`LogstashArtifact` row and one upstream fetch.
+    Args:
+        filename: Requested ``.tar.gz`` or ``.tar.gz.sha512`` basename.
 
-    Returns ``None`` for anything unrecognized, which callers answer with 404.
+    Returns:
+        ``(tarball_name, version, arch, is_checksum)``, where ``tarball_name``
+        is the ``.tar.gz`` even when the checksum sidecar was requested — both
+        files belong to one ``LogstashArtifact`` row and one upstream fetch.
+        ``None`` for anything unrecognized, which callers answer with 404.
     """
     match = ARTIFACT_FILENAME_RE.match(filename or '')
     if match is None:
@@ -906,7 +969,7 @@ class LogstashArtifact(models.Model):
     cache backend (no ``CACHES`` in settings, so Django falls back to per-process
     LocMemCache), and gunicorn runs 2+ worker processes, so an in-memory lock
     cannot prevent two workers starting the same 450 MB download. A conditional
-    UPDATE on this row can — see :meth:`claim_for_fetch`.
+    UPDATE on this row can — see ``claim_for_fetch()``.
     """
 
     class Status(models.TextChoices):
@@ -993,6 +1056,7 @@ class LogstashArtifact(models.Model):
 
     @property
     def checksum_filename(self):
+        """Return the ``.sha512`` sidecar basename for this tarball."""
         return f"{self.filename}.sha512"
 
     @property
@@ -1003,14 +1067,20 @@ class LogstashArtifact(models.Model):
         return min(100, int(self.bytes_downloaded * 100 / self.size_bytes))
 
     def resolve_source_url(self, base_url):
-        """Upstream URL for the tarball. An explicit source_url wins."""
+        """Return the upstream URL for the tarball.
+
+        An explicit ``source_url`` wins over ``base_url`` + filename.
+
+        Args:
+            base_url: Operator-configured artifact host (or Elastic default).
+        """
         if self.source_url:
             return self.source_url
         return f"{base_url.rstrip('/')}/{self.filename}"
 
     @classmethod
     def claim_for_fetch(cls, pk, *, now=None):
-        """Atomically take ownership of a download. Returns True if we won.
+        """Atomically take ownership of a download.
 
         A single conditional UPDATE is the whole mechanism. It is race-free on
         every supported engine: PostgreSQL re-evaluates the WHERE clause after
@@ -1020,6 +1090,13 @@ class LogstashArtifact(models.Model):
 
         A FETCHING row whose heartbeat has gone stale is also claimable, which
         is how a download orphaned by a worker restart gets picked back up.
+
+        Args:
+            pk: ``LogstashArtifact`` primary key.
+            now: Claim timestamp; defaults to ``timezone.now()``.
+
+        Returns:
+            True if this caller won the claim.
         """
         now = now or timezone.now()
         stale_before = now - timedelta(seconds=cls.STALE_CLAIM_SECONDS)
@@ -1038,7 +1115,14 @@ class LogstashArtifact(models.Model):
 
     @classmethod
     def release_claim(cls, pk):
-        """Hand a claim back without failing it, for the over-capacity path."""
+        """Hand a claim back without failing it, for the over-capacity path.
+
+        Args:
+            pk: ``LogstashArtifact`` primary key.
+
+        Returns:
+            Number of rows updated (0 or 1).
+        """
         return cls.objects.filter(pk=pk, status=cls.Status.FETCHING).update(
             status=cls.Status.PENDING,
             claimed_at=None,
@@ -1047,7 +1131,11 @@ class LogstashArtifact(models.Model):
 
     @classmethod
     def active_fetch_count(cls, *, now=None):
-        """Fetches genuinely in flight, ignoring rows abandoned by dead workers."""
+        """Count fetches genuinely in flight, ignoring rows abandoned by dead workers.
+
+        Args:
+            now: Clock for the stale-heartbeat cutoff; defaults to ``timezone.now()``.
+        """
         now = now or timezone.now()
         stale_before = now - timedelta(seconds=cls.STALE_CLAIM_SECONDS)
         return cls.objects.filter(

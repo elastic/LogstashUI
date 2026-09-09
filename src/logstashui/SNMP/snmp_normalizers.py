@@ -2,23 +2,21 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
+"""Logstash filter fragments for SNMP profile normalizers (multiply, ratio, translate)."""
+
 
 def _next_id(base, counter):
-    """
-    Return a deduplicated ID by appending an ever-increasing integer suffix.
+    """Return `base` plus an incrementing suffix, mutating `counter` in place.
 
-    The counter dict is mutated in-place so the same dict can be shared
-    across multiple calls to _apply_normalizers, guaranteeing uniqueness
-    even when normalizer blocks from several profiles are merged into a
-    single Logstash pipeline.
+    Share one counter across `_apply_normalizers` calls so IDs stay unique when
+    several profiles merge into a single pipeline.
 
     Args:
-        base: Base ID string (e.g. "normalizer_multiply_get")
-        counter: Shared mutable dict tracking how many times each base ID
-                 has been issued so far
+        base: ID prefix (e.g. ``normalizer_multiply_get``).
+        counter: Mutable dict of base → last issued integer.
 
     Returns:
-        Unique ID string (e.g. "normalizer_multiply_get_1")
+        Unique ID such as ``normalizer_multiply_get_1``.
     """
     n = counter.get(base, 0) + 1
     counter[base] = n
@@ -26,22 +24,17 @@ def _next_id(base, counter):
 
 
 def _apply_normalizers(normalizers, id_counter=None):
-    """
-    Generate Logstash filter components from normalizer configurations.
-    Groups normalizers by operation and scope for efficient processing.
-    
+    """Build Logstash filter components from profile normalizer configs.
+
+    Groups by operation and scope. Pass the same `id_counter` for every profile in
+    a pipeline so plugin IDs stay unique (Logstash rejects duplicate IDs).
+
     Args:
-        normalizers: List of normalizer configurations from profile
-        id_counter: Optional shared dict used to track ID usage across
-                    multiple calls. Pass the same dict for every profile
-                    in a pipeline so that IDs like
-                    ``normalizer_multiply_get_1`` / ``normalizer_multiply_get_2``
-                    are unique across the whole pipeline, not just within
-                    a single profile's normalizer block. If omitted a
-                    fresh dict is created (safe for single-call use).
-        
+        normalizers: Normalizer dicts from a profile.
+        id_counter: Optional shared ID map; a new dict is used when omitted.
+
     Returns:
-        List of Logstash filter components
+        List of Logstash filter component dicts.
     """
     if not normalizers:
         return []
@@ -99,21 +92,15 @@ def _apply_normalizers(normalizers, id_counter=None):
 
 
 def _generate_multiply_get_filter(normalizers, scope='get', id_counter=None):
-    """
-    Generate Ruby filter for multiply operations on get or table fields.
-    Consolidates multiple multiply operations into a single Ruby filter.
+    """Emit one Ruby filter that applies multiply ops for a get or table scope.
 
     Args:
-        normalizers: List of multiply normalizers for the given scope
-        scope: Target scope ('get' or 'table'), used to keep generated
-            Logstash filter component IDs unique across scopes so a
-            get-scope multiply and a table-scope multiply on the same
-            profile don't emit duplicate plugin IDs (Logstash rejects
-            pipelines with duplicate IDs at compile time).
-        id_counter: Shared mutable dict for deduplicating IDs across calls.
+        normalizers: Multiply normalizers for `scope`.
+        scope: ``get`` or ``table``; included in plugin IDs so scopes cannot collide.
+        id_counter: Shared mutable ID map.
 
     Returns:
-        Logstash filter component dict
+        Logstash filter component dict.
     """
     if id_counter is None:
         id_counter = {}
@@ -181,21 +168,15 @@ def _generate_multiply_get_filter(normalizers, scope='get', id_counter=None):
 
 
 def _generate_ratio_get_filter(normalizers, scope='get', id_counter=None):
-    """
-    Generate Ruby filter for ratio operations on get or table fields.
-    Calculates ratios from two input fields and optionally creates total and ratio output fields.
+    """Emit one Ruby filter that computes ratios (and optional totals) for a scope.
 
     Args:
-        normalizers: List of ratio normalizers for the given scope
-        scope: Target scope ('get' or 'table'), used to keep generated
-            Logstash filter component IDs unique across scopes so a
-            get-scope ratio and a table-scope ratio on the same profile
-            don't emit duplicate plugin IDs (Logstash rejects pipelines
-            with duplicate IDs at compile time).
-        id_counter: Shared mutable dict for deduplicating IDs across calls.
+        normalizers: Ratio normalizers for `scope`.
+        scope: ``get`` or ``table``; included in plugin IDs so scopes cannot collide.
+        id_counter: Shared mutable ID map.
 
     Returns:
-        Logstash filter component dict
+        Logstash filter component dict.
     """
     if id_counter is None:
         id_counter = {}
@@ -320,17 +301,14 @@ def _generate_ratio_get_filter(normalizers, scope='get', id_counter=None):
 
 
 def _generate_translate_filter(normalizers, id_counter=None):
-    """
-    Generate Logstash translate plugin filters for value-mapping operations.
-    Each normalizer produces its own translate filter that maps raw SNMP values
-    (typically integers) to human-readable strings in-place.
+    """Emit translate filters that map raw SNMP values to display strings in place.
 
     Args:
-        normalizers: List of translate normalizers
-        id_counter: Shared mutable dict for deduplicating IDs across calls.
+        normalizers: Translate normalizer configs.
+        id_counter: Shared mutable ID map.
 
     Returns:
-        List of Logstash filter component dicts, or None
+        List of filter component dicts, or None when there is nothing to emit.
     """
     if not normalizers:
         return None

@@ -2,17 +2,14 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
-"""
-Django management command to sync official SNMP profiles and device templates.
-This command treats bundled JSON files as a package-managed registry.
+"""Sync official SNMP profiles and device templates from bundled JSON.
 
-Usage:
-    python manage.py sync_snmp_official_data [--cleanup]
+Treats package JSON as the registry. `--cleanup` deletes unused official rows
+whose `official_key` is gone; rows still in use are marked orphaned.
 
-Options:
-    --cleanup    Remove (or orphan) official DB records that no longer exist in
-                 the bundled registry AND are not currently in use.
-                 Records still in use are marked orphaned rather than deleted.
+Examples:
+    python manage.py sync_snmp_official_data
+    python manage.py sync_snmp_official_data --cleanup
 """
 
 from django.core.management.base import BaseCommand
@@ -26,9 +23,11 @@ logger = logging.getLogger(__name__)
 
 
 class Command(BaseCommand):
+    """Upsert official profiles and templates from `SNMP/data/` JSON."""
     help = 'Sync official SNMP profiles and device templates from bundled JSON files'
 
     def add_arguments(self, parser):
+        """Add `--cleanup` to delete or orphan stale official rows."""
         parser.add_argument(
             '--cleanup',
             action='store_true',
@@ -39,6 +38,7 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        """Sync profiles then templates, optionally cleaning stale official rows."""
         cleanup = options.get('cleanup', False)
 
         try:
@@ -92,10 +92,7 @@ class Command(BaseCommand):
     # ------------------------------------------------------------------
 
     def _get_registered_profile_keys(self):
-        """
-        Return the set of official_key values declared in the bundled
-        official_profiles JSON files. Files without an official_key are skipped.
-        """
+        """Return `official_key` values from bundled `official_profiles` JSON."""
         keys = set()
         dirpath = os.path.join(settings.BASE_DIR, 'SNMP', 'data', 'official_profiles')
         if not os.path.exists(dirpath):
@@ -114,10 +111,7 @@ class Command(BaseCommand):
         return keys
 
     def _get_registered_template_keys(self):
-        """
-        Return the set of official_key values declared in the bundled
-        official_device_templates JSON files.
-        """
+        """Return `official_key` values from bundled `official_device_templates` JSON."""
         keys = set()
         dirpath = os.path.join(settings.BASE_DIR, 'SNMP', 'data', 'official_device_templates')
         if not os.path.exists(dirpath):
@@ -140,7 +134,7 @@ class Command(BaseCommand):
     # ------------------------------------------------------------------
 
     def _sync_official_profiles(self):
-        """Sync official profiles and return the count of official profiles in DB."""
+        """Sync official profiles and return how many official profile rows exist."""
         from SNMP.snmp_crud import sync_official_profiles
         from SNMP.models import Profile
         try:
@@ -151,7 +145,7 @@ class Command(BaseCommand):
             raise
 
     def _sync_official_device_templates(self):
-        """Sync official device templates and return the count of official templates in DB."""
+        """Sync official templates and return how many official template rows exist."""
         from SNMP.snmp_crud import sync_official_device_templates
         from SNMP.models import DeviceTemplate
         try:
@@ -167,21 +161,18 @@ class Command(BaseCommand):
 
     @transaction.atomic
     def _cleanup_stale_official_data(self, registered_profile_keys, registered_template_keys):
-        """
-        Remove or orphan official DB records that are no longer present in the
-        bundled registry.
+        """Delete unused official rows missing from the registry; orphan in-use ones.
 
-        Rules:
-        - A record is stale if its official_key is NOT in the registry set.
-        - A stale record that is NOT in use is deleted.
-        - A stale record that IS in use is kept but marked orphaned so operators
-          can find and handle it (Profile: profile_data['is_orphaned']=True;
-          DeviceTemplate: logged with a clear warning — a dedicated field can be
-          added in a future migration).
+        A row is stale when its `official_key` is not in the registry (or it is an
+        old official placeholder with no key). In-use profiles get
+        `profile_data['is_orphaned']=True`; in-use templates are logged, not deleted.
 
-        "In use" means:
-        - Profile: referenced by at least one DeviceTemplate
-        - DeviceTemplate: assigned to at least one Device
+        Args:
+            registered_profile_keys: Keys present in bundled profile JSON.
+            registered_template_keys: Keys present in bundled template JSON.
+
+        Returns:
+            Counts of deleted and orphaned profiles and templates.
         """
         from SNMP.models import Profile, DeviceTemplate
 

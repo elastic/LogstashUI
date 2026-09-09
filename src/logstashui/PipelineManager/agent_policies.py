@@ -2,6 +2,8 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
+"""HTTP views for policy deploy, diffs, keystore, and assigned nodes."""
+
 from django.http import JsonResponse
 
 from PipelineManager.models import Revision, Policy, Connection as ConnectionTable, Keystore
@@ -17,13 +19,16 @@ import logging
 logger = logging.getLogger(__name__)
 
 def _strip_nonuser_from_snapshot(snapshot, nonuser_pipeline_names, nonuser_key_names):
-    """
-    Return a copy of a revision snapshot with pipeline/keystore entries whose
-    names are currently managed by a non-user subsystem (e.g. SNMP) removed.
+    """Return a snapshot copy with currently non-user pipeline/keystore names removed.
 
     Revision snapshots taken before the user-only allowlist may have captured
     SNMP artifacts. Stripping them on read keeps diffs/change-counts honest
     without needing to rewrite historical revision records.
+
+    Args:
+        snapshot: Revision ``snapshot_json`` dict.
+        nonuser_pipeline_names: Pipeline names to drop.
+        nonuser_key_names: Keystore key names to drop.
     """
     if not snapshot:
         return snapshot
@@ -41,11 +46,13 @@ def _strip_nonuser_from_snapshot(snapshot, nonuser_pipeline_names, nonuser_key_n
 
 @require_admin_role
 def deploy_policy(request):
-    """
-    Deploy a policy by:
-    1. Incrementing the revision number in the Policy table
-    2. Creating a new Revision record with a snapshot of the current policy state
-    3. Keeping the current data in the policy (no changes to policy fields)
+    """Snapshot user-authored policy state as a new revision.
+
+    Increments ``current_revision_number``, writes a ``Revision`` row, and
+    leaves live policy fields unchanged. SNMP artifacts are excluded.
+
+    Args:
+        policy_id: Policy primary key.
     """
     if request.method != 'POST':
         return JsonResponse({"success": False, "error": "Method not allowed"}, status=405)
@@ -113,9 +120,14 @@ def deploy_policy(request):
 
 @require_admin_role
 def get_policy_diff(request):
-    """
-    Get diff between current policy state and last deployed revision.
-    Returns structured diff data for logstash.yml, jvm.options, log4j2.properties, pipelines, and keystore.
+    """Return current vs last-deployed policy state for the diff UI.
+
+    Args:
+        policy_id: Policy primary key.
+
+    Returns:
+        JSON with ``current`` and ``previous`` snapshots of yml, jvm,
+        log4j2, pipelines, and keystore.
     """
     if request.method != 'GET':
         return JsonResponse({"success": False, "error": "Method not allowed"}, status=405)
@@ -200,8 +212,10 @@ def get_policy_diff(request):
 
 @require_admin_role
 def get_policy_agent_count(request):
-    """
-    Get the count of agents (connections) using a specific policy
+    """Return the number of active agents assigned to a policy.
+
+    Args:
+        policy_id: Policy primary key.
     """
     try:
         policy_id = request.GET.get('policy_id')
@@ -234,9 +248,16 @@ def get_policy_agent_count(request):
 
 
 def get_policy_change_count(request):
-    """
-    Returns the number of sections (tabs) that have pending changes compared to the last deployed revision.
-    Sections: logstash_yml, jvm_options, log4j2_properties, pipelines, keystore, global_settings
+    """Count policy tabs with pending changes vs the last deployed revision.
+
+    Sections: logstash_yml, jvm_options, log4j2_properties, pipelines,
+    keystore, keystore password, global settings.
+
+    Args:
+        policy_id: Policy primary key.
+
+    Returns:
+        JSON ``{"success": True, "pending_changes": N}``.
     """
     try:
         policy_id = request.GET.get('policy_id')
@@ -325,8 +346,10 @@ def get_policy_change_count(request):
 
 @require_admin_role
 def get_keystore_entries(request):
-    """
-    Get all keystore entries for a specific policy.
+    """Return user-authored keystore entries for a policy.
+
+    Args:
+        policy_id: Policy primary key.
     """
     try:
         policy_id = request.GET.get('policy_id')
@@ -367,14 +390,13 @@ def get_keystore_entries(request):
 
 @require_admin_role
 def set_keystore_password(request):
-    """
-    Set, update, or clear the keystore password for a policy.
+    """Set, rotate, or clear the keystore password for a policy.
 
-    Body:
-      - policy_id (required)
-      - password (required unless clear=true) — non-empty string to set/rotate
-      - clear (optional bool) — if true, remove the policy password so agents
-        migrate back to unauthenticated keystores on next check-in
+    Args:
+        policy_id: Policy primary key (required).
+        password: Non-empty string to set/rotate (required unless ``clear``).
+        clear: If true, remove the password so agents migrate back to
+            unauthenticated keystores on next check-in.
     """
     if request.method != 'POST':
         return JsonResponse({"success": False, "error": "Method not allowed"}, status=405)
@@ -428,8 +450,12 @@ def set_keystore_password(request):
 
 @require_admin_role
 def create_keystore_entry(request):
-    """
-    Create a new keystore entry for a policy.
+    """Create a user-authored keystore entry for a policy.
+
+    Args:
+        policy_id: Policy primary key.
+        key_name: Unique key within the policy.
+        key_value: Plaintext value (encrypted on save).
     """
     if request.method != 'POST':
         return JsonResponse({"success": False, "error": "Method not allowed"}, status=405)
@@ -479,8 +505,11 @@ def create_keystore_entry(request):
 
 @require_admin_role
 def update_keystore_entry(request):
-    """
-    Update an existing keystore entry.
+    """Update a keystore entry's value.
+
+    Args:
+        entry_id: ``Keystore`` primary key.
+        key_value: New plaintext value.
     """
     if request.method != 'POST':
         return JsonResponse({"success": False, "error": "Method not allowed"}, status=405)
@@ -519,8 +548,10 @@ def update_keystore_entry(request):
 
 @require_admin_role
 def delete_keystore_entry(request):
-    """
-    Delete a keystore entry.
+    """Delete a keystore entry.
+
+    Args:
+        entry_id: ``Keystore`` primary key.
     """
     if request.method != 'POST':
         return JsonResponse({"success": False, "error": "Method not allowed"}, status=405)
@@ -559,8 +590,10 @@ def delete_keystore_entry(request):
 
 @require_admin_role
 def get_policy_nodes(request):
-    """
-    Get all nodes (connections) associated with a specific policy.
+    """Return active agent connections for a policy, with health and SNMP flags.
+
+    Args:
+        policy_id: Policy primary key.
     """
     try:
         policy_id = request.GET.get('policy_id')

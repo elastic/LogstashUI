@@ -2,11 +2,14 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
+"""Integration Factory page: pick a cloud Elasticsearch connection."""
+
 from django.shortcuts import render
 from PipelineManager.models import Connection
 
 
 def IntegrationFactory(request):
+    """Render the Integration Factory UI with CENTRALIZED cloud connections."""
     connections = Connection.objects.filter(
         connection_type=Connection.ConnectionType.CENTRALIZED,
         cloud_id__isnull=False

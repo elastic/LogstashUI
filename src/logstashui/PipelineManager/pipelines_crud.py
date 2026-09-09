@@ -2,6 +2,8 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
+"""HTTP views for creating, updating, cloning, and deleting pipelines."""
+
 from django.http import JsonResponse, HttpResponse
 from django.conf import settings
 
@@ -23,6 +25,13 @@ logger = logging.getLogger(__name__)
 
 @require_admin_role
 def UpdatePipelineSettings(request):
+    """Update pipeline workers/batch/queue settings for an agent or ES pipeline.
+
+    Args:
+        ls_id or es_id: Policy pk or CENTRALIZED connection pk.
+        pipeline: Pipeline name.
+        description, pipeline_workers, pipeline_batch_size, …: Optional fields.
+    """
     if request.method == "POST":
         try:
             es_id = request.POST.get("es_id")
@@ -136,14 +145,15 @@ def UpdatePipelineSettings(request):
 
 @require_admin_role
 def CreatePipeline(request, simulate=False, pipeline_name=None, pipeline_config=None):
-    """
-    Create a pipeline in Elasticsearch, LogstashAgent, or Django Pipeline model.
+    """Create a pipeline in Elasticsearch, LogstashAgent, or the Django model.
 
     Args:
-        request: Django request object
-        simulate: If True, send to logstashagent instead of Elasticsearch
-        pipeline_name: Pipeline name (used when called directly for simulation)
-        pipeline_config: Pipeline config string (used when called directly for simulation)
+        simulate: If True, PUT the pipeline to LogstashAgent instead of ES.
+        pipeline_name: Name when called directly for simulation.
+        pipeline_config: LSCL when called directly for simulation; also a POST
+            field (defaults to empty input/filter/output).
+        policy_id or es_id: Agent policy pk or CENTRALIZED connection pk (POST).
+        pipeline: Pipeline name (POST, when not ``simulate``).
     """
 
     if request.method == "POST" or simulate:
@@ -263,6 +273,12 @@ def CreatePipeline(request, simulate=False, pipeline_name=None, pipeline_config=
 
 @require_admin_role
 def DeletePipeline(request):
+    """Delete a pipeline from a policy or from Elasticsearch.
+
+    Body (JSON or form):
+        policy_id or es_id: Agent policy pk or CENTRALIZED connection pk.
+        pipeline: Pipeline name.
+    """
     if request.method == "POST":
         # Handle both JSON and form data
         if request.content_type == 'application/json':
@@ -322,6 +338,13 @@ def DeletePipeline(request):
 
 @require_admin_role
 def ClonePipeline(request):
+    """Clone a pipeline to a new name on the same policy or ES connection.
+
+    Args:
+        policy_id or es_id: Agent policy pk or CENTRALIZED connection pk.
+        source_pipeline: Existing pipeline name.
+        new_pipeline: Destination name.
+    """
     if request.method == "POST":
         es_id = request.POST.get("es_id")
         policy_id = request.POST.get("policy_id")
@@ -443,6 +466,13 @@ def ClonePipeline(request):
 
 @require_admin_role
 def RenamePipeline(request):
+    """Rename a pipeline by cloning then deleting the source.
+
+    Args:
+        policy_id or es_id: Agent policy pk or CENTRALIZED connection pk.
+        source_pipeline: Existing pipeline name.
+        new_pipeline: New name.
+    """
     if request.method == "POST":
         es_id = request.POST.get("es_id")
         policy_id = request.POST.get("policy_id")
@@ -569,6 +599,13 @@ def RenamePipeline(request):
 
 @require_admin_role
 def UpdatePipelineDescription(request):
+    """Update a pipeline's description on a policy or in Elasticsearch.
+
+    Args:
+        policy_id or es_id: Agent policy pk or CENTRALIZED connection pk.
+        pipeline_name: Pipeline name.
+        description: New description text.
+    """
     if request.method == "POST":
         es_id = request.POST.get("es_id")
         policy_id = request.POST.get("policy_id")
@@ -669,6 +706,15 @@ def UpdatePipelineDescription(request):
 
 
 def GetPipeline(request):
+    """Return LSCL for a CENTRALIZED Elasticsearch pipeline.
+
+    Args:
+        es_id: CENTRALIZED connection pk.
+        pipeline: Pipeline name.
+
+    Returns:
+        JSON ``{"code": "<lscl>"}``.
+    """
     if request.method == "GET":
         es_id = request.GET.get("es_id")
         pipeline_name = request.GET.get("pipeline")

@@ -90,15 +90,21 @@ _serve_semaphore = threading.BoundedSemaphore(
 
 
 def artifact_dir():
+    """Return the on-disk cache directory for Logstash tarballs."""
     return settings.LOGSTASH_DIR
 
 
 def artifact_path(filename):
+    """Return the absolute path of a cached tarball or sidecar.
+
+    Args:
+        filename: Basename (``logstash-…tar.gz`` or ``.sha512``).
+    """
     return os.path.join(artifact_dir(), filename)
 
 
 def upstream_base_url():
-    """Operator-configured mirror, falling back to Elastic's artifact host.
+    """Return the operator-configured mirror, or Elastic's artifact host.
 
     Read defensively: this runs on the agent-facing hot path and must not break
     on an un-migrated database.
@@ -119,6 +125,9 @@ def sweep_partials():
     Safe to call at any time: a live download holds its ``.part`` open, and on
     POSIX unlinking an open file only removes the name, so the writer fails at
     its final rename rather than corrupting anything.
+
+    Returns:
+        Number of ``.part`` files unlinked.
     """
     removed = 0
     try:
@@ -146,6 +155,10 @@ def _fetch(pk, otel_context=None):
 
     Never raises into the caller; every exit path records terminal state on the
     row so a watching UI and a polling agent both see the outcome.
+
+    Args:
+        pk: ``LogstashArtifact`` primary key.
+        otel_context: Optional trace context from the requesting greenlet.
     """
     detach = artifact_metrics.attach_context(otel_context)
     try:
@@ -244,6 +257,16 @@ def _fetch_expected_sha512(url, filename):
     A mirror may not publish checksums, and refusing to cache in that case would
     make internal mirrors unusable. A checksum that exists but does not parse is
     a different matter and fails the fetch.
+
+    Args:
+        url: Upstream checksum URL.
+        filename: Tarball basename (for log messages).
+
+    Returns:
+        Lowercase hex digest, or None if the sidecar is missing.
+
+    Raises:
+        ValueError: Sidecar exists but is not a 128-char hex digest.
     """
     try:
         response = requests.get(url, timeout=(10, 30))
@@ -267,6 +290,9 @@ def start_fetch(artifact):
     Returns True when a download was started here, False when someone else owns
     it or we are at the upstream cap. Either way the caller answers 503; the
     distinction only matters for logging.
+
+    Args:
+        artifact: ``LogstashArtifact`` row to fetch.
     """
     if not LogstashArtifact.claim_for_fetch(artifact.pk):
         return False
@@ -297,7 +323,15 @@ def start_fetch(artifact):
 
 
 def get_or_create_artifact(filename, *, source_url=''):
-    """Find or register the row for a tarball. Returns None for a bad filename."""
+    """Find or register the row for a tarball.
+
+    Args:
+        filename: Requested ``.tar.gz`` or ``.sha512`` basename.
+        source_url: Optional explicit upstream URL stored on the row.
+
+    Returns:
+        The ``LogstashArtifact`` row, or None for an unrecognized filename.
+    """
     parsed = parse_artifact_filename(filename)
     if parsed is None:
         return None
@@ -322,7 +356,8 @@ def scan_for_imports():
     clicks Import rather than uploading 450 MB through a browser. Hashing is
     deferred to a greenlet because SHA-512 over half a gigabyte takes seconds.
 
-    Returns the list of filenames newly registered.
+    Returns:
+        Filenames newly registered.
     """
     try:
         entries = sorted(os.listdir(artifact_dir()))
@@ -361,7 +396,11 @@ def scan_for_imports():
 
 
 def _verify_import(pk):
-    """Hash an imported tarball and publish it, or fail the row."""
+    """Hash an imported tarball and publish it, or fail the row.
+
+    Args:
+        pk: ``LogstashArtifact`` primary key.
+    """
     try:
         artifact = LogstashArtifact.objects.get(pk=pk)
         path = artifact_path(artifact.filename)
@@ -422,7 +461,14 @@ def _verify_import(pk):
 
 
 def _read_local_checksum(artifact):
-    """Read a hand-supplied ``.sha512`` sidecar, if there is one."""
+    """Read a hand-supplied ``.sha512`` sidecar, if there is one.
+
+    Args:
+        artifact: ``LogstashArtifact`` whose sidecar is next to the tarball.
+
+    Returns:
+        Lowercase hex digest, or None if missing/malformed.
+    """
     path = artifact_path(artifact.checksum_filename)
     if not os.path.exists(path):
         return None
@@ -437,7 +483,11 @@ def _read_local_checksum(artifact):
 
 
 def delete_artifact(artifact):
-    """Remove an artifact row along with its tarball and checksum on disk."""
+    """Remove an artifact row along with its tarball and checksum on disk.
+
+    Args:
+        artifact: ``LogstashArtifact`` to delete.
+    """
     for name in (artifact.filename, artifact.checksum_filename, f"{artifact.filename}.part"):
         try:
             os.unlink(artifact_path(name))
@@ -513,11 +563,17 @@ class _SemaphoreGuardedFile:
 
 
 def _parse_range(header, size):
-    """Parse a single byte range. Returns (start, end) inclusive, or a sentinel.
+    """Parse a single byte range.
 
-    Returns ``None`` when there is no usable range (absent, malformed, or
-    multi-range — all of which are answered with a normal 200), and the string
-    ``'unsatisfiable'`` when the range is well-formed but outside the file.
+    Args:
+        header: Raw ``Range`` header value.
+        size: File size in bytes.
+
+    Returns:
+        Inclusive ``(start, end)``, ``None`` when there is no usable range
+        (absent, malformed, or multi-range — answered with a normal 200),
+        or the string ``'unsatisfiable'`` when the range is well-formed but
+        outside the file.
     """
     if not header:
         return None
@@ -554,13 +610,19 @@ def _retry(status, payload, retry_after):
 
 
 def _authenticate_agent(request, connection_id):
-    """Resolve and verify the calling agent. Returns (connection, error_response).
+    """Resolve and verify the calling agent.
 
     Same inline sequence as the other agent endpoints; the only difference is
     that ``connection_id`` arrives in the URL, because a GET has no body to put
     it in. It has to come from somewhere: an agent key is a bare PBKDF2 hash with
     no lookup column, so the header alone cannot identify a row without hashing
     against every key in the table.
+
+    Args:
+        connection_id: Agent ``Connection`` primary key from the URL.
+
+    Returns:
+        ``(connection, None)`` on success, or ``(None, error_response)``.
     """
     auth_header = request.headers.get('Authorization', '')
     if not auth_header.startswith('ApiKey '):
@@ -606,6 +668,14 @@ def serve_artifact(request, connection_id, filename):
     and a full serve queue with 429 + ``Retry-After``. Both are retryable; the
     agent must not fall back to artifacts.elastic.co, which would defeat the
     point in an air-gapped site.
+
+    Args:
+        connection_id: Agent ``Connection`` primary key.
+        filename: Requested ``.tar.gz`` or ``.sha512`` basename.
+
+    Returns:
+        File stream (200/206), JSON 401/404/405, or JSON 429/502/503 with
+        ``Retry-After``.
     """
     if request.method not in ('GET', 'HEAD'):
         return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)

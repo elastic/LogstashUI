@@ -4,12 +4,12 @@
 
 """Resolve runtime data / logs directories (no Django import).
 
-Precedence: LOGSTASHUI_DATA_DIR / LOGSTASHUI_LOGS_DIR / LOGSTASHUI_LOGSTASH_DIR
-→ default.
+Precedence: ``LOGSTASHUI_DATA_DIR`` / ``LOGSTASHUI_LOGS_DIR`` /
+``LOGSTASHUI_LOGSTASH_DIR`` → default.
 
 Default data root is ``$(pwd)/logstashui_data``. Pytest keeps using
 ``<BASE_DIR>/data`` so test runs do not touch a checkout bind-mount.
-Docker/systemd always set LOGSTASHUI_DATA_DIR=/var/lib/logstashui.
+Docker/systemd always set ``LOGSTASHUI_DATA_DIR=/var/lib/logstashui``.
 """
 
 from __future__ import annotations
@@ -28,10 +28,12 @@ LEGACY_DATA_DIR = BASE_DIR / "data"
 
 
 def project_root() -> Path:
+    """Return the repository / project root (two levels above ``src/logstashui``)."""
     return PROJECT_ROOT
 
 
 def legacy_data_dir() -> Path:
+    """Return the legacy data directory (``src/logstashui/data``)."""
     return LEGACY_DATA_DIR
 
 
@@ -58,7 +60,15 @@ def _coerce_path(raw: Optional[str], *, relative_to: Path) -> Optional[Path]:
 
 
 def resolve_data_dir(*, migrate_legacy: bool = True) -> Path:
-    """Return the runtime data root (sqlite, tls, secrets, default logs)."""
+    """Return the runtime data root (sqlite, tls, secrets, default logs).
+
+    Reads ``LOGSTASHUI_DATA_DIR``, else ``$(pwd)/logstashui_data`` (or
+    ``src/logstashui/data`` under pytest). Optionally copies the legacy tree.
+
+    Args:
+        migrate_legacy: When True (and not pytest), copy ``src/logstashui/data``
+            into the chosen root if the destination has no sqlite yet.
+    """
     env = os.environ.get("LOGSTASHUI_DATA_DIR")
     chosen = _coerce_path(env, relative_to=Path.cwd())
     if chosen is None:
@@ -71,6 +81,13 @@ def resolve_data_dir(*, migrate_legacy: bool = True) -> Path:
 
 
 def resolve_logs_dir(data_dir: Optional[Path] = None) -> Path:
+    """Return the log directory.
+
+    Reads ``LOGSTASHUI_LOGS_DIR``, else ``<data_dir>/logs``.
+
+    Args:
+        data_dir: Data root used when the env var is unset. Resolved if omitted.
+    """
     env = os.environ.get("LOGSTASHUI_LOGS_DIR")
     chosen = _coerce_path(env, relative_to=Path.cwd())
     if chosen is None:
@@ -80,12 +97,16 @@ def resolve_logs_dir(data_dir: Optional[Path] = None) -> Path:
 
 
 def resolve_logstash_dir(data_dir: Optional[Path] = None) -> Path:
-    """Cache root for proxied Logstash release tarballs.
+    """Return the cache root for proxied Logstash release tarballs.
 
+    Reads ``LOGSTASHUI_LOGSTASH_DIR``, else ``<data_dir>/logstashes``.
     Deliberately a sibling of ``staticfiles``, never a child: STATIC_ROOT is
     served by WhiteNoise at ``/static/``, which is in LOGIN_REQUIRED_IGNORE_PATHS,
     so anything under it is an unauthenticated public download. ``collectstatic``
     also runs on every ``serve`` and would churn over half-gigabyte files.
+
+    Args:
+        data_dir: Data root used when the env var is unset. Resolved if omitted.
     """
     env = os.environ.get("LOGSTASHUI_LOGSTASH_DIR")
     chosen = _coerce_path(env, relative_to=Path.cwd())
@@ -96,7 +117,14 @@ def resolve_logstash_dir(data_dir: Optional[Path] = None) -> Path:
 
 
 def maybe_migrate_legacy_data(dest: Path) -> None:
-    """Copy src/logstashui/data → dest when dest has no sqlite and legacy does."""
+    """Copy ``src/logstashui/data`` to dest when dest has no sqlite and legacy does.
+
+    No-op if dest is the legacy path, dest already has ``db.sqlite3``, or the
+    legacy database is missing. Existing dest names are left untouched.
+
+    Args:
+        dest: Chosen runtime data root.
+    """
     try:
         dest = dest.resolve()
         legacy = LEGACY_DATA_DIR.resolve()
@@ -120,7 +148,11 @@ def maybe_migrate_legacy_data(dest: Path) -> None:
 
 
 def resolve_docs_dir() -> Path:
-    """Markdown docs root (contains ``docs/`` and optionally ``CHANGELOG.md``)."""
+    """Return the Markdown docs root (contains ``docs/`` and optionally ``CHANGELOG.md``).
+
+    Reads ``LOGSTASHUI_DOCS_DIR``, else the checkout ``docs/`` tree, else the
+    packaged ``Documentation/content`` directory.
+    """
     env = os.environ.get("LOGSTASHUI_DOCS_DIR")
     chosen = _coerce_path(env, relative_to=Path.cwd())
     if chosen is not None:
@@ -133,6 +165,11 @@ def resolve_docs_dir() -> Path:
 
 
 def resolve_changelog_path() -> Path:
+    """Return the path to ``CHANGELOG.md``.
+
+    Reads ``LOGSTASHUI_CHANGELOG``, else the checkout file, else
+    ``<docs_dir>/CHANGELOG.md``.
+    """
     env = os.environ.get("LOGSTASHUI_CHANGELOG")
     chosen = _coerce_path(env, relative_to=Path.cwd())
     if chosen is not None:
