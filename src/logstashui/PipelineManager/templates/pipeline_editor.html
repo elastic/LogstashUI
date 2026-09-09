@@ -48,7 +48,13 @@
     async function viewPipelineLogs() {
         if (!currentSlotId) {
             console.error('No slot ID available for logs');
-            alert('Unable to fetch logs - slot information not available');
+            await ConfirmationModal.show(
+                'Unable to fetch logs - slot information not available',
+                'Pipeline Logs',
+                'OK',
+                null,
+                true
+            );
             return;
         }
         
@@ -1480,7 +1486,13 @@
     async function viewPipelineLogs() {
         if (!currentSlotId) {
             console.error('No slot ID available for logs');
-            alert('Unable to fetch logs - slot information not available');
+            await ConfirmationModal.show(
+                'Unable to fetch logs - slot information not available',
+                'Pipeline Logs',
+                'OK',
+                null,
+                true
+            );
             return;
         }
         
