@@ -171,6 +171,13 @@ const PluginModal = (function() {
                  onerror="this.style.display='none'"
             >
             <h4 class="font-medium text-white">${name}</h4>
+            ${name === 'elastic_integration' ? `
+              <span class="inline-flex text-blue-300" title="Pinned to the top of the Filter pipeline" aria-label="Pinned to top">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M8 3h8l-1 6 3 3H6l3-3-1-6ZM12 12v9" />
+                </svg>
+              </span>
+            ` : ''}
           </div>
           <div class="flex gap-1">
             ${plugin.bundled === 'Yes' ?
