@@ -3342,8 +3342,14 @@ function addElseToConditional(componentId) {
 
 
 // Function to delete an else-if block
-function deleteElseIfBlock(componentId, elseIfIndex) {
-    if (!confirm('Are you sure you want to remove this else-if block and all its plugins?')) {
+async function deleteElseIfBlock(componentId, elseIfIndex) {
+    const confirmed = await ConfirmationModal.show(
+        'Are you sure you want to remove this else-if block and all its plugins?',
+        'Remove Else-If Block',
+        'Remove'
+    );
+
+    if (!confirmed) {
         return;
     }
 
@@ -3369,8 +3375,14 @@ function deleteElseIfBlock(componentId, elseIfIndex) {
 }
 
 // Function to delete an else block
-function deleteElseBlock(componentId) {
-    if (!confirm('Are you sure you want to remove this else block and all its plugins?')) {
+async function deleteElseBlock(componentId) {
+    const confirmed = await ConfirmationModal.show(
+        'Are you sure you want to remove this else block and all its plugins?',
+        'Remove Else Block',
+        'Remove'
+    );
+
+    if (!confirmed) {
         return;
     }
 
