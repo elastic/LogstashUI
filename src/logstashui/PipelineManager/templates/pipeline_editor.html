@@ -141,7 +141,7 @@
     }
     
     /**
-     * Compact sim status light: colored circle + tooltip; message is sr-only.
+     * Compact labelled simulation status; full message is mirrored into its detail popover.
      * @param {'ok'|'warn'|'err'|'busy'} kind
      */
     function setSimStatusLight(containerId, iconId, messageId, kind, title) {
@@ -149,7 +149,7 @@
         const msg = document.getElementById(messageId);
         if (!el) return;
         const base =
-            'sim-status-light inline-flex items-center justify-center w-8 h-8 rounded-full border';
+            'sim-status-light inline-flex items-center gap-1 px-1.5 h-7 rounded-md border';
         const styles = {
             ok: `${base} border-green-600 bg-green-900/40`,
             warn: `${base} border-yellow-600 bg-yellow-900/40`,
@@ -161,7 +161,7 @@
         el.setAttribute('aria-label', title || '');
 
         const icons = {
-            ok: `<svg id="${iconId}" class="w-4 h-4 text-green-400" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6"></circle></svg>`,
+            ok: `<svg id="${iconId}" class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 12l4 4L19 6"></path></svg>`,
             warn: `<svg id="${iconId}" class="w-4 h-4 text-yellow-400 animate-spin" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`,
             err: `<svg id="${iconId}" class="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M18.364 5.636L5.636 18.364M5.636 5.636l12.728 12.728"></path></svg>`,
             busy: `<svg id="${iconId}" class="w-4 h-4 animate-spin text-gray-300" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`,
@@ -862,8 +862,9 @@
         
         <!-- Row 2: Status | Mode toggle | Actions — 3-col grid avoids absolute-center overlap -->
         <div class="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] gap-3 items-center">
-            <!-- Left: compact sim target + status lights + logs -->
-            <div class="flex items-center gap-2 flex-wrap min-w-0">
+            <!-- Compact simulation panel -->
+            <section class="simulation-panel" aria-label="Simulation">
+                <span class="simulation-panel-label">Simulation</span>
                 <!-- Simulation target: terse closed label; detail via title / option list -->
                 <div id="simTargetSelectWrap" class="inline-flex items-center gap-1.5 shrink-0">
                     <label for="simTargetSelect" class="text-xs text-gray-400 font-medium whitespace-nowrap">Target</label>
@@ -886,48 +887,60 @@
                     </select>
                 </div>
 
-                <!-- Agent reachability: icon-only light (detail on hover) -->
-                <div id="agentStatus"
-                     class="sim-status-light inline-flex items-center justify-center w-8 h-8 rounded-full border border-gray-600 bg-gray-700/50"
-                     title="Checking agent…"
-                     role="status"
-                     aria-live="polite">
-                    <svg id="agentStatusIcon" class="w-4 h-4 animate-spin text-gray-300" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    <span id="agentStatusMessage" class="sr-only">Checking agent…</span>
+                <!-- Agent reachability with full details on hover or focus -->
+                <div class="simulation-status-detail" tabindex="0" aria-label="Agent status" aria-describedby="agentStatusDetail">
+                    <div id="agentStatus"
+                         class="sim-status-light inline-flex items-center gap-1 px-1.5 h-7 rounded-md border border-gray-600 bg-gray-700/50"
+                         title="Checking agent…"
+                         role="status"
+                         aria-live="polite">
+                        <svg id="agentStatusIcon" class="w-4 h-4 animate-spin text-gray-300" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span class="text-xs text-gray-200">Agent</span>
+                        <span id="agentStatusMessage" class="sr-only">Checking agent…</span>
+                    </div>
+                    <span id="agentStatusDetail" class="simulation-status-tooltip" role="tooltip"></span>
                 </div>
                 
-                <!-- Logstash health: icon-only light (detail on hover) -->
-                <div id="logstashState"
-                     class="sim-status-light inline-flex items-center justify-center w-8 h-8 rounded-full border border-gray-600 bg-gray-700/50"
-                     title="Checking Logstash health…"
-                     role="status"
-                     aria-live="polite">
-                    <svg id="logstashStateIcon" class="w-4 h-4 animate-spin text-gray-300" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    <span id="logstashStateMessage" class="sr-only">Checking Logstash health…</span>
+                <!-- Logstash health with full details on hover or focus -->
+                <div class="simulation-status-detail" tabindex="0" aria-label="Logstash status" aria-describedby="logstashStateDetail">
+                    <div id="logstashState"
+                         class="sim-status-light inline-flex items-center gap-1 px-1.5 h-7 rounded-md border border-gray-600 bg-gray-700/50"
+                         title="Checking Logstash health…"
+                         role="status"
+                         aria-live="polite">
+                        <svg id="logstashStateIcon" class="w-4 h-4 animate-spin text-gray-300" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span class="text-xs text-gray-200">Logstash</span>
+                        <span id="logstashStateMessage" class="sr-only">Checking Logstash health…</span>
+                    </div>
+                    <span id="logstashStateDetail" class="simulation-status-tooltip" role="tooltip"></span>
                 </div>
                 
                 <!-- Pipeline slot: quiet "Unallocated" until a slot is actually ready (no spin on page load) -->
-                <div id="pipelineLoadStatus"
-                     class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full border border-gray-600 bg-gray-700/50 max-w-[11rem]"
-                     title="No simulation slot yet">
-                    <svg id="pipelineStatusIcon" class="w-3.5 h-3.5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path>
-                    </svg>
-                    <span id="pipelineStatusMessage" class="text-xs font-medium text-gray-400 truncate">Unallocated</span>
+                <div class="simulation-status-detail" tabindex="0" aria-label="Simulation slot status" aria-describedby="pipelineLoadStatusDetail">
+                    <div id="pipelineLoadStatus"
+                         class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full border border-gray-600 bg-gray-700/50 max-w-[11rem]"
+                         title="No simulation slot yet">
+                        <svg id="pipelineStatusIcon" class="w-3.5 h-3.5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path>
+                        </svg>
+                        <span id="pipelineStatusMessage" class="text-xs font-medium text-gray-400 truncate">Unallocated</span>
+                    </div>
+                    <span id="pipelineLoadStatusDetail" class="simulation-status-tooltip" role="tooltip"></span>
                 </div>
                 
                 <!-- Simulation Logs Button -->
                 <button id="viewPipelineLogsBtn" onclick="viewPipelineLogs()" 
-                        class="text-xs px-2 py-1.5 rounded-md hover:bg-gray-700 transition-colors text-gray-300 hover:text-white underline whitespace-nowrap">
+                        class="simulation-logs text-xs px-1 py-1.5 rounded-md hover:bg-gray-700 transition-colors text-gray-300 hover:text-white whitespace-nowrap">
+                    <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8zM14 2v6h6M8 13h8M8 17h6"/></svg>
                     Logs
                 </button>
-            </div>
+            </section>
             
             <!-- Center: Presentation Mode Toggle (no absolute positioning) -->
             <div class="flex items-center justify-center gap-1 bg-gray-700 rounded-lg p-1 w-fit mx-auto xl:mx-0">
@@ -1335,12 +1348,36 @@
 <div id="slotPreallocationResult" class="hidden"></div>
 
 <style>
-  /* Single target: keep selection but de-emphasize the control */
-  #simTargetSelectWrap.sim-target-single label { display: none; }
-  #simTargetSelectWrap.sim-target-single select {
-    max-width: 7.5rem;
-    border-style: dashed;
-    opacity: 0.9;
+  .simulation-panel {
+    position: relative; display: flex; align-items: center; gap: 6px;
+    min-width: 0; width: fit-content; max-width: 100%; height: 48px;
+    padding: 7px 8px; border: 1px solid #3a4856; border-radius: 8px; background: #202a34;
+  }
+  .simulation-panel-label {
+    position: absolute; top: -8px; left: 10px; padding: 0 5px;
+    background: #202a34; color: #a9bacb; font-size: 10px; font-weight: 600; line-height: 14px;
+  }
+  #simTargetSelectWrap { gap: 5px; padding-right: 7px; border-right: 1px solid #465362; }
+  #simTargetSelect { min-width: 0; max-width: 7rem; padding: 4px; }
+  .simulation-status-detail { position: relative; min-width: 0; border-radius: 5px; }
+  .simulation-status-detail:focus-visible { outline: 2px solid #60a5fa; outline-offset: 2px; }
+  #pipelineLoadStatus { border-radius: 5px; max-width: 100%; height: 28px; padding: 3px 5px; }
+  .simulation-status-tooltip {
+    display: none; position: absolute; top: 100%; left: 0; z-index: 60;
+    width: max-content; max-width: min(340px, 80vw); padding: 10px 12px;
+    border: 1px solid #526174; border-radius: 7px; background: #18222e;
+    box-shadow: 0 8px 24px #0006; color: #e2e8f0; font-size: 12px; line-height: 1.5;
+    white-space: pre-wrap; overflow-wrap: anywhere;
+  }
+  .simulation-status-detail:hover .simulation-status-tooltip,
+  .simulation-status-detail:focus-within .simulation-status-tooltip { display: block; }
+  .simulation-status-detail.sim-detail-dismissed .simulation-status-tooltip { display: none; }
+  .simulation-logs { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; }
+  @media (max-width: 480px) {
+    .simulation-panel { gap: 3px; padding-inline: 4px; }
+    #simTargetSelectWrap label { display: none; }
+    #simTargetSelectWrap { padding-right: 3px; }
+    #simTargetSelect { max-width: 5.5rem; }
   }
   /* Screen-reader-only status text (icon lights use title tooltips) */
   .sr-only {
@@ -1358,6 +1395,20 @@
 </style>
 
 <script>
+    // Mirror existing messages, including slot updates from all simulation paths.
+    document.querySelectorAll('.simulation-status-detail').forEach(wrapper => {
+        const status = wrapper.querySelector('[title]');
+        const tooltip = wrapper.querySelector('[role="tooltip"]');
+        const syncDetail = () => { tooltip.textContent = status.title; };
+        syncDetail();
+        new MutationObserver(syncDetail).observe(status, { attributes: true, attributeFilter: ['title'] });
+        wrapper.addEventListener('keydown', event => {
+            if (event.key === 'Escape') wrapper.classList.add('sim-detail-dismissed');
+        });
+        ['mouseenter', 'focusin', 'click'].forEach(type => {
+            wrapper.addEventListener(type, () => wrapper.classList.remove('sim-detail-dismissed'));
+        });
+    });
     const pipelineName = "{{ pipeline_name }}";
     // Mutable so Sim target picker can switch embedded ↔ simulate without reload
     var simulationMode = "{{ simulation_mode }}";
