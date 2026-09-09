@@ -870,27 +870,34 @@
         <div class="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] gap-3 items-center">
             <!-- Compact simulation panel -->
             <section class="simulation-panel" aria-label="Simulation">
-                <span class="simulation-panel-label">Simulation</span>
                 <!-- Simulation target: terse closed label; detail via title / option list -->
-                <div id="simTargetSelectWrap" class="inline-flex items-center gap-1.5 shrink-0">
-                    <label for="simTargetSelect" class="text-xs text-gray-400 font-medium whitespace-nowrap">Target</label>
-                    <select id="simTargetSelect"
-                            class="text-xs bg-gray-800 border border-gray-600 text-gray-200 rounded-md px-2 py-1.5 w-auto min-w-[6.5rem] max-w-[9rem] focus:outline-none focus:ring-1 focus:ring-purple-500"
-                            title="Simulation agent (hover options for host / Logstash version)">
-                        {% if sim_targets %}
-                            {% for t in sim_targets %}
-                            <option value="{{ t.connection_id }}"
-                                    title="{{ t.detail|default:t.label }}"
-                                    data-detail="{{ t.detail|default:t.label }}"
-                                    data-policy-type="{{ t.policy_type }}"
-                                {% if selected_sim_connection_id == t.connection_id %}selected{% endif %}>
-                                {{ t.label }}
-                            </option>
-                            {% endfor %}
-                        {% else %}
-                            <option value="">…</option>
-                        {% endif %}
-                    </select>
+                <div id="simTargetSelectWrap" class="simulation-target-wrap shrink-0">
+                    <span class="simulation-target-icon" aria-hidden="true">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <rect x="3" y="4" width="18" height="13" rx="2" stroke-width="1.8"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m10 8 5 2.5-5 2.5V8ZM8 21h8M12 17v4"/>
+                        </svg>
+                    </span>
+                    <div class="simulation-target-fields">
+                        <label for="simTargetSelect">Simulation target</label>
+                        <select id="simTargetSelect"
+                                class="text-xs bg-gray-800 border border-gray-600 text-gray-200 rounded-md w-auto focus:outline-none focus:ring-1 focus:ring-purple-500"
+                                title="Simulation agent (hover options for host / Logstash version)">
+                            {% if sim_targets %}
+                                {% for t in sim_targets %}
+                                <option value="{{ t.connection_id }}"
+                                        title="{{ t.detail|default:t.label }}"
+                                        data-detail="{{ t.detail|default:t.label }}"
+                                        data-policy-type="{{ t.policy_type }}"
+                                    {% if selected_sim_connection_id == t.connection_id %}selected{% endif %}>
+                                    {{ t.label }}
+                                </option>
+                                {% endfor %}
+                            {% else %}
+                                <option value="">…</option>
+                            {% endif %}
+                        </select>
+                    </div>
                 </div>
 
                 <!-- Agent reachability with full details on hover or focus -->
@@ -949,15 +956,29 @@
             </section>
             
             <!-- Center: Presentation Mode Toggle (no absolute positioning) -->
-            <div class="flex items-center justify-center gap-1 bg-gray-700 rounded-lg p-1 w-fit mx-auto xl:mx-0">
+            <div class="editor-mode-switcher flex items-center justify-center gap-1 bg-gray-700 rounded-lg p-1 w-fit mx-auto xl:mx-0">
                 <button id="uiModeBtn" class="w-16 py-2 rounded-md font-medium transition-all bg-green-600 text-white mode-toggle-active" onclick="switchToUIMode()">
-                    UI
+                    <svg class="editor-mode-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <rect x="4" y="4" width="16" height="16" rx="2" stroke-width="1.8"/>
+                        <path stroke-linecap="round" stroke-width="1.8" d="M8 9h8M8 15h5"/>
+                        <circle cx="16.5" cy="15" r="1.5" stroke-width="1.5"/>
+                    </svg>
+                    <span>UI</span>
                 </button>
                 <button id="textModeBtn" class="w-16 py-2 rounded-md font-medium transition-all text-gray-300 hover:bg-gray-600" onclick="switchToTextMode()">
-                    Text
+                    <svg class="editor-mode-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m9 7-5 5 5 5M15 7l5 5-5 5M13 5l-2 14"/>
+                    </svg>
+                    <span>Text</span>
                 </button>
                 <button id="graphModeBtn" class="w-16 py-2 rounded-md font-medium transition-all text-gray-300 hover:bg-gray-600" onclick="switchToGraphMode()">
-                    Graph
+                    <svg class="editor-mode-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <circle cx="12" cy="5" r="2.25" stroke-width="1.8"/>
+                        <circle cx="5" cy="18" r="2.25" stroke-width="1.8"/>
+                        <circle cx="19" cy="18" r="2.25" stroke-width="1.8"/>
+                        <path stroke-width="1.8" d="m10.9 7-4.8 8.9M13.1 7l4.8 8.9M7.25 18h9.5"/>
+                    </svg>
+                    <span>Graph</span>
                 </button>
             </div>
             
@@ -1357,14 +1378,24 @@
   .simulation-panel {
     position: relative; display: flex; align-items: center; gap: 6px;
     min-width: 0; width: fit-content; max-width: 100%; height: 48px;
-    padding: 7px 8px; border: 1px solid #3a4856; border-radius: 8px; background: #202a34;
+    padding: 5px 8px; border: 1px solid #3a4856; border-radius: 8px; background: #202a34;
   }
-  .simulation-panel-label {
-    position: absolute; top: -8px; left: 10px; padding: 0 5px;
-    background: #202a34; color: #a9bacb; font-size: 10px; font-weight: 600; line-height: 14px;
+  .simulation-target-wrap {
+    display: flex; align-items: center; gap: 7px; height: 34px;
+    padding-right: 9px; border-right: 1px solid #52606f;
   }
-  #simTargetSelectWrap { gap: 5px; padding-right: 7px; border-right: 1px solid #465362; }
-  #simTargetSelect { min-width: 0; max-width: 7rem; padding: 4px; }
+  .simulation-target-icon {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; flex-shrink: 0; border-radius: 7px;
+    color: #60a5fa; background: #193a5c;
+  }
+  .simulation-target-fields {
+    display: flex; flex-direction: column; align-items: stretch; gap: 1px;
+  }
+  .simulation-target-fields label {
+    color: #a9bacb; font-size: 9px; font-weight: 500; line-height: 10px; white-space: nowrap;
+  }
+  #simTargetSelect { min-width: 6.5rem; max-width: 7rem; height: 23px; padding: 1px 5px; }
   .simulation-status-detail { position: relative; min-width: 0; border-radius: 5px; }
   .simulation-status-detail:focus-visible { outline: 2px solid #60a5fa; outline-offset: 2px; }
   #pipelineLoadStatus { border-radius: 5px; max-width: 100%; height: 28px; padding: 3px 5px; }
@@ -1379,10 +1410,17 @@
   .simulation-status-detail:focus-within .simulation-status-tooltip { display: block; }
   .simulation-status-detail.sim-detail-dismissed .simulation-status-tooltip { display: none; }
   .simulation-logs { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; }
+  #uiModeBtn,
+  #textModeBtn,
+  #graphModeBtn {
+    display: inline-flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 2px; width: 64px; height: 48px; padding: 4px; font-size: 11px; line-height: 13px;
+  }
+  .editor-mode-icon { width: 18px; height: 18px; flex-shrink: 0; }
   @media (max-width: 480px) {
     .simulation-panel { gap: 3px; padding-inline: 4px; }
-    #simTargetSelectWrap label { display: none; }
-    #simTargetSelectWrap { padding-right: 3px; }
+    .simulation-target-wrap { gap: 4px; padding-right: 4px; }
+    .simulation-target-icon { width: 26px; height: 26px; }
     #simTargetSelect { max-width: 5.5rem; }
   }
   /* Screen-reader-only status text (icon lights use title tooltips) */
