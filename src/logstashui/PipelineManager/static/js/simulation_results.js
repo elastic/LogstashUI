@@ -2048,7 +2048,7 @@ function initSimulationResults(runId) {
                                 <h3 class="text-base font-semibold text-red-400">Simulation Timeout</h3>
                                 <p class="text-sm text-red-200">
                                     No results received after 60 seconds. The pipeline may have failed or encountered an error.
-                                    Click "View Logs" to check for errors.
+                                    Use "Logs" in the Simulation controls to check for errors.
                                 </p>
                             </div>
                         </div>
@@ -2539,112 +2539,6 @@ function initSimulationResults(runId) {
 }
 
 /**
- * View Logstash logs for the current simulation
- */
-window.viewSimulationLogs = function() {
-    const overlay = document.getElementById('simulation-overlay');
-    if (!overlay) {
-        console.error('Simulation overlay not found');
-        ConfirmationModal.show('Unable to fetch logs — simulation overlay not found.', 'Error', 'OK', null, true);
-        return;
-    }
-    
-    const slotId = overlay.getAttribute('data-slot-id');
-    if (!slotId) {
-        console.error('Slot ID not found in overlay');
-        ConfirmationModal.show('Unable to fetch logs — slot information not available.', 'Error', 'OK', null, true);
-        return;
-    }
-    
-    // Show loading modal
-    const modal = document.createElement('div');
-    modal.id = 'logs-modal';
-    modal.className = 'fixed inset-0 flex items-center justify-center z-[60] p-4';
-    modal.innerHTML = `
-        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="document.getElementById('logs-modal').remove()"></div>
-        <div class="bg-gray-800 rounded-lg w-full max-w-6xl max-h-[90vh] flex flex-col relative z-10 border border-gray-700">
-            <div class="p-4 border-b border-gray-700 flex justify-between items-center">
-                <h3 class="text-lg font-semibold text-white">Pipeline Logs - slot${slotId}-filter1</h3>
-                <button onclick="document.getElementById('logs-modal').remove()" class="text-gray-400 hover:text-white">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                    </svg>
-                </button>
-            </div>
-            <div class="p-6 overflow-y-auto flex-grow">
-                <div id="logs-content" class="bg-gray-900 rounded-lg p-4 font-mono text-sm text-gray-300">
-                    <div class="flex items-center justify-center py-8">
-                        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-400"></div>
-                        <span class="ml-3">Loading logs...</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
-    
-    document.body.appendChild(modal);
-    
-    // Fetch logs from Django API endpoint (include sim target for multi-agent)
-    let logsUrl = `/ConnectionManager/GetRelatedLogs/?slot_id=${encodeURIComponent(slotId)}&max_entries=100&min_level=INFO`;
-    if (typeof window.getSimConnectionId === 'function' && window.getSimConnectionId()) {
-        logsUrl += `&sim_connection_id=${encodeURIComponent(window.getSimConnectionId())}`;
-    }
-    fetch(logsUrl)
-        .then(response => response.json())
-        .then(data => {
-            const logsContent = document.getElementById('logs-content');
-
-            if (data.error) {
-                logsContent.innerHTML = `<div class="text-red-400">Error fetching logs: ${data.error}</div>`;
-                return;
-            }
-            
-            if (!data.logs || data.logs.length === 0) {
-                logsContent.innerHTML = '<div class="text-yellow-400">No logs found for this pipeline. (Clean runs often produce no INFO-level pipeline logs — try min level DEBUG or re-run after an error.)</div>';
-                return;
-            }
-            
-            let html = `<div class="text-green-400 mb-4">Found ${data.log_count} log entries - Time shown in UTC</div>`;
-            
-            data.logs.forEach((log, idx) => {
-                const level = log.level || 'INFO';
-                const levelColor = {
-                    'ERROR': 'text-red-400',
-                    'WARN': 'text-yellow-400',
-                    'INFO': 'text-blue-400',
-                    'DEBUG': 'text-gray-400'
-                }[level] || 'text-gray-400';
-                
-                const timestamp = log.timeMillis ? new Date(log.timeMillis).toISOString() : 'N/A';
-                const logEvent = log.logEvent || {};
-                const message = logEvent.message || log.message || 'No message';
-                const logger = log.loggerName || 'unknown';
-                
-                html += `
-                    <div class="mb-4 pb-4 border-b border-gray-700">
-                        <div class="flex items-center gap-3 mb-2">
-                            <span class="${levelColor} font-bold">[${level}]</span>
-                            <span class="text-gray-500 text-xs">${timestamp}</span>
-                            <span class="text-gray-400 text-xs">${logger}</span>
-                        </div>
-                        <div class="text-gray-200 mb-2">${escapeHtml(message)}</div>
-                        <details class="text-xs">
-                            <summary class="cursor-pointer text-blue-400 hover:text-blue-300">View full log entry</summary>
-                            <pre class="mt-2 p-2 bg-gray-950 rounded overflow-x-auto">${JSON.stringify(log, null, 2)}</pre>
-                        </details>
-                    </div>
-                `;
-            });
-            
-            logsContent.innerHTML = html;
-        })
-        .catch(error => {
-            const logsContent = document.getElementById('logs-content');
-            logsContent.innerHTML = `<div class="text-red-400">Error fetching logs: ${error.message}</div>`;
-        });
-};
-
-/**
  * Show a loading block overlay over the simulation overlay bar to prevent interaction
  * during multi-simulation updates
  */
@@ -2709,4 +2603,3 @@ document.addEventListener('click', function(e) {
         linkTooltip.remove();
     }
 });
-
