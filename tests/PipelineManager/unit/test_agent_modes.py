@@ -448,9 +448,9 @@ def test_list_simulation_targets(db, system_policies):
     targets = list_simulation_targets(ensure_embedded=False)
     assert len(targets) == 2
     labels = [t['label'] for t in targets]
-    # Dedicated simulate-N first; discovered embedded last
-    assert labels == ['simulate-1', 'embedded']
-    sim = next(t for t in targets if t['label'] == 'simulate-1')
+    # Dedicated simulation agent first; discovered embedded last
+    assert labels == ['sim1', 'embedded']
+    sim = next(t for t in targets if t['label'] == 'sim1')
     assert '10.0.0.5' in sim['detail']
     assert '9.4.3' in sim['detail']
     emb = next(t for t in targets if t['label'] == 'embedded')
@@ -664,7 +664,7 @@ def test_list_targets_embedded_after_simulate(system_policies, monkeypatch):
         is_active=True,
     )
     labels = [t['label'] for t in list_simulation_targets(ensure_embedded=True)]
-    assert labels[0] == 'simulate-1'
+    assert labels[0] == 'sim1'
     assert labels[-1] == 'embedded'
 
 
