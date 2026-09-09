@@ -990,30 +990,41 @@
                     <!-- Utility Button: View Code -->
                     <button type="button"
                             id="viewCode"
-                            class="w-36 py-2 bg-gray-700 text-gray-200 rounded-md hover:bg-gray-600 transition-colors text-sm font-medium"
+                            class="w-36 py-2 inline-flex items-center justify-center gap-2 bg-gray-700 text-gray-200 rounded-md hover:bg-gray-600 transition-colors text-sm font-medium"
                             onclick="viewGeneratedCode()">
-                        View Code
+                        <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-6-6Z"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M14 3v6h6M9 13l-2 2 2 2M15 13l2 2-2 2M13 12l-2 6"/>
+                        </svg>
+                        <span>View Code</span>
                     </button>
                     
                     <!-- Secondary Button: Simulate -->
                     <button type="button"
                             id="simulatePipeline"
-                            class="w-36 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors text-sm font-medium"
+                            class="w-36 py-2 inline-flex items-center justify-center gap-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors text-sm font-medium"
                             onclick="openSimulateModal()">
-                        Simulate
+                        <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m8 5 11 7-11 7V5Z"/>
+                        </svg>
+                        <span>Simulate</span>
                     </button>
                     
                     <!-- Primary Button: Save -->
                     <button type="button"
                             id="savePipeline"
-                            class="w-36 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm font-semibold shadow-lg hover:shadow-xl"
+                            class="w-36 py-2 inline-flex items-center justify-center gap-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm font-semibold shadow-lg hover:shadow-xl"
                             hx-post="/ConnectionManager/SavePipeline/"
                             hx-include="#pipelineForm"
                             hx-trigger="none"
                             hx-target="#saveStatus"
                             hx-vals='js:{"save_pipeline": "true", "es_id": new URLSearchParams(window.location.search).get("es_id"), "ls_id": new URLSearchParams(window.location.search).get("ls_id"), "pipeline": new URLSearchParams(window.location.search).get("pipeline"), "components": components}'
                             onclick="prepareDiffModal()">
-                        Save Pipeline
+                        <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M5 3h12l3 3v15H4V4a1 1 0 0 1 1-1Z"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M8 3v6h8V3M8 21v-7h8v7"/>
+                        </svg>
+                        <span>Save Pipeline</span>
                     </button>
                 </form>
             </div>
@@ -1413,10 +1424,16 @@
   #uiModeBtn,
   #textModeBtn,
   #graphModeBtn {
-    display: inline-flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: 2px; width: 64px; height: 48px; padding: 4px; font-size: 11px; line-height: 13px;
+    display: inline-flex; align-items: center; justify-content: center;
+    gap: 6px; width: 68px; height: 36px; padding: 4px 7px; border: 1px solid transparent;
+    font-size: 11px; line-height: 13px;
   }
-  .editor-mode-icon { width: 18px; height: 18px; flex-shrink: 0; }
+  .editor-mode-icon { width: 16px; height: 16px; flex-shrink: 0; }
+  .editor-mode-switcher .mode-toggle-active {
+    animation: none; background: #16a34a;
+    border: 1px solid rgba(74, 222, 128, 0.6);
+    box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.18), 0 3px 10px rgba(0, 0, 0, 0.28);
+  }
   @media (max-width: 480px) {
     .simulation-panel { gap: 3px; padding-inline: 4px; }
     .simulation-target-wrap { gap: 4px; padding-right: 4px; }
