@@ -23,7 +23,7 @@ Requirements: Linux x86_64 (wheels can also be downloaded from another OS via pi
 ./bin/freeze_logstashui.sh --wheels
 ./bin/freeze_logstashui.sh --docker
 ./bin/freeze_logstashui.sh --all          # default if you pass no artifact flags
-./bin/freeze_logstashui.sh --docker --image logstashui:offline-0.5.2
+./bin/freeze_logstashui.sh --docker --image logstashui:offline-0.5.3
 ```
 
 `--image` saves a **local** tag. The script never `docker pull`.

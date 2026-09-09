@@ -23,7 +23,7 @@ start_logstashui.bat --update
 
 ## LogstashAgent pairing
 
-When LogstashUI is updated, upgrade enrolled agents to the **preferred agent version** shown in the UI (banner / Settings). For **0.5.2**:
+When LogstashUI is updated, upgrade enrolled agents to the **preferred agent version** shown in the UI (banner / Settings). For **0.5.3**:
 
 1. Install the matching LogstashAgent package on each host.
 2. Restart the agent unit for that role (`logstash-agent`, `logstash-agent@N`, or `lsagent-simulate@N`).

@@ -22,13 +22,19 @@ from .insecure_http import (
     warn_if_enabled,
 )
 from .database import build_databases
-from .logging_config import resolve_django_log_levels, resolve_log_level, ROTATING_FILE_HANDLER_CLASS
+from .logging_config import (
+    resolve_django_log_levels,
+    resolve_log_level,
+    ROTATING_FILE_HANDLER_CLASS,
+)
 from .paths import (
     resolve_data_dir,
     resolve_docs_dir,
     resolve_logs_dir,
     resolve_logstash_dir,
 )
+
+__PREFERRED_LS_AGENT_VERSION__ = "0.5.3-dev0"
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -88,7 +94,7 @@ def _get_version():
 
 
 __VERSION__ = _get_version()
-__PREFERRED_LS_AGENT_VERSION__ = "0.5.2"
+
 
 # Application definition
 
@@ -287,7 +293,9 @@ USE_X_FORWARDED_PORT = True
 # Example: CSRF_TRUSTED_ORIGINS=https://myserver.com,https://192.168.1.100
 csrf_origins_env = os.environ.get("CSRF_TRUSTED_ORIGINS", "")
 if csrf_origins_env:
-    CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in csrf_origins_env.split(",") if origin.strip()]
+    CSRF_TRUSTED_ORIGINS = [
+        origin.strip() for origin in csrf_origins_env.split(",") if origin.strip()
+    ]
 else:
     # Default for local development
     CSRF_TRUSTED_ORIGINS = [

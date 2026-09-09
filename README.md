@@ -14,6 +14,12 @@ LogstashUI provides a visual interface for designing, testing, and operating Log
 
 Instead of editing configuration files manually, pipelines can be authored visually, simulated against sample events, and deployed to multiple Logstash nodes from a single interface.
 
+### Supported Platforms
+
+Officially, if all other requirements are met, LogstashUI can run on any x86-64 or arm64 platform that can run Docker.
+
+It should be noted that at this time, Windows cannot run LogstashUI natively via Python due to a lack of support. However, running via Docker in Windows is fully supported.
+
 ## Features
 
 <details>
