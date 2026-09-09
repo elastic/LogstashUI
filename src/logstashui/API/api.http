@@ -1,0 +1,84 @@
+# LogstashUI REST API — example requests
+# Set all variables below before running.
+
+@baseUrl = http://localhost:8080
+@apiKey = lsui_your_token_here
+
+# Connection variables
+@connectionId = 1
+@connectionName = My Connection
+@host = https://elasticsearch.example.com
+@port = 9200
+@username = elastic
+@password = changeme
+@cloudId = my-deployment:dXMtZWFzdC0xLmF3cy5mb3VuZC5pbyQ...
+@esApiKey = VuaCfGcBCdbkQm-e5aOx:ui2lp2axTNmsyakw9tvNnw
+
+###
+# List all connections
+GET {{baseUrl}}/api/connections/
+Authorization: ApiKey {{apiKey}}
+Accept: application/json
+
+###
+# Get a single connection
+GET {{baseUrl}}/api/connections/{{connectionId}}/
+Authorization: ApiKey {{apiKey}}
+Accept: application/json
+
+###
+# Create a CENTRALIZED connection via Elastic Node URL + basic auth
+# connection_mode: "url" or "cloud"
+# auth_type: "basic" or "apiKey"
+POST {{baseUrl}}/api/connections/
+Authorization: ApiKey {{apiKey}}
+Content-Type: application/json
+
+{
+  "name": "{{connectionName}}",
+  "connection_type": "CENTRALIZED",
+  "connection_mode": "url",
+  "auth_type": "basic",
+  "host": "{{host}}",
+  "port": {{port}},
+  "username": "{{username}}",
+  "password": "{{password}}"
+}
+
+###
+# Create a CENTRALIZED connection via Cloud ID + API key
+POST {{baseUrl}}/api/connections/
+Authorization: ApiKey {{apiKey}}
+Content-Type: application/json
+
+{
+  "name": "{{connectionName}}",
+  "connection_type": "CENTRALIZED",
+  "connection_mode": "cloud",
+  "auth_type": "apiKey",
+  "cloud_id": "{{cloudId}}",
+  "api_key": "{{esApiKey}}"
+}
+
+###
+# Update a connection (credentials must be re-supplied; connectivity is re-tested)
+PUT {{baseUrl}}/api/connections/{{connectionId}}/
+Authorization: ApiKey {{apiKey}}
+Content-Type: application/json
+
+{
+  "name": "{{connectionName}}",
+  "connection_type": "CENTRALIZED",
+  "connection_mode": "url",
+  "auth_type": "basic",
+  "host": "{{host}}",
+  "port": {{port}},
+  "username": "{{username}}",
+  "password": "{{password}}"
+}
+
+###
+# Delete a connection
+DELETE {{baseUrl}}/api/connections/{{connectionId}}/
+Authorization: ApiKey {{apiKey}}
+Accept: application/json
