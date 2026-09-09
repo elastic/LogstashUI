@@ -5,12 +5,14 @@ The ways to deploy LogstashUI, from the standard Docker install to running from 
 > [!TIP]
 > If you have internet access and can use Docker and GitHub, use **Option 1** — it's the standard install and takes a couple of minutes. See the [Getting Started guide](/docs/docs/getting_started.md) for the step-by-step walkthrough.
 
-- [Option 1: Standard Docker Deployment (Recommended)](#option-1-standard-docker-deployment-recommended)
-- [Option 2: Host-backed Simulation](#option-2-host-backed-simulation)
-- [Option 3: pip / uv + systemd](#option-3-pip--uv--systemd)
-- [Option 4: Source Development Setup](#option-4-source-development-setup)
-- [Option 5: Kubernetes](#option-5-kubernetes)
-- [Option 6: Air-gapped freeze (optional)](#option-6-air-gapped-freeze-optional)
+- [Deploying LogstashUI](#deploying-logstashui)
+  - [Option 1: Standard Docker Deployment (Recommended)](#option-1-standard-docker-deployment-recommended)
+  - [Option 2: Host-backed Simulation (prefer enrolled Simulate agents)](#option-2-host-backed-simulation-prefer-enrolled-simulate-agents)
+  - [Option 3: pip / uv + systemd](#option-3-pip--uv--systemd)
+  - [Option 4: Source Development Setup](#option-4-source-development-setup)
+  - [Option 5: Kubernetes](#option-5-kubernetes)
+  - [Option 6: Air-gapped freeze (optional)](#option-6-air-gapped-freeze-optional)
+  - [Related Documentation](#related-documentation)
 
 ---
 
@@ -66,7 +68,7 @@ For frequent or heavy simulation, enroll one or more **Simulate** policy agents 
 ## Option 3: pip / uv + systemd
 
 ```bash
-pip install logstashui-0.5.2-py3-none-any.whl   # or: uv pip install …
+pip install logstashui-0.5.3-py3-none-any.whl   # or: uv pip install …
 logstashui                                       # HTTPS :8443, data in $(pwd)/logstashui_data
 sudo logstashui systemd                          # writes /etc/default/logstashui + unit; does not enable
 sudo systemctl enable --now logstashui

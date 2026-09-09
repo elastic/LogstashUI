@@ -1,3 +1,19 @@
+## [0.5.3] - In Progress as 0.5.3-dev
+
+### Changes
+
+- Fix database CI test script. (#203)
+- Remove experimental `standalone` from `freeze_logstgashui.sh` and associated templates. (#201)
+- Remove native Python support for Windows. The only accepted path to run on Windows will be via Docker.
+- Move `__PREFERRED_LS_AGENT_VERSION__` near the top of `LogstashUI.settings.py`, and remove the single `assert` test for that constant.
+
+### Documentation
+
+- Update docs to reflect future 0.5.3 release.
+- Fix bad examples in k8s documentation & examples. (#202)
+- Update functions to use Google-style Python docstrings (#205)
+
+
 ## [0.5.2] - Multi-database + k8s - 09/06/2026
 
 Package version is **0.5.2** (`pyproject.toml`). Preferred LogstashAgent version is **0.5.2** (lockstep).
