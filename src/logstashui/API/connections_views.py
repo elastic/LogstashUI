@@ -2,23 +2,19 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
-"""REST API views for LogstashUI.
+"""REST API views for Connection management.
 
-Authentication
---------------
-All mutating endpoints (POST, PUT, DELETE) require an admin-role user.
-Callers supply ``Authorization: ApiKey <token>`` which is resolved by
-``Common.middleware.ApiTokenCsrfMiddleware`` / ``ApiTokenUserMiddleware``
-before the view runs.  In NO_AUTH_MODE the middleware injects a user
-automatically, so no token is needed.
-
-Read endpoints (GET) are open to any authenticated user — the same rule as
-the browser UI list views.
+Endpoints
+---------
+GET    /api/connections/              list_connections
+POST   /api/connections/              list_connections
+GET    /api/connections/{id}/         connection_detail
+PUT    /api/connections/{id}/         connection_detail
+DELETE /api/connections/{id}/         connection_detail
+POST   /api/connections/{id}/test/    connection_test
 """
 
-import json
 import logging
-from functools import wraps
 
 from django.db import transaction
 from django.http import JsonResponse
@@ -29,54 +25,13 @@ from PipelineManager.forms import ConnectionForm
 from PipelineManager import manager_views
 from PipelineManager.agent_modes import is_embedded_connection
 
+from API.auth import api_require_auth, api_require_admin, parse_request_body
+
 logger = logging.getLogger(__name__)
 
 
-def _api_require_auth(view_func):
-    """Return 401 JSON for unauthenticated callers.
-
-    Placed before mutating decorators so that missing credentials produce a
-    401 (not a 403 or an htmx HTML response).
-    """
-    @wraps(view_func)
-    def wrapper(request, *args, **kwargs):
-        if not request.user.is_authenticated:
-            return JsonResponse(
-                {'success': False, 'error': 'Authentication required. Provide Authorization: ApiKey <token>.'},
-                status=401,
-            )
-        return view_func(request, *args, **kwargs)
-    return wrapper
-
-
-def _api_require_admin(view_func):
-    """Return 401/403 JSON for callers without an admin role.
-
-    Stacks on top of ``_api_require_auth``: unauthenticated → 401,
-    authenticated-but-not-admin → 403.  Always JSON — no htmx toasts.
-    """
-    @wraps(view_func)
-    def wrapper(request, *args, **kwargs):
-        if not request.user.is_authenticated:
-            return JsonResponse(
-                {'success': False, 'error': 'Authentication required. Provide Authorization: ApiKey <token>.'},
-                status=401,
-            )
-        if not hasattr(request.user, 'profile') or request.user.profile.role != 'admin':
-            logger.warning(
-                "API: user '%s' attempted admin operation without admin role: %s",
-                request.user.username, view_func.__name__,
-            )
-            return JsonResponse(
-                {'success': False, 'error': 'Access denied: Admin role required.'},
-                status=403,
-            )
-        return view_func(request, *args, **kwargs)
-    return wrapper
-
-
 # ---------------------------------------------------------------------------
-# Helpers
+# Serialization helpers
 # ---------------------------------------------------------------------------
 
 def _safe_connection_data(conn):
@@ -110,27 +65,6 @@ def _safe_connection_data(conn):
     }
 
 
-def _parse_body(request):
-    """Return request data as a plain dict.
-
-    Accepts JSON body (``Content-Type: application/json``) or falls back to
-    ``request.POST`` for form-encoded submissions.
-
-    Args:
-        request: Django request object.
-
-    Returns:
-        dict of submitted data, or an empty dict on parse failure.
-    """
-    content_type = request.content_type or ''
-    if 'application/json' in content_type:
-        try:
-            return json.loads(request.body)
-        except (json.JSONDecodeError, ValueError):
-            return {}
-    return dict(request.POST)
-
-
 # ---------------------------------------------------------------------------
 # /api/connections/  — list + create
 # ---------------------------------------------------------------------------
@@ -155,7 +89,7 @@ def connection_list(request):
     return JsonResponse({'error': 'Method not allowed'}, status=405)
 
 
-@_api_require_auth
+@api_require_auth
 def _list_connections(request):
     connections_qs = Connection.objects.values(
         'id', 'name', 'connection_type', 'agent_id',
@@ -176,9 +110,9 @@ def _list_connections(request):
     return JsonResponse(connections, safe=False, status=200)
 
 
-@_api_require_admin
+@api_require_admin
 def _create_connection(request):
-    data = _parse_body(request)
+    data = parse_request_body(request)
     form = ConnectionForm(data)
 
     if not form.is_valid():
@@ -222,7 +156,7 @@ def connection_detail(request, connection_id):
     return JsonResponse({'error': 'Method not allowed'}, status=405)
 
 
-@_api_require_auth
+@api_require_auth
 def _get_connection(request, connection_id):
     conn = Connection.objects.filter(id=connection_id).first()
     if not conn:
@@ -230,13 +164,13 @@ def _get_connection(request, connection_id):
     return JsonResponse({'success': True, 'connection': _safe_connection_data(conn)})
 
 
-@_api_require_admin
+@api_require_admin
 def _update_connection(request, connection_id):
     conn = Connection.objects.filter(id=connection_id).first()
     if not conn:
         return JsonResponse({'success': False, 'error': 'Connection not found'}, status=404)
 
-    data = _parse_body(request)
+    data = parse_request_body(request)
     form = ConnectionForm(data, instance=conn)
 
     if not form.is_valid():
@@ -267,7 +201,7 @@ def _update_connection(request, connection_id):
     })
 
 
-@_api_require_admin
+@api_require_admin
 def _delete_connection(request, connection_id):
     conn = Connection.objects.filter(id=connection_id).first()
     if not conn:
@@ -277,3 +211,36 @@ def _delete_connection(request, connection_id):
     conn.delete()
     logger.warning("API: connection '%s' (ID: %s) deleted by %s", name, connection_id, request.user.username)
     return JsonResponse({'success': True, 'message': f"Connection '{name}' deleted."}, status=200)
+
+
+# ---------------------------------------------------------------------------
+# /api/connections/<id>/test/  — live connectivity check
+# ---------------------------------------------------------------------------
+
+@csrf_exempt
+@api_require_auth
+def connection_test(request, connection_id):
+    """Test connectivity to an existing connection.
+
+    POST /api/connections/{id}/test/
+        Runs a live connectivity check against the stored connection and
+        returns the cluster info on success or an error message on failure.
+        No data is modified.  Requires any authenticated user (not admin-only
+        — same rule as the browser UI test button).
+
+    Args:
+        connection_id: ``Connection`` primary key.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+    conn = Connection.objects.filter(id=connection_id).first()
+    if not conn:
+        return JsonResponse({'success': False, 'error': 'Connection not found'}, status=404)
+
+    logger.info("API: connectivity test for connection %s by %s", connection_id, request.user.username)
+    success, message = manager_views.test_connectivity(connection_id)
+
+    if success:
+        return JsonResponse({'success': True, 'detail': message})
+    return JsonResponse({'success': False, 'error': str(message)}, status=422)

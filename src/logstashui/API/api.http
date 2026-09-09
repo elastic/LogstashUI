@@ -82,3 +82,106 @@ Content-Type: application/json
 DELETE {{baseUrl}}/api/connections/{{connectionId}}/
 Authorization: ApiKey {{apiKey}}
 Accept: application/json
+
+###
+# Test connectivity to an existing connection (no data modified)
+POST {{baseUrl}}/api/connections/{{connectionId}}/test/
+Authorization: ApiKey {{apiKey}}
+Content-Length: 0
+
+### =====================================================================
+### Security — Bootstrap, Users, API Keys
+### =====================================================================
+
+###
+# Check whether the system has been bootstrapped (no auth required)
+GET {{baseUrl}}/api/security/bootstrap/
+
+###
+# Bootstrap the first admin user (no auth required, fails if already bootstrapped)
+# Set create_key: true to receive a one-time API key in the response
+POST {{baseUrl}}/api/security/bootstrap/
+Content-Type: application/json
+
+{
+  "username": "{{username}}",
+  "password": "{{password}}",
+  "email": "",
+  "create_key": true,
+  "key_name": "Bootstrap Key"
+}
+
+###
+# Who am I? (token/session introspection)
+GET {{baseUrl}}/api/security/me/
+Authorization: ApiKey {{apiKey}}
+
+### ---- Users ----
+
+###
+# List all users
+GET {{baseUrl}}/api/security/users/
+Authorization: ApiKey {{apiKey}}
+
+###
+# Create a new user
+POST {{baseUrl}}/api/security/users/
+Authorization: ApiKey {{apiKey}}
+Content-Type: application/json
+
+{
+  "username": "newuser",
+  "password": "{{password}}",
+  "email": "",
+  "role": "readonly"
+}
+
+###
+# Get a single user
+GET {{baseUrl}}/api/security/users/{{connectionId}}/
+Authorization: ApiKey {{apiKey}}
+
+###
+# Update a user's role and/or password (supply either or both)
+PUT {{baseUrl}}/api/security/users/{{connectionId}}/
+Authorization: ApiKey {{apiKey}}
+Content-Type: application/json
+
+{
+  "role": "readonly",
+  "password": "{{password}}"
+}
+
+###
+# Delete a user
+DELETE {{baseUrl}}/api/security/users/{{connectionId}}/
+Authorization: ApiKey {{apiKey}}
+
+### ---- API Keys ----
+
+###
+# List all API keys
+GET {{baseUrl}}/api/security/keys/
+Authorization: ApiKey {{apiKey}}
+
+###
+# Create a new API key (returns one-time plaintext token — store it now)
+POST {{baseUrl}}/api/security/keys/
+Authorization: ApiKey {{apiKey}}
+Content-Type: application/json
+
+{
+  "name": "My API Key",
+  "expires_days": 90
+}
+
+###
+# Revoke an API key (key stops working; row kept for audit)
+POST {{baseUrl}}/api/security/keys/1/revoke/
+Authorization: ApiKey {{apiKey}}
+Content-Length: 0
+
+###
+# Delete an API key (permanent hard delete)
+DELETE {{baseUrl}}/api/security/keys/1/
+Authorization: ApiKey {{apiKey}}
