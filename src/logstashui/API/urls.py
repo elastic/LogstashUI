@@ -6,13 +6,17 @@
 
 from django.urls import path
 
-from API import connections_views, security_views
+from API import connections_views, security_views, snmp_views
 
 urlpatterns = [
     # Connections
     path('connections/', connections_views.connection_list, name='api-connections-list'),
     path('connections/<int:connection_id>/', connections_views.connection_detail, name='api-connections-detail'),
     path('connections/<int:connection_id>/test/', connections_views.connection_test, name='api-connections-test'),
+
+    # SNMP Devices
+    path('snmp/devices/', snmp_views.device_list, name='api-snmp-device-list'),
+    path('snmp/devices/<int:device_id>/', snmp_views.device_detail, name='api-snmp-device-detail'),
 
     # Security — bootstrap, users, API keys
     path('security/bootstrap/', security_views.bootstrap_view, name='api-security-bootstrap'),

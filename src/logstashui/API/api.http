@@ -185,3 +185,80 @@ Content-Length: 0
 # Delete an API key (permanent hard delete)
 DELETE {{baseUrl}}/api/security/keys/1/
 Authorization: ApiKey {{apiKey}}
+
+### =====================================================================
+### SNMP — Devices
+### =====================================================================
+
+# SNMP device variables
+@deviceId = 1
+@networkId = 1
+@credentialId = 1
+@deviceTemplateId = 1
+
+###
+# List devices (paginated, filterable)
+# Optional: ?page=1&page_size=25&search=router&network={{networkId}}&sort_by=-created_at
+GET {{baseUrl}}/api/snmp/devices/
+Authorization: ApiKey {{apiKey}}
+
+###
+# List devices — filtered by network, search term
+GET {{baseUrl}}/api/snmp/devices/?network={{networkId}}&search=router&sort_by=name
+Authorization: ApiKey {{apiKey}}
+
+###
+# Get a single device
+GET {{baseUrl}}/api/snmp/devices/{{deviceId}}/
+Authorization: ApiKey {{apiKey}}
+
+###
+# Create a device (ip_address or hostname required; both optional if one is provided)
+POST {{baseUrl}}/api/snmp/devices/
+Authorization: ApiKey {{apiKey}}
+Content-Type: application/json
+
+{
+  "name": "router-01",
+  "ip_address": "192.168.1.1",
+  "hostname": null,
+  "port": 161,
+  "retries": 2,
+  "timeout": 1000,
+  "credential": {{credentialId}},
+  "network": {{networkId}},
+  "device_template": {{deviceTemplateId}},
+  "site": "HQ",
+  "building": "A",
+  "room": "Server Room",
+  "latitude": null,
+  "longitude": null,
+  "metadata": {}
+}
+
+###
+# Update a device (pass null for FK fields to clear them)
+PUT {{baseUrl}}/api/snmp/devices/{{deviceId}}/
+Authorization: ApiKey {{apiKey}}
+Content-Type: application/json
+
+{
+  "name": "router-01-updated",
+  "ip_address": "192.168.1.2",
+  "hostname": null,
+  "port": 161,
+  "retries": 3,
+  "timeout": 2000,
+  "credential": {{credentialId}},
+  "network": {{networkId}},
+  "device_template": {{deviceTemplateId}},
+  "site": "HQ",
+  "building": "B",
+  "room": "NOC",
+  "metadata": {"role": "core"}
+}
+
+###
+# Delete a device
+DELETE {{baseUrl}}/api/snmp/devices/{{deviceId}}/
+Authorization: ApiKey {{apiKey}}
