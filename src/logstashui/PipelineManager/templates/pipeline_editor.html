@@ -866,8 +866,8 @@
             {% endif %}
         </div>
         
-        <!-- Row 2: Status | Mode toggle | Actions — 3-col grid avoids absolute-center overlap -->
-        <div class="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] gap-3 items-center">
+        <!-- Unified editor toolbar: simulation | mode | actions -->
+        <div class="editor-toolbar grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center">
             <!-- Compact simulation panel -->
             <section class="simulation-panel" aria-label="Simulation">
                 <!-- Simulation target: terse closed label; detail via title / option list -->
@@ -983,8 +983,8 @@
             </div>
             
             <!-- Right: Action Buttons -->
-            <div class="flex items-center gap-3 flex-wrap xl:justify-end">
-                <form onsubmit="return false;" class="flex items-center gap-4">
+            <div class="editor-actions flex items-center gap-3 flex-wrap xl:justify-end">
+                <form onsubmit="return false;" class="editor-action-form flex items-center gap-2">
                     {% csrf_token %}
                     
                     <!-- Utility Button: View Code -->
@@ -1013,7 +1013,7 @@
                     <!-- Primary Button: Save -->
                     <button type="button"
                             id="savePipeline"
-                            class="w-36 py-2 inline-flex items-center justify-center gap-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm font-semibold shadow-lg hover:shadow-xl"
+                            class="w-36 py-2 inline-flex items-center justify-center gap-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm font-medium shadow-sm"
                             hx-post="/ConnectionManager/SavePipeline/"
                             hx-include="#pipelineForm"
                             hx-trigger="none"
@@ -1029,9 +1029,9 @@
                 </form>
             </div>
         </div>
-        
-        <!-- Subtle Divider -->
-        <div class="mt-4 border-b border-gray-700/50"></div>
+
+        <div class="mt-4 border-b border-gray-700/50" aria-hidden="true"></div>
+
     </div>
 
     <!-- Stats Strip -->
@@ -1388,8 +1388,8 @@
 <style>
   .simulation-panel {
     position: relative; display: flex; align-items: center; gap: 6px;
-    min-width: 0; width: fit-content; max-width: 100%; height: 48px;
-    padding: 5px 8px; border: 1px solid #3a4856; border-radius: 8px; background: #202a34;
+    min-width: 0; width: fit-content; max-width: 100%; height: 44px;
+    padding: 4px 10px 4px 4px;
   }
   .simulation-target-wrap {
     display: flex; align-items: center; gap: 7px; height: 34px;
@@ -1421,6 +1421,21 @@
   .simulation-status-detail:focus-within .simulation-status-tooltip { display: block; }
   .simulation-status-detail.sim-detail-dismissed .simulation-status-tooltip { display: none; }
   .simulation-logs { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; }
+  .editor-toolbar {
+    column-gap: 24px; row-gap: 8px; width: 100%; padding: 6px 0;
+  }
+  .editor-mode-switcher { height: 44px; }
+  .editor-actions { min-width: 0; height: 44px; }
+  .editor-action-form { height: 44px; }
+  #viewCode,
+  #simulatePipeline,
+  #savePipeline {
+    height: 36px; padding-top: 0; padding-bottom: 0;
+    font-size: 13px; font-weight: 500;
+  }
+  #viewCode,
+  #simulatePipeline { width: 120px; }
+  #savePipeline { width: 136px; }
   #uiModeBtn,
   #textModeBtn,
   #graphModeBtn {
@@ -1433,6 +1448,10 @@
     animation: none; background: #16a34a;
     border: 1px solid rgba(74, 222, 128, 0.6);
     box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.18), 0 3px 10px rgba(0, 0, 0, 0.28);
+  }
+  @media (max-width: 1279px) {
+    .editor-toolbar { justify-items: center; padding: 10px; }
+    .editor-actions { height: auto; }
   }
   @media (max-width: 480px) {
     .simulation-panel { gap: 3px; padding-inline: 4px; }
