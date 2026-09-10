@@ -773,7 +773,7 @@ def list_simulation_targets(active_only: bool = True, *, ensure_embedded: bool =
             if embedded_probe_failed(conn):
                 continue
             discovered = is_embedded_discovered(conn)
-            # Closed select: terse; detail on hover / open option list
+            # Embedded is a fixed system target, so its display name stays concise.
             label = "embedded"
             ver_label = version or "docker"
             agent_port = conn.agent_api_port or EMBEDDED_AGENT_API_PORT
@@ -795,8 +795,8 @@ def list_simulation_targets(active_only: bool = True, *, ensure_embedded: bool =
             n = conn.instance_id or "?"
             ver_label = version or "system"
             host = conn.host or "127.0.0.1"
-            label = f"simulate-{n}"
-            detail = f"simulate-{n} · {host} · Logstash {ver_label}"
+            label = conn.name
+            detail = f"{conn.name} · {host} · Logstash {ver_label}"
             agent_port = conn.agent_api_port
             if agent_port is None and conn.instance_id:
                 agent_port = SIMULATE_AGENT_API_BASE + conn.instance_id

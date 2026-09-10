@@ -48,7 +48,13 @@
     async function viewPipelineLogs() {
         if (!currentSlotId) {
             console.error('No slot ID available for logs');
-            alert('Unable to fetch logs - slot information not available');
+            await ConfirmationModal.show(
+                'Unable to fetch logs - slot information not available',
+                'Pipeline Logs',
+                'OK',
+                null,
+                true
+            );
             return;
         }
         
@@ -141,7 +147,7 @@
     }
     
     /**
-     * Compact sim status light: colored circle + tooltip; message is sr-only.
+     * Compact labelled simulation status; full message is mirrored into its detail popover.
      * @param {'ok'|'warn'|'err'|'busy'} kind
      */
     function setSimStatusLight(containerId, iconId, messageId, kind, title) {
@@ -149,7 +155,7 @@
         const msg = document.getElementById(messageId);
         if (!el) return;
         const base =
-            'sim-status-light inline-flex items-center justify-center w-8 h-8 rounded-full border';
+            'sim-status-light inline-flex items-center gap-1 px-1.5 h-7 rounded-md border';
         const styles = {
             ok: `${base} border-green-600 bg-green-900/40`,
             warn: `${base} border-yellow-600 bg-yellow-900/40`,
@@ -161,7 +167,7 @@
         el.setAttribute('aria-label', title || '');
 
         const icons = {
-            ok: `<svg id="${iconId}" class="w-4 h-4 text-green-400" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6"></circle></svg>`,
+            ok: `<svg id="${iconId}" class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 12l4 4L19 6"></path></svg>`,
             warn: `<svg id="${iconId}" class="w-4 h-4 text-yellow-400 animate-spin" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`,
             err: `<svg id="${iconId}" class="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M18.364 5.636L5.636 18.364M5.636 5.636l12.728 12.728"></path></svg>`,
             busy: `<svg id="${iconId}" class="w-4 h-4 animate-spin text-gray-300" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`,
@@ -525,6 +531,33 @@
         position: relative;
     }
 
+    .pipeline-section-header {
+        cursor: pointer;
+        border-radius: 0.375rem;
+    }
+
+    .pipeline-section-header:focus-visible {
+        outline: 2px solid #60a5fa;
+        outline-offset: 4px;
+    }
+
+    .pipeline-section-chevron {
+        flex-shrink: 0;
+        transition: transform 0.2s ease, color 0.2s ease;
+    }
+
+    .pipeline-section-header:hover .pipeline-section-chevron {
+        color: #fff;
+    }
+
+    .pipeline-section-header[aria-expanded="false"] {
+        margin-bottom: 0;
+    }
+
+    .pipeline-section-header[aria-expanded="false"] .pipeline-section-chevron {
+        transform: rotate(-90deg);
+    }
+
     .component-container:hover .insertion-point {
         display: flex;
     }
@@ -850,137 +883,185 @@
             </a>
             {% elif es_id and connection_name %}
             <span class="text-gray-500 text-2xl font-thin select-none">/</span>
-            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-900/40 border border-blue-500/50">
-                <svg class="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-900/40 border border-blue-500/50">
+                <svg class="w-3 h-3 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M12 5l7 7-7 7"/>
                 </svg>
-                <span class="text-xs text-blue-300 font-medium uppercase tracking-wide">Connection</span>
-                <span class="text-sm text-blue-100 font-semibold">{{ connection_name }}</span>
+                <span class="text-[11px] text-blue-300 font-medium uppercase tracking-wide">Connection</span>
+                <span class="text-[13px] text-blue-100 font-semibold">{{ connection_name }}</span>
             </span>
             {% endif %}
         </div>
         
-        <!-- Row 2: Status | Mode toggle | Actions — 3-col grid avoids absolute-center overlap -->
-        <div class="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] gap-3 items-center">
-            <!-- Left: compact sim target + status lights + logs -->
-            <div class="flex items-center gap-2 flex-wrap min-w-0">
+        <!-- Unified editor toolbar: simulation | mode | actions -->
+        <div class="editor-toolbar grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center">
+            <!-- Compact simulation panel -->
+            <section class="simulation-panel" aria-label="Simulation">
                 <!-- Simulation target: terse closed label; detail via title / option list -->
-                <div id="simTargetSelectWrap" class="inline-flex items-center gap-1.5 shrink-0">
-                    <label for="simTargetSelect" class="text-xs text-gray-400 font-medium whitespace-nowrap">Target</label>
-                    <select id="simTargetSelect"
-                            class="text-xs bg-gray-800 border border-gray-600 text-gray-200 rounded-md px-2 py-1.5 w-auto min-w-[6.5rem] max-w-[9rem] focus:outline-none focus:ring-1 focus:ring-purple-500"
-                            title="Simulation agent (hover options for host / Logstash version)">
-                        {% if sim_targets %}
-                            {% for t in sim_targets %}
-                            <option value="{{ t.connection_id }}"
-                                    title="{{ t.detail|default:t.label }}"
-                                    data-detail="{{ t.detail|default:t.label }}"
-                                    data-policy-type="{{ t.policy_type }}"
-                                {% if selected_sim_connection_id == t.connection_id %}selected{% endif %}>
-                                {{ t.label }}
-                            </option>
-                            {% endfor %}
-                        {% else %}
-                            <option value="">…</option>
-                        {% endif %}
-                    </select>
+                <div id="simTargetSelectWrap" class="simulation-target-wrap shrink-0">
+                    <span class="simulation-target-icon" aria-hidden="true">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <rect x="3" y="4" width="18" height="13" rx="2" stroke-width="1.8"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m10 8 5 2.5-5 2.5V8ZM8 21h8M12 17v4"/>
+                        </svg>
+                    </span>
+                    <div class="simulation-target-fields">
+                        <label for="simTargetSelect">Simulation target</label>
+                        <select id="simTargetSelect"
+                                class="text-xs bg-gray-800 border border-gray-600 text-gray-200 rounded-md w-auto focus:outline-none focus:ring-1 focus:ring-purple-500"
+                                title="Simulation agent (hover options for host / Logstash version)">
+                            {% if sim_targets %}
+                                {% for t in sim_targets %}
+                                <option value="{{ t.connection_id }}"
+                                        title="{{ t.detail|default:t.label }}"
+                                        data-detail="{{ t.detail|default:t.label }}"
+                                        data-policy-type="{{ t.policy_type }}"
+                                    {% if selected_sim_connection_id == t.connection_id %}selected{% endif %}>
+                                    {{ t.label }}
+                                </option>
+                                {% endfor %}
+                            {% else %}
+                                <option value="">…</option>
+                            {% endif %}
+                        </select>
+                    </div>
                 </div>
 
-                <!-- Agent reachability: icon-only light (detail on hover) -->
-                <div id="agentStatus"
-                     class="sim-status-light inline-flex items-center justify-center w-8 h-8 rounded-full border border-gray-600 bg-gray-700/50"
-                     title="Checking agent…"
-                     role="status"
-                     aria-live="polite">
-                    <svg id="agentStatusIcon" class="w-4 h-4 animate-spin text-gray-300" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    <span id="agentStatusMessage" class="sr-only">Checking agent…</span>
+                <!-- Agent reachability with full details on hover or focus -->
+                <div class="simulation-status-detail" tabindex="0" aria-label="Agent status" aria-describedby="agentStatusDetail">
+                    <div id="agentStatus"
+                         class="sim-status-light inline-flex items-center gap-1 px-1.5 h-7 rounded-md border border-gray-600 bg-gray-700/50"
+                         title="Checking agent…"
+                         role="status"
+                         aria-live="polite">
+                        <svg id="agentStatusIcon" class="w-4 h-4 animate-spin text-gray-300" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span class="simulation-status-label text-xs text-gray-200">Agent</span>
+                        <span id="agentStatusMessage" class="sr-only">Checking agent…</span>
+                    </div>
+                    <span id="agentStatusDetail" class="simulation-status-tooltip" role="tooltip"></span>
                 </div>
                 
-                <!-- Logstash health: icon-only light (detail on hover) -->
-                <div id="logstashState"
-                     class="sim-status-light inline-flex items-center justify-center w-8 h-8 rounded-full border border-gray-600 bg-gray-700/50"
-                     title="Checking Logstash health…"
-                     role="status"
-                     aria-live="polite">
-                    <svg id="logstashStateIcon" class="w-4 h-4 animate-spin text-gray-300" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    <span id="logstashStateMessage" class="sr-only">Checking Logstash health…</span>
+                <!-- Logstash health with full details on hover or focus -->
+                <div class="simulation-status-detail" tabindex="0" aria-label="Logstash status" aria-describedby="logstashStateDetail">
+                    <div id="logstashState"
+                         class="sim-status-light inline-flex items-center gap-1 px-1.5 h-7 rounded-md border border-gray-600 bg-gray-700/50"
+                         title="Checking Logstash health…"
+                         role="status"
+                         aria-live="polite">
+                        <svg id="logstashStateIcon" class="w-4 h-4 animate-spin text-gray-300" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span class="simulation-status-label text-xs text-gray-200">Logstash</span>
+                        <span id="logstashStateMessage" class="sr-only">Checking Logstash health…</span>
+                    </div>
+                    <span id="logstashStateDetail" class="simulation-status-tooltip" role="tooltip"></span>
                 </div>
                 
                 <!-- Pipeline slot: quiet "Unallocated" until a slot is actually ready (no spin on page load) -->
-                <div id="pipelineLoadStatus"
-                     class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full border border-gray-600 bg-gray-700/50 max-w-[11rem]"
-                     title="No simulation slot yet">
-                    <svg id="pipelineStatusIcon" class="w-3.5 h-3.5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path>
-                    </svg>
-                    <span id="pipelineStatusMessage" class="text-xs font-medium text-gray-400 truncate">Unallocated</span>
+                <div class="simulation-status-detail" tabindex="0" aria-label="Simulation slot status" aria-describedby="pipelineLoadStatusDetail">
+                    <div id="pipelineLoadStatus"
+                         class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full border border-gray-600 bg-gray-700/50 max-w-[11rem]"
+                         title="No simulation slot yet">
+                        <svg id="pipelineStatusIcon" class="w-3.5 h-3.5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path>
+                        </svg>
+                        <span id="pipelineStatusMessage" class="text-xs font-medium text-gray-400 truncate">Unallocated</span>
+                    </div>
+                    <span id="pipelineLoadStatusDetail" class="simulation-status-tooltip" role="tooltip"></span>
                 </div>
                 
                 <!-- Simulation Logs Button -->
                 <button id="viewPipelineLogsBtn" onclick="viewPipelineLogs()" 
-                        class="text-xs px-2 py-1.5 rounded-md hover:bg-gray-700 transition-colors text-gray-300 hover:text-white underline whitespace-nowrap">
+                        class="simulation-logs text-xs px-1 py-1.5 rounded-md hover:bg-gray-700 transition-colors text-gray-300 hover:text-white whitespace-nowrap">
+                    <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8zM14 2v6h6M8 13h8M8 17h6"/></svg>
                     Logs
                 </button>
-            </div>
+            </section>
             
             <!-- Center: Presentation Mode Toggle (no absolute positioning) -->
-            <div class="flex items-center justify-center gap-1 bg-gray-700 rounded-lg p-1 w-fit mx-auto xl:mx-0">
-                <button id="uiModeBtn" class="w-16 py-2 rounded-md font-medium transition-all bg-green-600 text-white mode-toggle-active" onclick="switchToUIMode()">
-                    UI
+            <div class="editor-mode-switcher flex items-center justify-center gap-1 bg-gray-700 rounded-lg p-1 w-fit mx-auto xl:mx-0">
+                <button id="uiModeBtn" class="w-16 py-2 rounded-md font-medium transition-all bg-green-600 text-white mode-toggle-active" onclick="switchToUIMode()" aria-label="UI mode" title="UI mode">
+                    <svg class="editor-mode-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <rect x="4" y="4" width="16" height="16" rx="2" stroke-width="1.8"/>
+                        <path stroke-linecap="round" stroke-width="1.8" d="M8 9h8M8 15h5"/>
+                        <circle cx="16.5" cy="15" r="1.5" stroke-width="1.5"/>
+                    </svg>
+                    <span class="editor-mode-label">UI</span>
                 </button>
-                <button id="textModeBtn" class="w-16 py-2 rounded-md font-medium transition-all text-gray-300 hover:bg-gray-600" onclick="switchToTextMode()">
-                    Text
+                <button id="textModeBtn" class="w-16 py-2 rounded-md font-medium transition-all text-gray-300 hover:bg-gray-600" onclick="switchToTextMode()" aria-label="Text mode" title="Text mode">
+                    <svg class="editor-mode-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m9 7-5 5 5 5M15 7l5 5-5 5M13 5l-2 14"/>
+                    </svg>
+                    <span class="editor-mode-label">Text</span>
                 </button>
-                <button id="graphModeBtn" class="w-16 py-2 rounded-md font-medium transition-all text-gray-300 hover:bg-gray-600" onclick="switchToGraphMode()">
-                    Graph
+                <button id="graphModeBtn" class="w-16 py-2 rounded-md font-medium transition-all text-gray-300 hover:bg-gray-600" onclick="switchToGraphMode()" aria-label="Graph mode" title="Graph mode">
+                    <svg class="editor-mode-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <circle cx="12" cy="5" r="2.25" stroke-width="1.8"/>
+                        <circle cx="5" cy="18" r="2.25" stroke-width="1.8"/>
+                        <circle cx="19" cy="18" r="2.25" stroke-width="1.8"/>
+                        <path stroke-width="1.8" d="m10.9 7-4.8 8.9M13.1 7l4.8 8.9M7.25 18h9.5"/>
+                    </svg>
+                    <span class="editor-mode-label">Graph</span>
                 </button>
             </div>
             
             <!-- Right: Action Buttons -->
-            <div class="flex items-center gap-3 flex-wrap xl:justify-end">
-                <form onsubmit="return false;" class="flex items-center gap-4">
+            <div class="editor-actions flex items-center gap-3 flex-wrap xl:justify-end">
+                <form onsubmit="return false;" class="editor-action-form flex items-center gap-2">
                     {% csrf_token %}
                     
                     <!-- Utility Button: View Code -->
                     <button type="button"
                             id="viewCode"
-                            class="w-36 py-2 bg-gray-700 text-gray-200 rounded-md hover:bg-gray-600 transition-colors text-sm font-medium"
+                            class="w-36 py-2 inline-flex items-center justify-center gap-2 bg-gray-700 text-gray-200 rounded-md hover:bg-gray-600 transition-colors text-sm font-medium"
+                            aria-label="View code" title="View code"
                             onclick="viewGeneratedCode()">
-                        View Code
+                        <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-6-6Z"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M14 3v6h6M9 13l-2 2 2 2M15 13l2 2-2 2M13 12l-2 6"/>
+                        </svg>
+                        <span class="editor-action-label">View Code</span>
                     </button>
                     
                     <!-- Secondary Button: Simulate -->
                     <button type="button"
                             id="simulatePipeline"
-                            class="w-36 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors text-sm font-medium"
+                            class="w-36 py-2 inline-flex items-center justify-center gap-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors text-sm font-medium"
+                            aria-label="Simulate pipeline" title="Simulate pipeline"
                             onclick="openSimulateModal()">
-                        Simulate
+                        <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m8 5 11 7-11 7V5Z"/>
+                        </svg>
+                        <span class="editor-action-label">Simulate</span>
                     </button>
                     
                     <!-- Primary Button: Save -->
                     <button type="button"
                             id="savePipeline"
-                            class="w-36 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm font-semibold shadow-lg hover:shadow-xl"
+                            class="w-36 py-2 inline-flex items-center justify-center gap-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm font-medium shadow-sm"
+                            aria-label="Save pipeline" title="Save pipeline"
                             hx-post="/ConnectionManager/SavePipeline/"
                             hx-include="#pipelineForm"
                             hx-trigger="none"
                             hx-target="#saveStatus"
                             hx-vals='js:{"save_pipeline": "true", "es_id": new URLSearchParams(window.location.search).get("es_id"), "ls_id": new URLSearchParams(window.location.search).get("ls_id"), "pipeline": new URLSearchParams(window.location.search).get("pipeline"), "components": components}'
                             onclick="prepareDiffModal()">
-                        Save Pipeline
+                        <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M5 3h12l3 3v15H4V4a1 1 0 0 1 1-1Z"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M8 3v6h8V3M8 21v-7h8v7"/>
+                        </svg>
+                        <span class="editor-action-label">Save Pipeline</span>
                     </button>
                 </form>
             </div>
         </div>
-        
-        <!-- Subtle Divider -->
-        <div class="mt-4 border-b border-gray-700/50"></div>
+
+        <div class="mt-4 border-b border-gray-700/50" aria-hidden="true"></div>
+
     </div>
 
     <!-- Stats Strip -->
@@ -1155,19 +1236,25 @@
                 <div id="pipelineCanvas" class="min-h-full space-y-8">
                     <!-- Input Section -->
                     <div id="inputSection" class="p-4 bg-gray-700 rounded-lg border-l-4 border-blue-500">
-                        <div class="flex items-center mb-4">
-                            <div class="flex items-center justify-center w-10 h-10 bg-blue-600 rounded-lg">
+                        <button type="button"
+                                class="pipeline-section-header flex items-center w-full mb-4 text-left"
+                                aria-expanded="true" aria-controls="inputComponents"
+                                onclick="togglePipelineSection('inputSection')">
+                            <span class="flex items-center justify-center w-10 h-10 bg-blue-600 rounded-lg">
                                 <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                           d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
                                 </svg>
-                            </div>
-                            <div class="ml-6" style="margin-left:10px;">
-                                <h2 class="text-xl font-bold text-white">Input</h2>
-                                <p class="text-xs text-gray-400">Define data sources and how data enters the
-                                    pipeline</p>
-                            </div>
-                        </div>
+                            </span>
+                            <span class="ml-6" style="margin-left:10px;">
+                                <span class="block text-xl font-bold text-white">Input</span>
+                                <span class="block text-xs text-gray-400">Define data sources and how data enters the
+                                    pipeline</span>
+                            </span>
+                            <svg class="pipeline-section-chevron w-5 h-5 ml-auto text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m5 9 7 7 7-7"/>
+                            </svg>
+                        </button>
                         <div id="inputComponents"
                              class="component-container min-h-32 p-4 bg-gray-800 rounded border-2 border-dashed border-gray-600 empty-section"
                              data-type="input">
@@ -1188,18 +1275,24 @@
 
                     <!-- Filter Section -->
                     <div id="filterSection" class="p-4 bg-gray-700 rounded-lg border-l-4 border-purple-600">
-                        <div class="flex items-center mb-4">
-                            <div class="flex items-center justify-center w-10 h-10 bg-purple-600 rounded-lg">
+                        <button type="button"
+                                class="pipeline-section-header flex items-center w-full mb-4 text-left"
+                                aria-expanded="true" aria-controls="filterComponents"
+                                onclick="togglePipelineSection('filterSection')">
+                            <span class="flex items-center justify-center w-10 h-10 bg-purple-600 rounded-lg">
                                 <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                           d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/>
                                 </svg>
-                            </div>
-                            <div class="ml-6">
-                                <h2 class="text-xl font-bold text-white">Filter</h2>
-                                <p class="text-xs text-gray-400">Transform, enrich, and process data with conditions</p>
-                            </div>
-                        </div>
+                            </span>
+                            <span class="ml-6">
+                                <span class="block text-xl font-bold text-white">Filter</span>
+                                <span class="block text-xs text-gray-400">Transform, enrich, and process data with conditions</span>
+                            </span>
+                            <svg class="pipeline-section-chevron w-5 h-5 ml-auto text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m5 9 7 7 7-7"/>
+                            </svg>
+                        </button>
                         <div id="filterComponents"
                              class="component-container min-h-32 p-4 bg-gray-800 rounded border-2 border-dashed border-gray-600 empty-section"
                              data-type="filter">
@@ -1227,18 +1320,24 @@
 
                     <!-- Output Section -->
                     <div id="outputSection" class="p-4 bg-gray-700 rounded-lg border-l-4 border-green-500">
-                        <div class="flex items-center mb-4">
-                            <div class="flex items-center justify-center w-10 h-10 bg-green-600 rounded-lg">
+                        <button type="button"
+                                class="pipeline-section-header flex items-center w-full mb-4 text-left"
+                                aria-expanded="true" aria-controls="outputComponents"
+                                onclick="togglePipelineSection('outputSection')">
+                            <span class="flex items-center justify-center w-10 h-10 bg-green-600 rounded-lg">
                                 <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                           d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"/>
                                 </svg>
-                            </div>
-                            <div class="ml-6" style="margin-left:10px;">
-                                <h2 class="text-xl font-bold text-white">Output</h2>
-                                <p class="text-xs text-gray-400">Send processed data to destinations</p>
-                            </div>
-                        </div>
+                            </span>
+                            <span class="ml-6" style="margin-left:10px;">
+                                <span class="block text-xl font-bold text-white">Output</span>
+                                <span class="block text-xs text-gray-400">Send processed data to destinations</span>
+                            </span>
+                            <svg class="pipeline-section-chevron w-5 h-5 ml-auto text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m5 9 7 7 7-7"/>
+                            </svg>
+                        </button>
                         <div id="outputComponents"
                              class="component-container min-h-32 p-4 bg-gray-800 rounded border-2 border-dashed border-gray-600 empty-section"
                              data-type="output">
@@ -1335,12 +1434,103 @@
 <div id="slotPreallocationResult" class="hidden"></div>
 
 <style>
-  /* Single target: keep selection but de-emphasize the control */
-  #simTargetSelectWrap.sim-target-single label { display: none; }
-  #simTargetSelectWrap.sim-target-single select {
-    max-width: 7.5rem;
-    border-style: dashed;
-    opacity: 0.9;
+  .simulation-panel {
+    position: relative; display: flex; align-items: center; gap: 6px;
+    min-width: 0; width: fit-content; max-width: 100%; height: 44px;
+    padding: 4px 10px 4px 4px;
+  }
+  .simulation-target-wrap {
+    display: flex; align-items: center; gap: 7px; height: 34px;
+    padding-right: 9px; border-right: 1px solid #52606f;
+  }
+  .simulation-target-icon {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 30px; height: 30px; flex-shrink: 0; border-radius: 7px;
+    color: #60a5fa; background: #193a5c;
+  }
+  .simulation-target-fields {
+    display: flex; flex-direction: column; align-items: stretch; gap: 1px;
+  }
+  .simulation-target-fields label {
+    color: #a9bacb; font-size: 9px; font-weight: 500; line-height: 10px; white-space: nowrap;
+  }
+  #simTargetSelect { width: 10.5rem; min-width: 0; max-width: 10.5rem; height: 23px; padding: 1px 5px; }
+  .simulation-status-detail { position: relative; min-width: 0; border-radius: 5px; }
+  .simulation-status-detail:focus-visible { outline: 2px solid #60a5fa; outline-offset: 2px; }
+  #pipelineLoadStatus { border-radius: 5px; max-width: 100%; height: 28px; padding: 3px 5px; }
+  .simulation-status-tooltip {
+    display: none; position: absolute; top: 100%; left: 0; z-index: 60;
+    width: max-content; max-width: min(340px, 80vw); padding: 10px 12px;
+    border: 1px solid #526174; border-radius: 7px; background: #18222e;
+    box-shadow: 0 8px 24px #0006; color: #e2e8f0; font-size: 12px; line-height: 1.5;
+    white-space: pre-wrap; overflow-wrap: anywhere;
+  }
+  .simulation-status-detail:hover .simulation-status-tooltip,
+  .simulation-status-detail:focus-within .simulation-status-tooltip { display: block; }
+  .simulation-status-detail.sim-detail-dismissed .simulation-status-tooltip { display: none; }
+  .simulation-logs { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; }
+  .editor-toolbar {
+    container: editor-toolbar / inline-size;
+    column-gap: 24px; row-gap: 8px; width: 100%; padding: 6px 0;
+  }
+  .editor-mode-switcher { height: 44px; }
+  .editor-actions { min-width: 0; height: 44px; }
+  .editor-action-form { height: 44px; }
+  #viewCode,
+  #simulatePipeline,
+  #savePipeline {
+    height: 36px; padding-top: 0; padding-bottom: 0;
+    font-size: 13px; font-weight: 500;
+  }
+  #viewCode,
+  #simulatePipeline { width: 120px; }
+  #savePipeline { width: 136px; }
+  #uiModeBtn,
+  #textModeBtn,
+  #graphModeBtn {
+    display: inline-flex; align-items: center; justify-content: center;
+    gap: 6px; width: 68px; height: 36px; padding: 4px 7px; border: 1px solid transparent;
+    font-size: 11px; line-height: 13px;
+  }
+  .editor-mode-icon { width: 16px; height: 16px; flex-shrink: 0; }
+  .editor-mode-switcher .mode-toggle-active {
+    animation: none; background: #16a34a;
+    border: 1px solid rgba(74, 222, 128, 0.6);
+    box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.18), 0 3px 10px rgba(0, 0, 0, 0.28);
+  }
+  @container editor-toolbar (max-width: 1050px) {
+    .simulation-status-label,
+    #pipelineStatusMessage,
+    .editor-mode-label,
+    .editor-action-label { display: none; }
+    #agentStatus,
+    #logstashState,
+    #pipelineLoadStatus {
+      justify-content: center; width: 28px; min-width: 28px; padding-left: 0; padding-right: 0; gap: 0;
+    }
+    #uiModeBtn,
+    #textModeBtn,
+    #graphModeBtn,
+    #viewCode,
+    #simulatePipeline,
+    #savePipeline { width: 36px; padding-left: 0; padding-right: 0; gap: 0; }
+    .editor-mode-switcher,
+    .editor-action-form { gap: 4px; }
+  }
+  @media (max-width: 1279px) {
+    .editor-toolbar {
+      grid-template-columns: minmax(0, 1fr) auto auto;
+    }
+  }
+  @media (max-width: 760px) {
+    .editor-toolbar { grid-template-columns: 1fr; justify-items: center; padding: 10px 0; }
+    .editor-actions { height: auto; }
+  }
+  @media (max-width: 480px) {
+    .simulation-panel { gap: 3px; padding-inline: 4px; }
+    .simulation-target-wrap { gap: 4px; padding-right: 4px; }
+    .simulation-target-icon { width: 26px; height: 26px; }
+    #simTargetSelect { width: 8.5rem; max-width: 8.5rem; }
   }
   /* Screen-reader-only status text (icon lights use title tooltips) */
   .sr-only {
@@ -1358,6 +1548,20 @@
 </style>
 
 <script>
+    // Mirror existing messages, including slot updates from all simulation paths.
+    document.querySelectorAll('.simulation-status-detail').forEach(wrapper => {
+        const status = wrapper.querySelector('[title]');
+        const tooltip = wrapper.querySelector('[role="tooltip"]');
+        const syncDetail = () => { tooltip.textContent = status.title; };
+        syncDetail();
+        new MutationObserver(syncDetail).observe(status, { attributes: true, attributeFilter: ['title'] });
+        wrapper.addEventListener('keydown', event => {
+            if (event.key === 'Escape') wrapper.classList.add('sim-detail-dismissed');
+        });
+        ['mouseenter', 'focusin', 'click'].forEach(type => {
+            wrapper.addEventListener(type, () => wrapper.classList.remove('sim-detail-dismissed'));
+        });
+    });
     const pipelineName = "{{ pipeline_name }}";
     // Mutable so Sim target picker can switch embedded ↔ simulate without reload
     var simulationMode = "{{ simulation_mode }}";
@@ -1429,7 +1633,13 @@
     async function viewPipelineLogs() {
         if (!currentSlotId) {
             console.error('No slot ID available for logs');
-            alert('Unable to fetch logs - slot information not available');
+            await ConfirmationModal.show(
+                'Unable to fetch logs - slot information not available',
+                'Pipeline Logs',
+                'OK',
+                null,
+                true
+            );
             return;
         }
         

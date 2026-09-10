@@ -210,13 +210,34 @@ function updateInsertionPointsForMoveMode() {
     const isMovingCondition = movingComponent && movingComponent.plugin === 'if';
     
     insertionPoints.forEach(point => {
+        point.classList.remove('pinned-order-hidden');
+
         // Determine the section type of this insertion point
         const container = point.closest('[data-type]');
         const sectionType = container ? container.dataset.type : null;
+        const targetLocation = getInsertionPointLocation(point);
+        const pinnedCount = window.getPinnedFilterCount?.() || 0;
+        const movingPinned = window.isPinnedPipelineComponent?.(movingComponent);
+
+        // Pinned integrations can only be reordered inside their top-level prefix.
+        if (movingPinned && (!targetLocation || targetLocation.isNested ||
+            targetLocation.type !== 'filter' || targetLocation.index > pinnedCount)) {
+            point.classList.add('pinned-order-hidden', 'disabled');
+            return;
+        }
 
         // Disable insertion points in different sections
         if (sectionType && sectionType !== window.moveMode.componentType) {
             point.classList.add('disabled');
+            return;
+        }
+
+        // A regular filter component cannot be placed before the pinned prefix.
+        if (pinnedCount > 0 &&
+            !movingPinned &&
+            targetLocation && !targetLocation.isNested &&
+            targetLocation.type === 'filter' && targetLocation.index < pinnedCount) {
+            point.classList.add('pinned-order-hidden', 'disabled');
             return;
         }
 
@@ -256,6 +277,19 @@ function dropComponentAtInsertionPoint(insertionPoint) {
     const targetLocation = getInsertionPointLocation(insertionPoint);
     if (!targetLocation) {
         console.error('Could not determine target location');
+        return;
+    }
+
+    const movingComponent = findComponentById(window.moveMode.componentId);
+    const pinnedCount = window.getPinnedFilterCount?.() || 0;
+    const movingPinned = window.isPinnedPipelineComponent?.(movingComponent);
+    if (movingPinned && (targetLocation.isNested ||
+        targetLocation.type !== 'filter' || targetLocation.index > pinnedCount)) {
+        return;
+    }
+    if (movingComponent && !movingPinned &&
+        !targetLocation.isNested && targetLocation.type === 'filter' &&
+        targetLocation.index < pinnedCount) {
         return;
     }
 
@@ -411,6 +445,7 @@ function moveComponent(source, target) {
 
     // Insert at target location
     insertComponentAtLocation(component, target, adjustedTargetIndex);
+    window.enforcePinnedPipelineOrder?.();
 
     // Refresh the UI
     newlyAddedPluginId = component.id;

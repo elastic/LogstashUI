@@ -116,7 +116,7 @@ def SelectSimulationTarget(request):
 
     Examples:
         payload = {"connection_id": 12}
-        # {"success": True, "selected_connection_id": 12, "label": "simulate-1", ...}
+        # {"success": True, "selected_connection_id": 12, "label": "LogstashUI-simulate-1", ...}
     """
     if request.method != "POST":
         return JsonResponse({"error": "Method not allowed"}, status=405)

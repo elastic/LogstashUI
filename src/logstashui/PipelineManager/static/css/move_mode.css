@@ -137,3 +137,8 @@
     content: 'Wrong section';
     color: #ef4444;
 }
+
+/* Invalid positions above elastic_integration are omitted entirely. */
+.move-mode .insertion-point.pinned-order-hidden {
+    display: none !important;
+}
