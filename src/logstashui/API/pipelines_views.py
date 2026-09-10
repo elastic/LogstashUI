@@ -352,44 +352,45 @@ def policy_deploy(request, policy_id):
     from PipelineManager.models import Revision
 
     # H15 fix: a non-atomic read-increment-write allowed two concurrent deploys
-    # to get the same revision number.  Use a DB-level F() increment inside an
-    # atomic block so only one caller wins the counter.
+    # to get the same revision number. Keep the F() increment, snapshot, Revision
+    # insert, and policy update in one atomic block so a later failure cannot
+    # leave current_revision_number bumped with no matching Revision row.
     with transaction.atomic():
         Policy.objects.filter(pk=policy.pk).update(
             current_revision_number=F('current_revision_number') + 1
         )
         policy.refresh_from_db(fields=['current_revision_number'])
-    new_revision_number = policy.current_revision_number
+        new_revision_number = policy.current_revision_number
 
-    snapshot_data = {
-        'logstash_yml': policy.logstash_yml,
-        'jvm_options': policy.jvm_options,
-        'log4j2_properties': policy.log4j2_properties,
-        'settings_path': policy.settings_path,
-        'logs_path': policy.logs_path,
-        'binary_path': policy.binary_path,
-        'pipelines': list(
-            policy.pipelines.filter(managed_by='user').values(
-                'name', 'description', 'lscl', 'no_input', 'non_reloadable'
-            )
-        ),
-        'keystore': list(
-            policy.keystore_entries.filter(managed_by='user').values('key_name', 'key_value')
-        ),
-        'keystore_password_hash': policy.keystore_password_hash,
-    }
+        snapshot_data = {
+            'logstash_yml': policy.logstash_yml,
+            'jvm_options': policy.jvm_options,
+            'log4j2_properties': policy.log4j2_properties,
+            'settings_path': policy.settings_path,
+            'logs_path': policy.logs_path,
+            'binary_path': policy.binary_path,
+            'pipelines': list(
+                policy.pipelines.filter(managed_by='user').values(
+                    'name', 'description', 'lscl', 'no_input', 'non_reloadable'
+                )
+            ),
+            'keystore': list(
+                policy.keystore_entries.filter(managed_by='user').values('key_name', 'key_value')
+            ),
+            'keystore_password_hash': policy.keystore_password_hash,
+        }
 
-    Revision.objects.create(
-        policy=policy,
-        revision_number=new_revision_number,
-        snapshot_json=snapshot_data,
-        created_by=request.user.username,
-    )
+        Revision.objects.create(
+            policy=policy,
+            revision_number=new_revision_number,
+            snapshot_json=snapshot_data,
+            created_by=request.user.username,
+        )
 
-    policy.last_deployed_at = datetime.now(timezone.utc)
-    # Bug 5 fix: clear the undeployed-changes flag after a successful deploy.
-    policy.has_undeployed_changes = False
-    policy.save(update_fields=['current_revision_number', 'last_deployed_at', 'has_undeployed_changes'])
+        policy.last_deployed_at = datetime.now(timezone.utc)
+        # Bug 5 fix: clear the undeployed-changes flag after a successful deploy.
+        policy.has_undeployed_changes = False
+        policy.save(update_fields=['last_deployed_at', 'has_undeployed_changes'])
 
     logger.info(
         "API: policy '%s' deployed as revision %s by %s.",

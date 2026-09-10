@@ -62,7 +62,7 @@ Content-Type: application/json
 }
 
 ###
-# Update a connection (credentials must be re-supplied; connectivity is re-tested)
+# Update a connection (partial updates allowed; omitted credentials are kept; connectivity is re-tested)
 PUT {{baseUrl}}/api/connections/{{connectionId}}/
 Authorization: ApiKey {{apiKey}}
 Content-Type: application/json
