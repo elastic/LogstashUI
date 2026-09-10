@@ -416,7 +416,7 @@ class TestDeviceInvalidForeignKeys:
             'credential': 99999,
         })
         # Django raises ValueError / IntegrityError for bad FK — should not be 500
-        assert response.status_code in (400, 409, 500)
+        assert response.status_code in (400, 409)
         assert response['Content-Type'] == 'application/json'
 
     def test_create_invalid_network_id(self, authenticated_client):

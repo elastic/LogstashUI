@@ -138,13 +138,17 @@ Content-Type: application/json
 }
 
 ###
+# User variables
+@userId = 1
+
+###
 # Get a single user
-GET {{baseUrl}}/api/security/users/{{connectionId}}/
+GET {{baseUrl}}/api/security/users/{{userId}}/
 Authorization: ApiKey {{apiKey}}
 
 ###
 # Update a user's role and/or password (supply either or both)
-PUT {{baseUrl}}/api/security/users/{{connectionId}}/
+PUT {{baseUrl}}/api/security/users/{{userId}}/
 Authorization: ApiKey {{apiKey}}
 Content-Type: application/json
 
@@ -155,9 +159,8 @@ Content-Type: application/json
 
 ###
 # Delete a user
-DELETE {{baseUrl}}/api/security/users/{{connectionId}}/
+DELETE {{baseUrl}}/api/security/users/{{userId}}/
 Authorization: ApiKey {{apiKey}}
-
 ### ---- API Keys ----
 
 ###
