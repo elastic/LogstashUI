@@ -1,0 +1,783 @@
+# LogstashUI REST API — example requests
+# Set all variables below before running.
+
+@baseUrl = http://localhost:8080
+@apiKey = lsui_your_token_here
+
+# Connection variables
+@connectionId = 1
+@connectionName = My Connection
+@host = https://elasticsearch.example.com
+@port = 9200
+# These aren't real credentials
+@username = elastic
+@password = changeme
+@cloudId = my-deployment:dXMtZWFzdC0xLmF3cy5mb3VuZC5pbyQ...
+@esApiKey = VuaCfGcBCdbkQm-e5aOx:ui2lp2axTNmsyakw9tvNnw
+
+###
+# List all connections
+GET {{baseUrl}}/api/connections/
+Authorization: ApiKey {{apiKey}}
+Accept: application/json
+
+###
+# Get a single connection
+GET {{baseUrl}}/api/connections/{{connectionId}}/
+Authorization: ApiKey {{apiKey}}
+Accept: application/json
+
+###
+# Create a CENTRALIZED connection via Elastic Node URL + basic auth
+# connection_mode: "url" or "cloud"
+# auth_type: "basic" or "apiKey"
+POST {{baseUrl}}/api/connections/
+Authorization: ApiKey {{apiKey}}
+Content-Type: application/json
+
+{
+  "name": "{{connectionName}}",
+  "connection_type": "CENTRALIZED",
+  "connection_mode": "url",
+  "auth_type": "basic",
+  "host": "{{host}}",
+  "port": {{port}},
+  "username": "{{username}}",
+  "password": "{{password}}"
+}
+
+###
+# Create a CENTRALIZED connection via Cloud ID + API key
+POST {{baseUrl}}/api/connections/
+Authorization: ApiKey {{apiKey}}
+Content-Type: application/json
+
+{
+  "name": "{{connectionName}}",
+  "connection_type": "CENTRALIZED",
+  "connection_mode": "cloud",
+  "auth_type": "apiKey",
+  "cloud_id": "{{cloudId}}",
+  "api_key": "{{esApiKey}}"
+}
+
+###
+# Update a connection (partial updates allowed; omitted credentials are kept; connectivity is re-tested)
+PUT {{baseUrl}}/api/connections/{{connectionId}}/
+Authorization: ApiKey {{apiKey}}
+Content-Type: application/json
+
+{
+  "name": "{{connectionName}}",
+  "connection_type": "CENTRALIZED",
+  "connection_mode": "url",
+  "auth_type": "basic",
+  "host": "{{host}}",
+  "port": {{port}},
+  "username": "{{username}}",
+  "password": "{{password}}"
+}
+
+###
+# Delete a connection
+DELETE {{baseUrl}}/api/connections/{{connectionId}}/
+Authorization: ApiKey {{apiKey}}
+Accept: application/json
+
+###
+# Test connectivity to an existing connection (no data modified)
+POST {{baseUrl}}/api/connections/{{connectionId}}/test/
+Authorization: ApiKey {{apiKey}}
+Content-Length: 0
+
+### =====================================================================
+### Security — Bootstrap, Users, API Keys
+### =====================================================================
+
+###
+# Check whether the system has been bootstrapped (no auth required)
+GET {{baseUrl}}/api/security/bootstrap/
+
+###
+# Bootstrap the first admin user (no auth required, fails if already bootstrapped)
+# Set create_key: true to receive a one-time API key in the response
+POST {{baseUrl}}/api/security/bootstrap/
+Content-Type: application/json
+
+{
+  "username": "{{username}}",
+  "password": "{{password}}",
+  "email": "",
+  "create_key": true,
+  "key_name": "Bootstrap Key"
+}
+
+###
+# Who am I? (token/session introspection)
+GET {{baseUrl}}/api/security/me/
+Authorization: ApiKey {{apiKey}}
+
+### ---- Users ----
+
+###
+# List all users
+GET {{baseUrl}}/api/security/users/
+Authorization: ApiKey {{apiKey}}
+
+###
+# Create a new user
+POST {{baseUrl}}/api/security/users/
+Authorization: ApiKey {{apiKey}}
+Content-Type: application/json
+
+{
+  "username": "newuser",
+  "password": "{{password}}",
+  "email": "",
+  "role": "readonly"
+}
+
+###
+# User variables
+@userId = 1
+
+###
+# Get a single user
+GET {{baseUrl}}/api/security/users/{{userId}}/
+Authorization: ApiKey {{apiKey}}
+
+###
+# Update a user's role and/or password (supply either or both)
+PUT {{baseUrl}}/api/security/users/{{userId}}/
+Authorization: ApiKey {{apiKey}}
+Content-Type: application/json
+
+{
+  "role": "readonly",
+  "password": "{{password}}"
+}
+
+###
+# Delete a user
+DELETE {{baseUrl}}/api/security/users/{{userId}}/
+Authorization: ApiKey {{apiKey}}
+### ---- API Keys ----
+
+###
+# List all API keys
+GET {{baseUrl}}/api/security/keys/
+Authorization: ApiKey {{apiKey}}
+
+###
+# Create a new API key (returns one-time plaintext token — store it now)
+POST {{baseUrl}}/api/security/keys/
+Authorization: ApiKey {{apiKey}}
+Content-Type: application/json
+
+{
+  "name": "My API Key",
+  "expires_days": 90
+}
+
+###
+# Revoke an API key (key stops working; row kept for audit)
+POST {{baseUrl}}/api/security/keys/1/revoke/
+Authorization: ApiKey {{apiKey}}
+Content-Length: 0
+
+###
+# Delete an API key (permanent hard delete)
+DELETE {{baseUrl}}/api/security/keys/1/
+Authorization: ApiKey {{apiKey}}
+
+### =====================================================================
+### SNMP — Devices
+### =====================================================================
+
+# SNMP device variables
+@deviceId = 1
+@networkId = 1
+@credentialId = 1
+@deviceTemplateId = 1
+
+###
+# List devices (paginated, filterable)
+# Optional: ?page=1&page_size=25&search=router&network={{networkId}}&sort_by=-created_at
+GET {{baseUrl}}/api/snmp/devices/
+Authorization: ApiKey {{apiKey}}
+
+###
+# List devices — filtered by network, search term
+GET {{baseUrl}}/api/snmp/devices/?network={{networkId}}&search=router&sort_by=name
+Authorization: ApiKey {{apiKey}}
+
+###
+# Get a single device
+GET {{baseUrl}}/api/snmp/devices/{{deviceId}}/
+Authorization: ApiKey {{apiKey}}
+
+###
+# Create a device (ip_address or hostname required; both optional if one is provided)
+POST {{baseUrl}}/api/snmp/devices/
+Authorization: ApiKey {{apiKey}}
+Content-Type: application/json
+
+{
+  "name": "router-01",
+  "ip_address": "192.168.1.1",
+  "hostname": null,
+  "port": 161,
+  "retries": 2,
+  "timeout": 1000,
+  "credential": {{credentialId}},
+  "network": {{networkId}},
+  "device_template": {{deviceTemplateId}},
+  "site": "HQ",
+  "building": "A",
+  "room": "Server Room",
+  "latitude": null,
+  "longitude": null,
+  "metadata": {}
+}
+
+###
+# Update a device (pass null for FK fields to clear them)
+PUT {{baseUrl}}/api/snmp/devices/{{deviceId}}/
+Authorization: ApiKey {{apiKey}}
+Content-Type: application/json
+
+{
+  "name": "router-01-updated",
+  "ip_address": "192.168.1.2",
+  "hostname": null,
+  "port": 161,
+  "retries": 3,
+  "timeout": 2000,
+  "credential": {{credentialId}},
+  "network": {{networkId}},
+  "device_template": {{deviceTemplateId}},
+  "site": "HQ",
+  "building": "B",
+  "room": "NOC",
+  "metadata": {"role": "core"}
+}
+
+###
+# Delete a device
+DELETE {{baseUrl}}/api/snmp/devices/{{deviceId}}/
+Authorization: ApiKey {{apiKey}}
+
+### =====================================================================
+### SNMP — Credentials
+### =====================================================================
+
+@credentialId = 1
+
+###
+# List all credentials (optionally filter: ?search=cisco&version=2c)
+GET {{baseUrl}}/api/snmp/credentials/
+Authorization: ApiKey {{apiKey}}
+
+###
+# Get a single credential (secrets masked as ***)
+GET {{baseUrl}}/api/snmp/credentials/{{credentialId}}/
+Authorization: ApiKey {{apiKey}}
+
+###
+# Create a v2c credential
+POST {{baseUrl}}/api/snmp/credentials/
+Authorization: ApiKey {{apiKey}}
+Content-Type: application/json
+
+{
+  "name": "my-v2c-cred",
+  "description": "Example SNMPv2c credential",
+  "version": "2c",
+  "community": "public"
+}
+
+###
+# Create a v3 credential (authPriv)
+POST {{baseUrl}}/api/snmp/credentials/
+Authorization: ApiKey {{apiKey}}
+Content-Type: application/json
+
+{
+  "name": "my-v3-cred",
+  "description": "Example SNMPv3 authPriv credential",
+  "version": "3",
+  "security_name": "snmpuser",
+  "security_level": "authPriv",
+  "auth_protocol": "sha",
+  "auth_pass": "authpassword123",
+  "priv_protocol": "aes",
+  "priv_pass": "privpassword123"
+}
+
+###
+# Update a credential (leave auth_pass/priv_pass empty to keep existing secrets)
+PUT {{baseUrl}}/api/snmp/credentials/{{credentialId}}/
+Authorization: ApiKey {{apiKey}}
+Content-Type: application/json
+
+{
+  "name": "my-v2c-cred",
+  "description": "Updated description",
+  "version": "2c",
+  "community": "newcommunity"
+}
+
+###
+# Delete a credential
+DELETE {{baseUrl}}/api/snmp/credentials/{{credentialId}}/
+Authorization: ApiKey {{apiKey}}
+
+### =====================================================================
+### SNMP — Networks
+### =====================================================================
+
+@networkId = 1
+
+###
+# List all networks (optionally filter: ?search=homelab)
+GET {{baseUrl}}/api/snmp/networks/
+Authorization: ApiKey {{apiKey}}
+
+###
+# Get a single network
+GET {{baseUrl}}/api/snmp/networks/{{networkId}}/
+Authorization: ApiKey {{apiKey}}
+
+###
+# Create a network (CENTRALIZED mode, ES connection)
+POST {{baseUrl}}/api/snmp/networks/
+Authorization: ApiKey {{apiKey}}
+Content-Type: application/json
+
+{
+  "name": "Office",
+  "network_range": "10.10.10.0/24",
+  "deployment_mode": "CENTRALIZED",
+  "credential_mode": "KEYSTORE",
+  "connection": {{connectionId}},
+  "agent_connection": null,
+  "discovery_credential": {{credentialId}},
+  "credential": null,
+  "discovery_enabled": true,
+  "traps_enabled": false,
+  "interval": 30,
+  "namespace": "default",
+  "namespace_from_device_template": false
+}
+
+###
+# Create a network (AGENT mode)
+POST {{baseUrl}}/api/snmp/networks/
+Authorization: ApiKey {{apiKey}}
+Content-Type: application/json
+
+{
+  "name": "Remote-Office",
+  "network_range": "172.16.0.0/24",
+  "deployment_mode": "AGENT",
+  "credential_mode": "KEYSTORE",
+  "connection": {{connectionId}},
+  "agent_connection": null,
+  "discovery_credential": {{credentialId}},
+  "discovery_enabled": true,
+  "traps_enabled": false,
+  "interval": 60,
+  "namespace": "remote"
+}
+
+###
+# Update a network
+PUT {{baseUrl}}/api/snmp/networks/{{networkId}}/
+Authorization: ApiKey {{apiKey}}
+Content-Type: application/json
+
+{
+  "name": "Homelab",
+  "network_range": "192.168.0.0/24",
+  "interval": 60,
+  "discovery_enabled": true,
+  "traps_enabled": false
+}
+
+###
+# Delete a network (also removes associated Logstash pipelines in ES)
+DELETE {{baseUrl}}/api/snmp/networks/{{networkId}}/
+Authorization: ApiKey {{apiKey}}
+
+### =====================================================================
+### SNMP — Profiles (OID device profiles)
+### =====================================================================
+
+@profileId = 1
+
+###
+# List all profiles (optionally filter: ?search=cisco&official=false)
+GET {{baseUrl}}/api/snmp/profiles/
+Authorization: ApiKey {{apiKey}}
+
+###
+# Get a single profile (includes full profile_data and normalizers)
+GET {{baseUrl}}/api/snmp/profiles/{{profileId}}/
+Authorization: ApiKey {{apiKey}}
+
+###
+# Create a profile
+POST {{baseUrl}}/api/snmp/profiles/
+Authorization: ApiKey {{apiKey}}
+Content-Type: application/json
+
+{
+  "name": "my_custom_switch",
+  "description": "Custom profile for in-house switch",
+  "vendor": "Acme",
+  "product": "Switch X",
+  "profile_data": {
+    "get": {
+      "system.name": "1.3.6.1.2.1.1.5.0",
+      "system.uptime": "1.3.6.1.2.1.1.3.0"
+    },
+    "walk": [],
+    "table": {}
+  },
+  "normalizers": []
+}
+
+###
+# Update a profile (rename also allowed via "name" field)
+PUT {{baseUrl}}/api/snmp/profiles/{{profileId}}/
+Authorization: ApiKey {{apiKey}}
+Content-Type: application/json
+
+{
+  "name": "my_custom_switch",
+  "description": "Updated description",
+  "vendor": "Acme",
+  "product": "Switch X Pro"
+}
+
+###
+# Delete a profile
+DELETE {{baseUrl}}/api/snmp/profiles/{{profileId}}/
+Authorization: ApiKey {{apiKey}}
+
+### =====================================================================
+### SNMP — Device Templates
+### =====================================================================
+
+@templateId = 1
+
+###
+# List all device templates (optionally filter: ?search=cisco&official=false)
+GET {{baseUrl}}/api/snmp/templates/
+Authorization: ApiKey {{apiKey}}
+
+###
+# Get a single template (includes associated profiles)
+GET {{baseUrl}}/api/snmp/templates/{{templateId}}/
+Authorization: ApiKey {{apiKey}}
+
+###
+# Create a device template
+POST {{baseUrl}}/api/snmp/templates/
+Authorization: ApiKey {{apiKey}}
+Content-Type: application/json
+
+{
+  "name": "my_custom_switch",
+  "description": "Template for in-house switches",
+  "vendor": "Acme",
+  "model": "Switch-X",
+  "product": "Switch X Series",
+  "type": "switch",
+  "matching_rules": ["Acme Switch", "ACME-SW"],
+  "profiles": [{{profileId}}]
+}
+
+###
+# Update a device template (official templates return 403)
+PUT {{baseUrl}}/api/snmp/templates/{{templateId}}/
+Authorization: ApiKey {{apiKey}}
+Content-Type: application/json
+
+{
+  "description": "Updated description",
+  "matching_rules": ["Acme Switch", "ACME-SW", "AcmeSW"],
+  "profiles": [{{profileId}}]
+}
+
+###
+# Delete a device template (official templates return 403)
+DELETE {{baseUrl}}/api/snmp/templates/{{templateId}}/
+Authorization: ApiKey {{apiKey}}
+
+### =====================================================================
+### POLICIES
+### =====================================================================
+
+# Policy variables
+@policyId = 1
+@tokenId = 1
+@cloneSourceId = 1
+
+###
+# List all policies (non-EMBEDDED, includes active agent count)
+GET {{baseUrl}}/api/policies/
+Authorization: ApiKey {{apiKey}}
+
+###
+# Get a single policy (full fields including logstash.yml, jvm.options, log4j2.properties)
+GET {{baseUrl}}/api/policies/{{policyId}}/
+Authorization: ApiKey {{apiKey}}
+
+###
+# Create a PACKAGED policy (minimal — defaults for all config files)
+POST {{baseUrl}}/api/policies/
+Authorization: ApiKey {{apiKey}}
+Content-Type: application/json
+
+{
+  "name": "my-packaged-policy",
+  "policy_type": "PACKAGED"
+}
+
+###
+# Create a MANAGED policy (full fields)
+POST {{baseUrl}}/api/policies/
+Authorization: ApiKey {{apiKey}}
+Content-Type: application/json
+
+{
+  "name": "my-managed-policy",
+  "policy_type": "MANAGED",
+  "settings_path": "/etc/logstash/",
+  "logs_path": "/var/log/logstash",
+  "logstash_source": "SYSTEM",
+  "logstash_via_ui": false,
+  "logstash_yml": "",
+  "jvm_options": "",
+  "log4j2_properties": ""
+}
+
+###
+# Update a policy — change jvm_options and logstash.yml
+# Note: policy_type cannot be changed; system SIMULATE/MANAGED policies are path-locked
+PUT {{baseUrl}}/api/policies/{{policyId}}/
+Authorization: ApiKey {{apiKey}}
+Content-Type: application/json
+
+{
+  "jvm_options": "-Xms1g\n-Xmx1g",
+  "logstash_yml": "pipeline.workers: 4\n"
+}
+
+###
+# Delete a policy (non-system, no assigned connections)
+DELETE {{baseUrl}}/api/policies/{{policyId}}/
+Authorization: ApiKey {{apiKey}}
+
+###
+# Deploy a policy (snapshot → new Revision, increments revision number)
+POST {{baseUrl}}/api/policies/{{policyId}}/deploy/
+Authorization: ApiKey {{apiKey}}
+Content-Length: 0
+
+###
+# Clone a policy (copies pipelines + keystore; PACKAGED/DEFAULT → MANAGED)
+POST {{baseUrl}}/api/policies/{{cloneSourceId}}/clone/
+Authorization: ApiKey {{apiKey}}
+Content-Type: application/json
+
+{
+  "new_name": "my-cloned-policy"
+}
+
+###
+# Get pending changes diff (current vs last deployed revision)
+GET {{baseUrl}}/api/policies/{{policyId}}/diff/
+Authorization: ApiKey {{apiKey}}
+
+###
+# List enrollment tokens for a policy (includes encoded token + install command)
+GET {{baseUrl}}/api/policies/{{policyId}}/tokens/
+Authorization: ApiKey {{apiKey}}
+
+###
+# Create an enrollment token
+POST {{baseUrl}}/api/policies/{{policyId}}/tokens/
+Authorization: ApiKey {{apiKey}}
+Content-Type: application/json
+
+{
+  "name": "production-token"
+}
+
+###
+# Delete an enrollment token
+DELETE {{baseUrl}}/api/policies/{{policyId}}/tokens/{{tokenId}}/
+Authorization: ApiKey {{apiKey}}
+
+### =====================================================================
+### PIPELINES — Agent / Policy (Django ORM)
+### =====================================================================
+
+# Pipeline variables
+@pipelineId = 1
+@esPipelineName = my-pipeline
+@esPipelineConnId = 17
+
+###
+# List pipelines for a policy (user-managed only by default)
+GET {{baseUrl}}/api/pipelines/?policy_id={{policyId}}
+Authorization: ApiKey {{apiKey}}
+
+###
+# List pipelines — all managed_by values
+GET {{baseUrl}}/api/pipelines/?policy_id={{policyId}}&managed_by=user
+Authorization: ApiKey {{apiKey}}
+
+###
+# Get a single agent pipeline
+GET {{baseUrl}}/api/pipelines/{{pipelineId}}/
+Authorization: ApiKey {{apiKey}}
+
+###
+# Create a pipeline in a policy
+POST {{baseUrl}}/api/pipelines/
+Authorization: ApiKey {{apiKey}}
+Content-Type: application/json
+
+{
+  "policy_id": {{policyId}},
+  "name": "api-test-pipeline",
+  "lscl": "input { beats { port => 5044 } }\nfilter { grok { match => { \"message\" => \"%{COMBINEDAPACHELOG}\" } } }\noutput { elasticsearch { hosts => [\"localhost:9200\"] } }",
+  "description": "Created via API",
+  "pipeline_workers": 1,
+  "pipeline_batch_size": 128,
+  "pipeline_batch_delay": 50,
+  "queue_type": "memory"
+}
+
+###
+# Update (save) a pipeline
+PUT {{baseUrl}}/api/pipelines/{{pipelineId}}/
+Authorization: ApiKey {{apiKey}}
+Content-Type: application/json
+
+{
+  "lscl": "input { beats { port => 5044 } }\nfilter { mutate { add_field => { \"env\" => \"prod\" } } }\noutput { elasticsearch { hosts => [\"localhost:9200\"] } }",
+  "description": "Updated via API",
+  "pipeline_workers": 2
+}
+
+###
+# Delete a pipeline
+DELETE {{baseUrl}}/api/pipelines/{{pipelineId}}/
+Authorization: ApiKey {{apiKey}}
+
+###
+# Deploy a policy (snapshot user pipelines → agents pick up on next check-in)
+POST {{baseUrl}}/api/pipelines/policies/{{policyId}}/deploy/
+Authorization: ApiKey {{apiKey}}
+Content-Length: 0
+
+### =====================================================================
+### PIPELINES — Elasticsearch / Centralized
+### =====================================================================
+
+###
+# List all ES-managed pipelines for a connection
+GET {{baseUrl}}/api/pipelines/es/{{esPipelineConnId}}/
+Authorization: ApiKey {{apiKey}}
+
+###
+# Get a single ES pipeline by name
+GET {{baseUrl}}/api/pipelines/es/{{esPipelineConnId}}/{{esPipelineName}}/
+Authorization: ApiKey {{apiKey}}
+
+###
+# Create an ES pipeline
+POST {{baseUrl}}/api/pipelines/es/{{esPipelineConnId}}/
+Authorization: ApiKey {{apiKey}}
+Content-Type: application/json
+
+{
+  "name": "{{esPipelineName}}",
+  "lscl": "input { beats { port => 5044 } }\nfilter {}\noutput { elasticsearch { hosts => [\"localhost:9200\"] } }",
+  "description": "ES pipeline via API",
+  "pipeline_workers": 1,
+  "pipeline_batch_size": 128,
+  "queue_type": "memory"
+}
+
+###
+# Update an ES pipeline
+PUT {{baseUrl}}/api/pipelines/es/{{esPipelineConnId}}/{{esPipelineName}}/
+Authorization: ApiKey {{apiKey}}
+Content-Type: application/json
+
+{
+  "lscl": "input { beats { port => 5044 } }\nfilter { mutate { add_field => { \"env\" => \"prod\" } } }\noutput { elasticsearch { hosts => [\"localhost:9200\"] } }",
+  "description": "Updated ES pipeline",
+  "pipeline_workers": 2
+}
+
+###
+# Delete an ES pipeline
+DELETE {{baseUrl}}/api/pipelines/es/{{esPipelineConnId}}/{{esPipelineName}}/
+Authorization: ApiKey {{apiKey}}
+
+### =====================================================================
+### PIPELINES — Simulate (synchronous)
+### =====================================================================
+
+###
+# Simulate using a saved pipeline_id
+POST {{baseUrl}}/api/pipelines/simulate/
+Authorization: ApiKey {{apiKey}}
+Content-Type: application/json
+
+{
+  "pipeline_id": {{pipelineId}},
+  "event": "192.168.1.1 - frank [10/Oct/2000:13:55:36 -0700] \"GET /apache_pb.gif HTTP/1.0\" 200 2326",
+  "timeout": 30
+}
+
+###
+# Simulate using raw LSCL
+POST {{baseUrl}}/api/pipelines/simulate/
+Authorization: ApiKey {{apiKey}}
+Content-Type: application/json
+
+{
+  "lscl": "input { beats { port => 5044 } }\nfilter { grok { match => { \"message\" => \"%{COMBINEDAPACHELOG}\" } } mutate { add_field => { \"env\" => \"prod\" } } }\noutput { elasticsearch { hosts => [\"localhost:9200\"] } }",
+  "event": "192.168.1.1 - frank [10/Oct/2000:13:55:36 -0700] \"GET /apache_pb.gif HTTP/1.0\" 200 2326",
+  "policy_id": {{policyId}},
+  "timeout": 60
+}
+
+### =====================================================================
+### SNMP — Deploy
+### =====================================================================
+
+###
+# Check whether there are undeployed config changes
+GET {{baseUrl}}/api/snmp/deploy/status/
+Authorization: ApiKey {{apiKey}}
+
+###
+# Compute a deployment diff (desired vs actual pipelines) — caches the plan for 60s
+POST {{baseUrl}}/api/snmp/deploy/diff/
+Authorization: ApiKey {{apiKey}}
+Content-Length: 0
+
+###
+# Apply the deployment — pushes pipelines to ES / agent records
+# Run diff/ first to preview; apply/ reuses the cached plan when available
+POST {{baseUrl}}/api/snmp/deploy/apply/
+Authorization: ApiKey {{apiKey}}
+Content-Length: 0

@@ -39,7 +39,8 @@ urlpatterns = [
     path('', include('Site.urls')),
     path('Documentation/', include("Documentation.urls")),
 
-    path('AI/', include ("AI.urls"))
+    path('AI/', include ("AI.urls")),
+    path('api/', include('API.urls')),
     #path('Crash', crash)
 ]
 

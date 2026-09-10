@@ -388,6 +388,12 @@ class Connection(models.Model):
 
         AGENT rows need ``host``. CENTRALIZED rows need Cloud ID or host,
         plus either an API key or username/password.
+
+        For *updates* (pk already set) the form may clear the credential
+        fields on submission when the user didn't re-enter them.  In that
+        case we fall back to the persisted DB row to confirm that credentials
+        are still stored — the form's ``save()`` will restore the encrypted
+        value before writing to the database.
         """
         if self.connection_type == self.ConnectionType.AGENT:
             if not self.host:
@@ -399,9 +405,23 @@ class Connection(models.Model):
                     "Either Cloud ID or Cloud URL is required for centralized connections"
                 )
             if not (self.api_key or (self.username and self.password)):
-                raise ValidationError(
-                    "Either API key or username/password is required for centralized connections"
-                )
+                # Bug 2 fix: for partial PUT requests the form clears the credential
+                # field that wasn't re-submitted.  If this is an existing row, check
+                # the persisted record to see whether a credential is already stored;
+                # if yes, validation passes and form.save() will restore it.
+                has_stored_credential = False
+                if self.pk:
+                    try:
+                        db = Connection.objects.get(pk=self.pk)
+                        has_stored_credential = bool(
+                            db.api_key or (db.username and db.password)
+                        )
+                    except Connection.DoesNotExist:
+                        pass
+                if not has_stored_credential:
+                    raise ValidationError(
+                        "Either API key or username/password is required for centralized connections"
+                    )
 
     def save(self, *args, **kwargs):
         """Validate, encrypt credentials, and persist the connection.

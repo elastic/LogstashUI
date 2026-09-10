@@ -2241,6 +2241,12 @@ def DeployConfiguration(request):
                         'error': 'Failed to deploy any pipelines. Errors: ' + '; '.join(errors)
                     }, status=500)
                 else:
+                    # No pipeline changes needed — still stamp last_deployment so
+                    # has_undeployed_changes() returns False (config matches deployed state).
+                    from django.utils import timezone
+                    state, _ = SNMPDeploymentState.objects.get_or_create(id=1)
+                    state.last_deployment = timezone.now()
+                    state.save(update_fields=['last_deployment'])
                     return JsonResponse({
                         'success': True,
                         'message': 'All pipelines are already up to date - no changes needed',
@@ -2646,7 +2652,12 @@ def DeployConfiguration(request):
                     'error': 'Failed to deploy any pipelines. Errors: ' + '; '.join(errors)
                 }, status=500)
             else:
-                # No changes needed - all pipelines are already up to date
+                # No changes needed — still stamp last_deployment so
+                # has_undeployed_changes() returns False (config matches deployed state).
+                from django.utils import timezone
+                state, _ = SNMPDeploymentState.objects.get_or_create(id=1)
+                state.last_deployment = timezone.now()
+                state.save(update_fields=['last_deployment'])
                 return JsonResponse({
                     'success': True,
                     'message': 'All pipelines are already up to date - no changes needed',

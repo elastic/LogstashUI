@@ -115,6 +115,7 @@ INSTALLED_APPS = [
     "Site",
     "Documentation",
     "AI",
+    "API",
     # Frameworks
     "django_htmx",
     "tailwind",
@@ -262,6 +263,8 @@ LOGIN_REQUIRED_IGNORE_PATHS = [
     "/static/",
     "/health/",
     "/.well-known/logstashui/ca.crt",
+    # REST API — auth is enforced by the views themselves (JSON 401/403, not a redirect)
+    "/api/",
     "/ConnectionManager/StreamSimulate/",
     "/ConnectionManager/StreamSimulate",
     "/ConnectionManager/Enroll/",

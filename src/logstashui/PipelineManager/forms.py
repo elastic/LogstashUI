@@ -114,6 +114,17 @@ class ConnectionForm(ModelForm):
         ``connection_type``.
         """
         super().__init__(*args, **kwargs)
+        # Snapshot original encrypted credentials BEFORE Django's _post_clean()
+        # clears them from self.instance during is_valid().  save() uses these
+        # snapshots to restore credentials when the caller didn't re-submit them
+        # (i.e. a partial PUT that doesn't include api_key or password).
+        if self.instance and self.instance.pk:
+            self._original_api_key = self.instance.api_key
+            self._original_password = self.instance.password
+        else:
+            self._original_api_key = None
+            self._original_password = None
+
         # Set initial values for the form
         if self.instance and self.instance.pk:
             # For existing instances, don't require password/API key to be re-entered
@@ -206,17 +217,18 @@ class ConnectionForm(ModelForm):
         """
         instance = super().save(commit=False)
         
-        # Only update password if a new one was provided
+        # Only update password if a new one was provided.
+        # Use the snapshot from __init__ because Django's _post_clean() already
+        # cleared self.instance.password during is_valid().
         if 'password' in self.cleaned_data and not self.cleaned_data['password']:
-            # If password field is empty, keep the existing password
-            if self.instance and self.instance.pk:
-                instance.password = self.instance.password
+            if self._original_password:
+                instance.password = self._original_password
         
-        # Only update API key if a new one was provided
+        # Only update API key if a new one was provided.
+        # Same reason: use the __init__-time snapshot.
         if 'api_key' in self.cleaned_data and not self.cleaned_data['api_key']:
-            # If API key field is empty, keep the existing API key
-            if self.instance and self.instance.pk:
-                instance.api_key = self.instance.api_key
+            if self._original_api_key:
+                instance.api_key = self._original_api_key
         
         if commit:
             instance.save()
