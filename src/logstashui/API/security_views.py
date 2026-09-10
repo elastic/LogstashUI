@@ -262,7 +262,9 @@ def _create_user(request):
         UserProfile.objects.create(user=user, role=role)
 
     logger.info("API: user '%s' created by '%s' with role '%s'.", username, request.user.username, role)
-    return JsonResponse({'success': True, 'user': _user_data(user)}, status=201)
+    # Discrepancy B fix: include top-level user_id for docs compatibility as well
+    # as the full nested 'user' object.
+    return JsonResponse({'success': True, 'user_id': user.id, 'user': _user_data(user)}, status=201)
 
 
 # ---------------------------------------------------------------------------

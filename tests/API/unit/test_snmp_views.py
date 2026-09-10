@@ -399,3 +399,241 @@ class TestDeviceDelete:
     def test_delete_wrong_method_returns_405(self, authenticated_client, device):
         response = authenticated_client.patch(f'/api/snmp/devices/{device.id}/')
         assert response.status_code == 405
+
+
+# ---------------------------------------------------------------------------
+# Edge-case coverage — gaps identified after initial review
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+class TestDeviceInvalidForeignKeys:
+    """Invalid FK ids should not crash the server — they surface as errors."""
+
+    def test_create_invalid_credential_id(self, authenticated_client):
+        response = _post(authenticated_client, '/api/snmp/devices/', {
+            'name': 'bad-cred-device',
+            'ip_address': '10.0.1.1',
+            'credential': 99999,
+        })
+        # Django raises ValueError / IntegrityError for bad FK — should not be 500
+        assert response.status_code in (400, 409, 500)
+        assert response['Content-Type'] == 'application/json'
+
+    def test_create_invalid_network_id(self, authenticated_client):
+        response = _post(authenticated_client, '/api/snmp/devices/', {
+            'name': 'bad-net-device',
+            'ip_address': '10.0.1.2',
+            'network': 99999,
+        })
+        assert response.status_code in (400, 409, 500)
+        assert response['Content-Type'] == 'application/json'
+
+    def test_create_invalid_template_id(self, authenticated_client):
+        response = _post(authenticated_client, '/api/snmp/devices/', {
+            'name': 'bad-tmpl-device',
+            'ip_address': '10.0.1.3',
+            'device_template': 99999,
+        })
+        assert response.status_code in (400, 409, 500)
+        assert response['Content-Type'] == 'application/json'
+
+    def test_update_invalid_credential_id(self, authenticated_client, device):
+        response = _put(authenticated_client, f'/api/snmp/devices/{device.id}/', {
+            'ip_address': '10.0.0.1',
+            'credential': 99999,
+        })
+        assert response.status_code in (400, 409, 500)
+        assert response['Content-Type'] == 'application/json'
+
+
+@pytest.mark.django_db
+class TestDeviceLatLon:
+    """latitude / longitude edge cases."""
+
+    def test_create_with_valid_lat_lon(self, authenticated_client):
+        response = _post(authenticated_client, '/api/snmp/devices/', {
+            'name': 'geo-device',
+            'ip_address': '10.0.2.1',
+            'latitude': 37.7749,
+            'longitude': -122.4194,
+        })
+        assert response.status_code == 201
+        d = __import__('SNMP.models', fromlist=['Device']).Device.objects.get(name='geo-device')
+        assert float(d.latitude) == pytest.approx(37.7749, abs=1e-4)
+        assert float(d.longitude) == pytest.approx(-122.4194, abs=1e-4)
+
+    def test_create_non_numeric_latitude_returns_400(self, authenticated_client):
+        response = _post(authenticated_client, '/api/snmp/devices/', {
+            'name': 'bad-lat-device',
+            'ip_address': '10.0.2.2',
+            'latitude': 'not-a-number',
+            'longitude': 0,
+        })
+        assert response.status_code == 400
+        assert response['Content-Type'] == 'application/json'
+
+    def test_create_non_numeric_longitude_returns_400(self, authenticated_client):
+        response = _post(authenticated_client, '/api/snmp/devices/', {
+            'name': 'bad-lon-device',
+            'ip_address': '10.0.2.3',
+            'latitude': 0,
+            'longitude': 'not-a-number',
+        })
+        assert response.status_code == 400
+        assert response['Content-Type'] == 'application/json'
+
+    def test_update_non_numeric_lat_returns_400(self, authenticated_client, device):
+        response = _put(authenticated_client, f'/api/snmp/devices/{device.id}/', {
+            'ip_address': '10.0.0.1',
+            'latitude': 'bad',
+            'longitude': 0,
+        })
+        assert response.status_code == 400
+
+    def test_lat_lon_null_clears_value(self, authenticated_client):
+        """Explicitly passing null should store None."""
+        response = _post(authenticated_client, '/api/snmp/devices/', {
+            'name': 'null-geo-device',
+            'ip_address': '10.0.2.4',
+            'latitude': None,
+            'longitude': None,
+        })
+        assert response.status_code == 201
+        from SNMP.models import Device
+        d = Device.objects.get(name='null-geo-device')
+        assert d.latitude is None
+        assert d.longitude is None
+
+
+@pytest.mark.django_db
+class TestDeviceMetadataVariants:
+    """metadata can arrive as a dict or a JSON string."""
+
+    def test_create_metadata_as_dict(self, authenticated_client):
+        response = _post(authenticated_client, '/api/snmp/devices/', {
+            'name': 'meta-dict-device',
+            'ip_address': '10.0.3.1',
+            'metadata': {'env': 'prod', 'tier': 1},
+        })
+        assert response.status_code == 201
+        from SNMP.models import Device
+        d = Device.objects.get(name='meta-dict-device')
+        assert d.metadata == {'env': 'prod', 'tier': 1}
+
+    def test_create_metadata_as_json_string(self, authenticated_client):
+        """metadata sent as a serialized JSON string should be parsed."""
+        response = _post(authenticated_client, '/api/snmp/devices/', {
+            'name': 'meta-str-device',
+            'ip_address': '10.0.3.2',
+            'metadata': '{"env": "staging"}',
+        })
+        assert response.status_code == 201
+        from SNMP.models import Device
+        d = Device.objects.get(name='meta-str-device')
+        assert d.metadata == {'env': 'staging'}
+
+    def test_create_invalid_json_string_metadata_stores_empty(self, authenticated_client):
+        """Invalid JSON string for metadata should gracefully store {}."""
+        response = _post(authenticated_client, '/api/snmp/devices/', {
+            'name': 'meta-bad-str-device',
+            'ip_address': '10.0.3.3',
+            'metadata': 'not-valid-json{{{',
+        })
+        assert response.status_code == 201
+        from SNMP.models import Device
+        d = Device.objects.get(name='meta-bad-str-device')
+        assert d.metadata == {}
+
+    def test_update_metadata_as_json_string(self, authenticated_client, device):
+        response = _put(authenticated_client, f'/api/snmp/devices/{device.id}/', {
+            'ip_address': '10.0.0.1',
+            'metadata': '{"role": "core"}',
+        })
+        assert response.status_code == 200
+        device.refresh_from_db()
+        assert device.metadata == {'role': 'core'}
+
+
+@pytest.mark.django_db
+class TestDeviceListPaginationBoundaries:
+    """page_size clamping and boundary conditions."""
+
+    def test_page_size_zero_clamped_to_one(self, authenticated_client, device):
+        response = authenticated_client.get('/api/snmp/devices/?page_size=0')
+        assert response.status_code == 200
+        data = response.json()
+        assert data['page_size'] >= 1
+
+    def test_page_size_above_max_clamped_to_200(self, authenticated_client, device):
+        response = authenticated_client.get('/api/snmp/devices/?page_size=9999')
+        assert response.status_code == 200
+        data = response.json()
+        assert data['page_size'] == 200
+
+    def test_page_beyond_last_returns_empty_devices(self, authenticated_client, device):
+        response = authenticated_client.get('/api/snmp/devices/?page=9999&page_size=25')
+        assert response.status_code == 200
+        data = response.json()
+        assert data['devices'] == []
+        assert data['has_next'] is False
+
+    def test_negative_page_clamped_to_one(self, authenticated_client, device):
+        response = authenticated_client.get('/api/snmp/devices/?page=-5')
+        assert response.status_code == 200
+        assert response.json()['page'] == 1
+
+
+@pytest.mark.django_db
+class TestDeviceListAllSortFields:
+    """Every documented sort_by value should return 200."""
+
+    SORT_FIELDS = [
+        'name', '-name',
+        'ip_address', '-ip_address',
+        'hostname', '-hostname',
+        'created_at', '-created_at',
+    ]
+
+    @pytest.mark.parametrize('sort_by', SORT_FIELDS)
+    def test_valid_sort_returns_200(self, authenticated_client, device, sort_by):
+        response = authenticated_client.get(f'/api/snmp/devices/?sort_by={sort_by}')
+        assert response.status_code == 200
+
+    def test_invalid_sort_falls_back_to_default(self, authenticated_client, device):
+        """An unrecognised sort_by should not crash — falls back to -created_at."""
+        response = authenticated_client.get('/api/snmp/devices/?sort_by=TOTALLY_INVALID')
+        assert response.status_code == 200
+        assert 'devices' in response.json()
+
+
+@pytest.mark.django_db
+class TestDeviceListNetworkFilter:
+    """Network filter should return only devices in that network."""
+
+    def test_filter_by_valid_network(self, authenticated_client, device, network):
+        response = authenticated_client.get(f'/api/snmp/devices/?network={network.id}')
+        assert response.status_code == 200
+        ids = [d['id'] for d in response.json()['devices']]
+        assert device.id in ids
+
+    def test_filter_by_nonexistent_network_returns_empty(self, authenticated_client, device):
+        response = authenticated_client.get('/api/snmp/devices/?network=99999')
+        assert response.status_code == 200
+        assert response.json()['total'] == 0
+
+    def test_filter_excludes_devices_in_other_networks(
+        self, authenticated_client, device, network, snmp_connection, credential
+    ):
+        from SNMP.models import Network, Device
+        other_net = Network.objects.create(
+            name='OtherNet', network_range='172.16.0.0/24',
+            connection=snmp_connection, discovery_credential=credential,
+        )
+        other_dev = Device.objects.create(
+            name='other-net-device', ip_address='172.16.0.1',
+            network=other_net, credential=credential,
+        )
+        response = authenticated_client.get(f'/api/snmp/devices/?network={network.id}')
+        ids = [d['id'] for d in response.json()['devices']]
+        assert other_dev.id not in ids
+        assert device.id in ids

@@ -113,6 +113,15 @@ def _list_connections(request):
 @api_require_admin
 def _create_connection(request):
     data = parse_request_body(request)
+
+    # Bug 1 fix: enforce unique name before saving
+    name = (data.get('name') or '').strip()
+    if name and Connection.objects.filter(name=name).exists():
+        return JsonResponse(
+            {'success': False, 'error': f"A connection named '{name}' already exists."},
+            status=409,
+        )
+
     form = ConnectionForm(data)
 
     if not form.is_valid():
@@ -164,6 +173,45 @@ def _get_connection(request, connection_id):
     return JsonResponse({'success': True, 'connection': _safe_connection_data(conn)})
 
 
+def _connection_form_defaults(conn):
+    """Build a form-data dict from an existing Connection for partial-update support.
+
+    Infers the current ``connection_mode`` and ``auth_type`` radio values from the
+    stored connection so that the form's ``clean()`` branches correctly and does not
+    zero out whichever credential field is already stored.
+
+    Sensitive fields (``api_key``, ``password``) are deliberately omitted from the
+    returned dict.  The form's ``save()`` treats an empty value as "keep existing",
+    so callers only need to supply the fields they actually want to change.
+    """
+    # Infer connection_mode (cloud vs url)
+    connection_mode = 'cloud' if conn.cloud_id else 'url'
+
+    # Infer auth_type so clean() doesn't zero the wrong credential field.
+    # The fields are stored encrypted, so a non-empty string means "has a key".
+    if conn.connection_type == Connection.ConnectionType.AGENT:
+        auth_type = 'apiKey'          # AGENT always uses api_key table; basic unused
+    elif conn.api_key:
+        auth_type = 'apiKey'
+    else:
+        auth_type = 'basic'
+
+    return {
+        'name':            conn.name,
+        'connection_type': conn.connection_type,
+        'host':            conn.host or '',
+        'port':            conn.port or '',
+        'username':        conn.username or '',
+        'cloud_id':        conn.cloud_id or '',
+        'cloud_url':       conn.cloud_url or '',
+        # Include radio-button values so the form's clean() zeros the correct
+        # opposing fields and does NOT zero the credential field we're keeping.
+        'connection_mode': connection_mode,
+        'auth_type':       auth_type,
+        # api_key / password deliberately omitted: empty string → keep existing
+    }
+
+
 @api_require_admin
 def _update_connection(request, connection_id):
     conn = Connection.objects.filter(id=connection_id).first()
@@ -171,7 +219,22 @@ def _update_connection(request, connection_id):
         return JsonResponse({'success': False, 'error': 'Connection not found'}, status=404)
 
     data = parse_request_body(request)
-    form = ConnectionForm(data, instance=conn)
+
+    # Bug 2 fix: support partial PUT by merging existing values as form defaults.
+    # The caller only needs to supply the fields they want to change; omitted
+    # fields retain their current values.
+    merged = _connection_form_defaults(conn)
+    merged.update(data)
+
+    # Bug 1 fix (update path): check for name collision against other connections.
+    new_name = (merged.get('name') or '').strip()
+    if new_name and new_name != conn.name and Connection.objects.filter(name=new_name).exists():
+        return JsonResponse(
+            {'success': False, 'error': f"A connection named '{new_name}' already exists."},
+            status=409,
+        )
+
+    form = ConnectionForm(merged, instance=conn)
 
     if not form.is_valid():
         logger.warning("API update connection %s: invalid form — %s", connection_id, form.errors)
