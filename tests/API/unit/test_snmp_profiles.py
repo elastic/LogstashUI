@@ -175,11 +175,12 @@ class TestProfileCreate:
     def test_create_missing_vendor_400(self, authenticated_client):
         assert _post(authenticated_client, '/api/snmp/profiles/', {'name': 'no-vendor'}).status_code == 400
 
-    def test_create_duplicate_name_400(self, authenticated_client, profile):
+    def test_create_duplicate_name_409(self, authenticated_client, profile):
+        # H7/M7 fix: duplicate profile now returns 409 Conflict, not 400.
         r = _post(authenticated_client, '/api/snmp/profiles/', {
             'name': profile.name, 'vendor': 'Acme', 'profile_data': {},
         })
-        assert r.status_code == 400
+        assert r.status_code == 409
 
     def test_create_no_auth_401(self, client):
         assert _post(client, '/api/snmp/profiles/', {'name': 'x', 'vendor': 'y'}).status_code == 401
@@ -241,11 +242,15 @@ class TestProfileDelete:
         assert authenticated_client.delete(f'/api/snmp/profiles/{pid}/').status_code == 200
         assert not Profile.objects.filter(id=pid).exists()
 
-    def test_delete_system_profile_403(self, authenticated_client, db):
+    def test_delete_non_json_profile_200(self, authenticated_client, db):
+        # Bug 3 fix: only profiles whose name ends in '.json' are protected as
+        # "official".  A profile named 'system' (no .json suffix) is a user
+        # profile and must be deletable.  The companion test
+        # test_delete_generic_system_json_403 covers the .json protection path.
         sys_profile = Profile.objects.create(
             name='system', vendor='System', profile_data=SAMPLE_PROFILE_DATA, normalizers=[],
         )
-        assert authenticated_client.delete(f'/api/snmp/profiles/{sys_profile.id}/').status_code == 403
+        assert authenticated_client.delete(f'/api/snmp/profiles/{sys_profile.id}/').status_code == 200
 
     def test_delete_generic_system_json_403(self, authenticated_client, db):
         p = Profile.objects.create(

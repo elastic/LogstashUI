@@ -65,7 +65,17 @@ def parse_request_body(request):
     content_type = request.content_type or ''
     if 'application/json' in content_type:
         try:
-            return json.loads(request.body)
+            result = json.loads(request.body)
+            # H2 fix: if the body is a JSON array or scalar (not a dict),
+            # callers expect a dict and will crash with AttributeError.
+            if not isinstance(result, dict):
+                logger.warning(
+                    "parse_request_body: expected JSON object, got %s — ignoring body",
+                    type(result).__name__,
+                )
+                return {}
+            return result
         except (json.JSONDecodeError, ValueError):
+            logger.warning("parse_request_body: invalid JSON body — ignoring")
             return {}
     return dict(request.POST)

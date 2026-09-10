@@ -244,13 +244,15 @@ class TestUserList:
         })
         assert User.objects.filter(username='persistuser').exists()
 
-    def test_create_user_default_role_is_admin(self, authenticated_client):
+    def test_create_user_default_role_is_readonly(self, authenticated_client):
+        # H7 fix: default role changed from 'admin' to 'readonly' so that omitting
+        # the role field does not silently grant admin privileges.
         _post(authenticated_client, '/api/security/users/', {
             'username': 'defaultrole',
             'password': 'Sup3rS3cur3!Pass',
         })
         user = User.objects.get(username='defaultrole')
-        assert user.profile.role == 'admin'
+        assert user.profile.role == 'readonly'
 
     def test_create_user_sets_django_permissions(self, authenticated_client):
         _post(authenticated_client, '/api/security/users/', {

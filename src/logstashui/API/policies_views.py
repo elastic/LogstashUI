@@ -23,7 +23,8 @@ import json
 import logging
 import secrets
 
-from django.db.models import Count, Q
+from django.db import IntegrityError, transaction
+from django.db.models import Count, F, Q
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
@@ -144,7 +145,7 @@ def policy_list(request):
         return _list_policies(request)
     if request.method == 'POST':
         return _create_policy(request)
-    return JsonResponse({'error': 'Method not allowed'}, status=405)
+    return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
 
 
 @api_require_admin
@@ -196,6 +197,9 @@ def _create_policy(request):
     if type_error:
         return JsonResponse({'success': False, 'error': type_error}, status=400)
 
+    # M13 / M9 fix: wrap the entire create block in a transaction so a duplicate-
+    # name race (TOCTOU) produces a clean 409 rather than an unhandled IntegrityError.
+
     def _optional_int(key, default):
         raw = data.get(key, default)
         if raw is None or raw == '':
@@ -217,31 +221,35 @@ def _create_policy(request):
     log4j2_properties = data.get('log4j2_properties') or get_default_log4j2_properties()
 
     try:
-        policy = Policy.objects.create(
-            name=name,
-            policy_type=policy_type,
-            settings_path=normalize_agent_opt_path(data.get('settings_path', '/etc/logstash/')) or '/etc/logstash/',
-            logs_path=normalize_agent_opt_path(data.get('logs_path', '/var/log/logstash')) or '/var/log/logstash',
-            binary_path=normalize_agent_opt_path(data.get('binary_path', '/usr/share/logstash/bin')) or '/usr/share/logstash/bin',
-            data_path=normalize_agent_opt_path(data.get('data_path', '')),
-            keystore_env_file=normalize_agent_opt_path(
-                data.get('keystore_env_file') or '/etc/default/logstash'
-            ) or '/etc/default/logstash',
-            logstash_source=data.get('logstash_source') or Policy.LogstashSource.SYSTEM,
-            logstash_version=data.get('logstash_version') or '',
-            logstash_download_dir=normalize_agent_opt_path(
-                data.get('logstash_download_dir') or '/opt/logstash-agent/logstash-versions'
-            ) or '/opt/logstash-agent/logstash-versions',
-            logstash_via_ui=bool(data.get('logstash_via_ui', False)),
-            agent_api_port=_optional_int('agent_api_port', agent_port_default),
-            logstash_api_port=_optional_int('logstash_api_port', ls_port_default),
-            logstash_yml=logstash_yml,
-            jvm_options=jvm_options,
-            log4j2_properties=log4j2_properties,
-        )
+        with transaction.atomic():
+            policy = Policy.objects.create(
+                name=name,
+                policy_type=policy_type,
+                settings_path=normalize_agent_opt_path(data.get('settings_path', '/etc/logstash/')) or '/etc/logstash/',
+                logs_path=normalize_agent_opt_path(data.get('logs_path', '/var/log/logstash')) or '/var/log/logstash',
+                binary_path=normalize_agent_opt_path(data.get('binary_path', '/usr/share/logstash/bin')) or '/usr/share/logstash/bin',
+                data_path=normalize_agent_opt_path(data.get('data_path', '')),
+                keystore_env_file=normalize_agent_opt_path(
+                    data.get('keystore_env_file') or '/etc/default/logstash'
+                ) or '/etc/default/logstash',
+                logstash_source=data.get('logstash_source') or Policy.LogstashSource.SYSTEM,
+                logstash_version=data.get('logstash_version') or '',
+                logstash_download_dir=normalize_agent_opt_path(
+                    data.get('logstash_download_dir') or '/opt/logstash-agent/logstash-versions'
+                ) or '/opt/logstash-agent/logstash-versions',
+                logstash_via_ui=bool(data.get('logstash_via_ui', False)),
+                agent_api_port=_optional_int('agent_api_port', agent_port_default),
+                logstash_api_port=_optional_int('logstash_api_port', ls_port_default),
+                logstash_yml=logstash_yml,
+                jvm_options=jvm_options,
+                log4j2_properties=log4j2_properties,
+            )
+    except IntegrityError:
+        # M9 fix: race between the name-exists check and the INSERT.
+        return JsonResponse({'success': False, 'error': f"Policy '{name}' already exists."}, status=409)
     except Exception as exc:
         logger.error("API create policy: %s", exc)
-        return JsonResponse({'success': False, 'error': str(exc)}, status=500)
+        return JsonResponse({'success': False, 'error': 'An internal error occurred. Check server logs.'}, status=500)
 
     if policy_type == Policy.PolicyType.MANAGED and uses_packaged_default_paths(policy):
         apply_managed_path_bundle(policy)
@@ -294,7 +302,7 @@ def policy_detail(request, policy_id):
         return _update_policy(request, policy_id)
     if request.method == 'DELETE':
         return _delete_policy(request, policy_id)
-    return JsonResponse({'error': 'Method not allowed'}, status=405)
+    return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
 
 
 @api_require_admin
@@ -391,7 +399,7 @@ def _update_policy(request, policy_id):
         policy.save()
     except Exception as exc:
         logger.error("API update policy %s: %s", policy_id, exc)
-        return JsonResponse({'success': False, 'error': str(exc)}, status=500)
+        return JsonResponse({'success': False, 'error': 'An internal error occurred. Check server logs.'}, status=500)
 
     logger.info("API: policy '%s' updated by %s.", policy.name, request.user.username)
     return JsonResponse({
@@ -440,7 +448,7 @@ def policy_deploy(request, policy_id):
         ``last_deployed_at``. Admin only.
     """
     if request.method != 'POST':
-        return JsonResponse({'error': 'Method not allowed'}, status=405)
+        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
     return _do_deploy(request, policy_id)
 
 
@@ -453,7 +461,12 @@ def _do_deploy(request, policy_id):
     except Policy.DoesNotExist:
         return JsonResponse({'success': False, 'error': 'Policy not found.'}, status=404)
 
-    policy.current_revision_number += 1
+    # H15 fix: non-atomic read-increment-write; use DB-level F() inside atomic.
+    with transaction.atomic():
+        Policy.objects.filter(pk=policy.pk).update(
+            current_revision_number=F('current_revision_number') + 1
+        )
+        policy.refresh_from_db(fields=['current_revision_number'])
     new_rev = policy.current_revision_number
 
     snapshot = {
@@ -484,7 +497,7 @@ def _do_deploy(request, policy_id):
     policy.last_deployed_at = datetime.now(timezone.utc)
     # Bug 5 fix: clear the undeployed-changes flag after a successful deploy.
     policy.has_undeployed_changes = False
-    policy.save()
+    policy.save(update_fields=['last_deployed_at', 'has_undeployed_changes'])
 
     logger.info(
         "API: policy '%s' deployed as revision %s by %s.",
@@ -514,7 +527,7 @@ def policy_clone(request, policy_id):
         Admin only.
     """
     if request.method != 'POST':
-        return JsonResponse({'error': 'Method not allowed'}, status=405)
+        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
     return _do_clone(request, policy_id)
 
 
@@ -548,6 +561,7 @@ def _do_clone(request, policy_id):
         )
 
     source_type = normalize_policy_type(source.policy_type)
+    # M10 / H17 fix notes applied below at clone create and pipeline copy.
     if source_type in (Policy.PolicyType.PACKAGED, Policy.PolicyType.DEFAULT, 'DEFAULT'):
         cloned_type = Policy.PolicyType.MANAGED
     elif source_type == Policy.PolicyType.SIMULATE:
@@ -578,9 +592,12 @@ def _do_clone(request, policy_id):
             keystore_password=source.keystore_password,
             keystore_password_hash=source.keystore_password_hash,
         )
+    except IntegrityError:
+        # M10 fix: race between the name-exists check and the INSERT.
+        return JsonResponse({'success': False, 'error': f"Policy '{new_name}' already exists."}, status=409)
     except Exception as exc:
         logger.error("API clone policy %s: %s", policy_id, exc)
-        return JsonResponse({'success': False, 'error': str(exc)}, status=500)
+        return JsonResponse({'success': False, 'error': 'An internal error occurred. Check server logs.'}, status=500)
 
     if cloned_type == Policy.PolicyType.MANAGED and source_type in (
         Policy.PolicyType.PACKAGED, Policy.PolicyType.DEFAULT, 'DEFAULT'
@@ -593,13 +610,18 @@ def _do_clone(request, policy_id):
         policy=new_policy, name='default', token=secrets.token_urlsafe(32)
     )
 
-    # Clone pipelines
-    for p in Pipeline.objects.filter(policy=source):
+    # Clone user pipelines only.
+    # H17 fix: previously cloned ALL pipelines including SNMP/system ones
+    # (managed_by != 'user'), which polluted the new policy with unmanaged entries.
+    for p in Pipeline.objects.filter(policy=source, managed_by='user'):
         Pipeline.objects.create(
             policy=new_policy,
             name=p.name,
             description=p.description,
             lscl=p.lscl,
+            managed_by='user',
+            no_input=p.no_input,
+            non_reloadable=p.non_reloadable,
             pipeline_workers=p.pipeline_workers,
             pipeline_batch_size=p.pipeline_batch_size,
             pipeline_batch_delay=p.pipeline_batch_delay,
@@ -644,7 +666,7 @@ def policy_diff(request, policy_id):
         Admin only.
     """
     if request.method != 'GET':
-        return JsonResponse({'error': 'Method not allowed'}, status=405)
+        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
     return _do_diff(request, policy_id)
 
 
@@ -764,7 +786,7 @@ def policy_tokens(request, policy_id):
         return _list_tokens(request, policy_id)
     if request.method == 'POST':
         return _create_token(request, policy_id)
-    return JsonResponse({'error': 'Method not allowed'}, status=405)
+    return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
 
 
 @api_require_admin
@@ -819,7 +841,7 @@ def policy_token_detail(request, policy_id, token_id):
         return _get_token(request, policy_id, token_id)
     if request.method == 'DELETE':
         return _delete_token(request, policy_id, token_id)
-    return JsonResponse({'error': 'Method not allowed'}, status=405)
+    return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
 
 
 @api_require_admin

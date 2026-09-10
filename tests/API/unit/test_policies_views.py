@@ -255,8 +255,10 @@ class TestPolicyUpdate:
         assert 'custom' in packaged_policy.log4j2_properties
 
     def test_update_cannot_change_type(self, authenticated_client, packaged_policy):
+        # Bug 6 fix: changed from 403 (permission) to 400 (validation error)
+        # since this is a bad-request constraint, not an authorisation failure.
         r = _put(authenticated_client, f'/api/policies/{packaged_policy.id}/', {'policy_type': 'MANAGED'})
-        assert r.status_code == 403
+        assert r.status_code == 400
 
     def test_update_embedded_403(self, authenticated_client, db):
         embedded = Policy.objects.create(

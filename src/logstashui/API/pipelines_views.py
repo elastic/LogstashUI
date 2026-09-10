@@ -36,7 +36,8 @@ from datetime import datetime, timezone
 
 import requests
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
+from django.db.models import F
 from django.http import JsonResponse
 from django.test import RequestFactory
 from django.views.decorators.csrf import csrf_exempt
@@ -110,7 +111,12 @@ def _pipeline_list_data(pipeline):
 def _apply_pipeline_fields(data, pipeline):
     """Apply parsed request data onto a Pipeline instance (mutates in place)."""
     if 'name' in data:
-        pipeline.name = (data['name'] or '').strip() or pipeline.name
+        new_name = (data['name'] or '').strip()
+        # L3 fix: an empty name on update was silently ignored; raise ValueError
+        # so the caller returns 400.
+        if not new_name:
+            raise ValueError('name cannot be empty.')
+        pipeline.name = new_name
     if 'description' in data:
         pipeline.description = data['description'] or ''
     if 'lscl' in data:
@@ -119,11 +125,12 @@ def _apply_pipeline_fields(data, pipeline):
     for int_field in ('pipeline_workers', 'pipeline_batch_size',
                       'pipeline_batch_delay', 'queue_checkpoint_writes'):
         if int_field in data and data[int_field] is not None:
-            pipeline.__setattr__(int_field, int(data[int_field]))
+            # M20 fix: __setattr__ bypasses Django field descriptors; use setattr.
+            setattr(pipeline, int_field, int(data[int_field]))
 
     for str_field in ('queue_type', 'queue_max_bytes'):
         if str_field in data and data[str_field] is not None:
-            pipeline.__setattr__(str_field, str(data[str_field]))
+            setattr(pipeline, str_field, str(data[str_field]))
 
 
 # ---------------------------------------------------------------------------
@@ -146,7 +153,7 @@ def pipeline_list(request):
         return _list_pipelines(request)
     if request.method == 'POST':
         return _create_pipeline(request)
-    return JsonResponse({'error': 'Method not allowed'}, status=405)
+    return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
 
 
 @api_require_auth
@@ -163,7 +170,12 @@ def _list_pipelines(request):
     except Policy.DoesNotExist:
         return JsonResponse({'success': False, 'error': 'Policy not found.'}, status=404)
 
+    # H18 fix: managed_by was passed directly from query params, letting any
+    # caller filter SNMP or other system pipelines.  Restrict to known values.
+    _ALLOWED_MANAGED_BY = frozenset({'user', 'snmp', 'library'})
     managed_by = request.GET.get('managed_by', 'user').strip() or 'user'
+    if managed_by not in _ALLOWED_MANAGED_BY:
+        managed_by = 'user'
     pipelines = list(
         policy.pipelines.filter(managed_by=managed_by).order_by('name')
     )
@@ -217,7 +229,7 @@ def _create_pipeline(request):
         return JsonResponse({'success': False, 'error': str(exc)}, status=409)
     except Exception as exc:
         logger.error("API create pipeline: %s", exc)
-        return JsonResponse({'success': False, 'error': str(exc)}, status=500)
+        return JsonResponse({'success': False, 'error': 'An internal error occurred. Check server logs.'}, status=500)
 
     policy.has_undeployed_changes = True
     policy.save(update_fields=['has_undeployed_changes'])
@@ -248,7 +260,7 @@ def pipeline_detail(request, pipeline_id):
         return _update_pipeline(request, pipeline_id)
     if request.method == 'DELETE':
         return _delete_pipeline(request, pipeline_id)
-    return JsonResponse({'error': 'Method not allowed'}, status=405)
+    return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
 
 
 @api_require_auth
@@ -283,7 +295,7 @@ def _update_pipeline(request, pipeline_id):
         return JsonResponse({'success': False, 'error': str(exc)}, status=409)
     except Exception as exc:
         logger.error("API update pipeline %s: %s", pipeline_id, exc)
-        return JsonResponse({'success': False, 'error': str(exc)}, status=500)
+        return JsonResponse({'success': False, 'error': 'An internal error occurred. Check server logs.'}, status=500)
 
     policy = pipeline.policy
     policy.has_undeployed_changes = True
@@ -330,7 +342,7 @@ def policy_deploy(request, policy_id):
     POST /api/pipelines/policies/{policy_id}/deploy/
     """
     if request.method != 'POST':
-        return JsonResponse({'error': 'Method not allowed'}, status=405)
+        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
 
     try:
         policy = Policy.objects.get(pk=policy_id)
@@ -339,7 +351,14 @@ def policy_deploy(request, policy_id):
 
     from PipelineManager.models import Revision
 
-    policy.current_revision_number += 1
+    # H15 fix: a non-atomic read-increment-write allowed two concurrent deploys
+    # to get the same revision number.  Use a DB-level F() increment inside an
+    # atomic block so only one caller wins the counter.
+    with transaction.atomic():
+        Policy.objects.filter(pk=policy.pk).update(
+            current_revision_number=F('current_revision_number') + 1
+        )
+        policy.refresh_from_db(fields=['current_revision_number'])
     new_revision_number = policy.current_revision_number
 
     snapshot_data = {
@@ -406,7 +425,7 @@ def es_pipeline_list(request, connection_id):
         return _es_list_pipelines(request, connection_id)
     if request.method == 'POST':
         return _es_create_pipeline(request, connection_id)
-    return JsonResponse({'error': 'Method not allowed'}, status=405)
+    return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
 
 
 def _check_es_connection_exists(connection_id):
@@ -507,13 +526,21 @@ def es_pipeline_detail(request, connection_id, name):
     PUT    /api/pipelines/es/{connection_id}/{name}/   admin only
     DELETE /api/pipelines/es/{connection_id}/{name}/   admin only
     """
+    # H16 fix: without this guard an unknown connection_id produced a 502 instead
+    # of the expected 404 because get_elastic_connection raised DoesNotExist which
+    # was caught by the broad `except Exception` in each sub-handler and reported
+    # as a connection error rather than a "not found" error.
+    early = _check_es_connection_exists(connection_id)
+    if early:
+        return early
+
     if request.method == 'GET':
         return _es_get_pipeline(request, connection_id, name)
     if request.method == 'PUT':
         return _es_update_pipeline(request, connection_id, name)
     if request.method == 'DELETE':
         return _es_delete_pipeline(request, connection_id, name)
-    return JsonResponse({'error': 'Method not allowed'}, status=405)
+    return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
 
 
 @api_require_auth
@@ -620,7 +647,7 @@ def pipeline_simulate(request):
         ``slot_id``, and ``run_id``.
     """
     if request.method != 'POST':
-        return JsonResponse({'error': 'Method not allowed'}, status=405)
+        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
 
     data = parse_request_body(request)
 
@@ -628,6 +655,14 @@ def pipeline_simulate(request):
     lscl = (data.get('lscl') or '').strip()
     pipeline_id = data.get('pipeline_id')
     event_text = (data.get('event') or '').strip()
+
+    # M8 fix: providing both lscl and pipeline_id was ambiguous and silently
+    # favoured lscl.  Return an error instead so callers know the constraint.
+    if pipeline_id and lscl:
+        return JsonResponse(
+            {'success': False, 'error': 'Provide lscl or pipeline_id, not both.'},
+            status=400,
+        )
 
     if pipeline_id and not lscl:
         try:

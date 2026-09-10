@@ -138,10 +138,19 @@ def _parse_device_fields(data, device):
         device: ``Device`` instance to update (may be unsaved).
     """
     if 'name' in data:
-        device.name = (data['name'] or '').strip() or device.name
+        new_name = (data['name'] or '').strip()
+        # L3 fix: an empty name on update was silently ignored; now raise so the
+        # caller returns 400.
+        if not new_name:
+            raise ValueError('name cannot be empty.')
+        device.name = new_name
 
-    device.ip_address = data.get('ip_address') or None
-    device.hostname = data.get('hostname') or None
+    # H13 fix: ip_address/hostname were unconditionally overwritten from data,
+    # so a partial PUT that omitted either field would silently null it out.
+    if 'ip_address' in data:
+        device.ip_address = data['ip_address'] or None
+    if 'hostname' in data:
+        device.hostname = data['hostname'] or None
 
     if 'port' in data and data['port'] is not None:
         device.port = int(data['port'])
@@ -212,8 +221,12 @@ def device_list(request):
 
 @api_require_auth
 def _list_devices(request):
-    page = max(1, int(request.GET.get('page', 1)))
-    page_size = max(1, min(200, int(request.GET.get('page_size', 25))))
+    # H3 fix: non-integer page/page_size raised ValueError, crashing as 500.
+    try:
+        page = max(1, int(request.GET.get('page', 1)))
+        page_size = max(1, min(200, int(request.GET.get('page_size', 25))))
+    except (ValueError, TypeError):
+        return JsonResponse({'success': False, 'error': 'page and page_size must be positive integers.'}, status=400)
     search = request.GET.get('search', '').strip()
     network_filter = request.GET.get('network', '').strip()
     sort_by = request.GET.get('sort_by', '-created_at')
@@ -236,7 +249,10 @@ def _list_devices(request):
             Q(hostname__icontains=search)
         )
     if network_filter:
-        qs = qs.filter(network_id=network_filter)
+        try:
+            qs = qs.filter(network_id=int(network_filter))
+        except (ValueError, TypeError):
+            return JsonResponse({'success': False, 'error': 'network filter must be an integer id.'}, status=400)
 
     qs = qs.order_by(sort_by)
 
@@ -288,7 +304,7 @@ def _create_device(request):
         return JsonResponse({'success': False, 'error': str(exc)}, status=409)
     except Exception as exc:
         logger.error("API create device: %s", exc)
-        return JsonResponse({'success': False, 'error': str(exc)}, status=500)
+        return JsonResponse({'success': False, 'error': 'An internal error occurred. Check server logs.'}, status=500)
 
     SNMPDeploymentState.mark_config_changed()
     logger.info("API: device '%s' (ID: %s) created by %s.", name, device.id, request.user.username)
@@ -352,7 +368,7 @@ def _update_device(request, device_id):
         return JsonResponse({'success': False, 'error': str(exc)}, status=409)
     except Exception as exc:
         logger.error("API update device %s: %s", device_id, exc)
-        return JsonResponse({'success': False, 'error': str(exc)}, status=500)
+        return JsonResponse({'success': False, 'error': 'An internal error occurred. Check server logs.'}, status=500)
 
     SNMPDeploymentState.mark_config_changed()
     logger.info("API: device %s updated by %s.", device_id, request.user.username)
@@ -419,18 +435,26 @@ def _apply_credential_fields(data, cred, is_update=False):
         cred.version = data['version']
 
     version = cred.version
-    # Always clear version-specific fields before re-applying (mirrors UI behaviour)
-    cred.community = ''
+    # Clear non-community version-specific fields before re-applying.
+    # H12 fix: community is NOT unconditionally cleared here; it is only written
+    # when 'community' is present in the request body (partial-update safety).
     cred.security_name = ''
     cred.security_level = ''
     cred.auth_protocol = ''
     cred.priv_protocol = ''
     if not is_update:
+        cred.community = ''
         cred.auth_pass = ''
         cred.priv_pass = ''
 
     if version in ('1', '2c'):
-        cred.community = data.get('community', 'public') or 'public'
+        if 'community' in data:
+            # Explicit community update.
+            cred.community = data['community'] or 'public'
+        elif not is_update:
+            # New credential — apply the default.
+            cred.community = 'public'
+        # else: partial update without 'community' → keep the stored value.
     elif version == '3':
         cred.security_name = data.get('security_name', '') or ''
         cred.security_level = data.get('security_level', '') or ''
@@ -444,6 +468,11 @@ def _apply_credential_fields(data, cred, is_update=False):
             pp = data.get('priv_pass', '')
             if pp:
                 cred.priv_pass = pp
+        # H14 fix: downgrading to noAuthNoPriv must clear stale auth/priv passes
+        # that were set when the level was previously higher.
+        if cred.security_level == 'noAuthNoPriv':
+            cred.auth_pass = ''
+            cred.priv_pass = ''
 
 
 @csrf_exempt
@@ -500,9 +529,12 @@ def _create_credential(request):
     except ValidationError as exc:
         errors = exc.message_dict if hasattr(exc, 'message_dict') else {'error': exc.messages}
         return JsonResponse({'success': False, 'error': errors}, status=400)
+    except IntegrityError:
+        # H5 fix: a duplicate name race produces IntegrityError which was un-caught.
+        return JsonResponse({'success': False, 'error': f"A credential named '{name}' already exists."}, status=409)
     except Exception as exc:
         logger.error("API create credential: %s", exc)
-        return JsonResponse({'success': False, 'error': str(exc)}, status=500)
+        return JsonResponse({'success': False, 'error': 'An internal error occurred. Check server logs.'}, status=500)
 
     SNMPDeploymentState.mark_config_changed()
     logger.info("API: credential '%s' (id=%s) created by %s.", name, cred.id, request.user.username)
@@ -544,9 +576,12 @@ def _update_credential(request, credential_id):
     except ValidationError as exc:
         errors = exc.message_dict if hasattr(exc, 'message_dict') else {'error': exc.messages}
         return JsonResponse({'success': False, 'error': errors}, status=400)
+    except IntegrityError:
+        # H6 fix: catch duplicate-name race on update.
+        return JsonResponse({'success': False, 'error': 'A credential with that name already exists.'}, status=409)
     except Exception as exc:
         logger.error("API update credential %s: %s", credential_id, exc)
-        return JsonResponse({'success': False, 'error': str(exc)}, status=500)
+        return JsonResponse({'success': False, 'error': 'An internal error occurred. Check server logs.'}, status=500)
 
     SNMPDeploymentState.mark_config_changed()
     logger.info("API: credential %s updated by %s.", credential_id, request.user.username)
@@ -597,6 +632,8 @@ def _network_data(net, device_count=None):
 def _validate_network_cidr(network_range):
     """Return (ok, error_str). Rejects prefixes larger than /20."""
     import ipaddress as _ip
+    if not (network_range or '').strip():
+        return False, 'network_range is required.'
     try:
         net = _ip.ip_network(network_range or '', strict=False)
         if net.prefixlen < 20:
@@ -606,7 +643,9 @@ def _validate_network_cidr(network_range):
                 'Please break it into smaller subnets (/20 or smaller).'
             )
     except ValueError:
-        pass  # Model clean() will reject invalid CIDR
+        # M14 fix: previously this swallowed the ValueError so an invalid CIDR
+        # string reached the model and could produce a confusing DB error.
+        return False, f"'{network_range}' is not a valid CIDR network range."
     return True, None
 
 
@@ -715,7 +754,7 @@ def _create_network(request):
         return JsonResponse({'success': False, 'error': errors}, status=400)
     except Exception as exc:
         logger.error("API create network: %s", exc)
-        return JsonResponse({'success': False, 'error': str(exc)}, status=500)
+        return JsonResponse({'success': False, 'error': 'An internal error occurred. Check server logs.'}, status=500)
 
     SNMPDeploymentState.mark_config_changed()
     logger.info("API: network '%s' (id=%s) created by %s.", name, net.id, request.user.username)
@@ -772,7 +811,7 @@ def _update_network(request, network_id):
         return JsonResponse({'success': False, 'error': errors}, status=400)
     except Exception as exc:
         logger.error("API update network %s: %s", network_id, exc)
-        return JsonResponse({'success': False, 'error': str(exc)}, status=500)
+        return JsonResponse({'success': False, 'error': 'An internal error occurred. Check server logs.'}, status=500)
 
     SNMPDeploymentState.mark_config_changed()
     logger.info("API: network %s updated by %s.", network_id, request.user.username)
@@ -877,10 +916,12 @@ def _list_profiles(request):
     if search:
         qs = qs.filter(Q(name__icontains=search) | Q(vendor__icontains=search))
     official_filter = request.GET.get('official', '').strip().lower()
+    # M15 fix: previously converted the entire queryset to a Python list before
+    # filtering, loading every row into memory.  Use ORM __endswith filter instead.
     if official_filter == 'true':
-        qs = [p for p in qs if p.name.endswith('.json')]
+        qs = qs.filter(name__endswith='.json')
     elif official_filter == 'false':
-        qs = [p for p in qs if not p.name.endswith('.json')]
+        qs = qs.exclude(name__endswith='.json')
 
     items = [_profile_list_data(p) for p in qs]
     return JsonResponse({'profiles': items, 'total': len(items)})
@@ -897,7 +938,8 @@ def _create_profile(request):
         return JsonResponse({'success': False, 'error': 'vendor is required.'}, status=400)
 
     if Profile.objects.filter(name=name).exists():
-        return JsonResponse({'success': False, 'error': 'A profile with this name already exists.'}, status=400)
+        # H7/M7 fix: duplicate profile should return 409 Conflict, not 400.
+        return JsonResponse({'success': False, 'error': 'A profile with this name already exists.'}, status=409)
 
     profile = Profile(
         name=name,
@@ -912,9 +954,11 @@ def _create_profile(request):
     except ValidationError as exc:
         errors = exc.message_dict if hasattr(exc, 'message_dict') else {'error': exc.messages}
         return JsonResponse({'success': False, 'error': errors}, status=400)
+    except IntegrityError:
+        return JsonResponse({'success': False, 'error': 'A profile with this name already exists.'}, status=409)
     except Exception as exc:
         logger.error("API create profile: %s", exc)
-        return JsonResponse({'success': False, 'error': str(exc)}, status=500)
+        return JsonResponse({'success': False, 'error': 'An internal error occurred. Check server logs.'}, status=500)
 
     SNMPDeploymentState.mark_config_changed()
     logger.info("API: profile '%s' (id=%s) created by %s.", name, profile.id, request.user.username)
@@ -973,7 +1017,7 @@ def _update_profile(request, profile_id):
         return JsonResponse({'success': False, 'error': errors}, status=400)
     except Exception as exc:
         logger.error("API update profile %s: %s", profile_id, exc)
-        return JsonResponse({'success': False, 'error': str(exc)}, status=500)
+        return JsonResponse({'success': False, 'error': 'An internal error occurred. Check server logs.'}, status=500)
 
     SNMPDeploymentState.mark_config_changed()
     logger.info("API: profile %s updated by %s.", profile_id, request.user.username)
@@ -1041,22 +1085,48 @@ def _template_detail_data(t):
 
 
 def _set_template_profiles(template, profile_ids):
-    """Set the M2M profiles on a template from a list of int ids.
+    """Set the M2M profiles on a template from a list of int ids or name strings.
 
-    Returns a list of ids that were not found (skipped).
+    M17 fix: previously issued one SELECT per profile_id (N+1 queries).
+    Now fetches all matching profiles in two bulk queries (by id and by name).
+
+    Returns a list of ids/names that were not found (skipped).
     """
-    template.profiles.clear()
+    int_ids = []
+    str_names = []
+    for pid in profile_ids:
+        pid_str = str(pid).strip()
+        if pid_str.isdigit():
+            int_ids.append(int(pid_str))
+        else:
+            str_names.append(pid_str)
+
+    profiles_by_id = {}
+    if int_ids:
+        for p in Profile.objects.filter(id__in=int_ids):
+            profiles_by_id[p.id] = p
+
+    profiles_by_name = {}
+    if str_names:
+        for p in Profile.objects.filter(name__in=str_names):
+            profiles_by_name[p.name] = p
+
+    profiles_to_add = []
     skipped = []
     for pid in profile_ids:
-        try:
-            pid_str = str(pid)
-            if pid_str.isdigit():
-                p = Profile.objects.get(id=int(pid_str))
-            else:
-                p = Profile.objects.get(name=pid_str)
-            template.profiles.add(p)
-        except Profile.DoesNotExist:
+        pid_str = str(pid).strip()
+        if pid_str.isdigit():
+            p = profiles_by_id.get(int(pid_str))
+        else:
+            p = profiles_by_name.get(pid_str)
+        if p:
+            profiles_to_add.append(p)
+        else:
             skipped.append(pid)
+
+    template.profiles.clear()
+    if profiles_to_add:
+        template.profiles.add(*profiles_to_add)
     return skipped
 
 
@@ -1117,7 +1187,7 @@ def _create_template(request):
         return JsonResponse({'success': False, 'error': errors}, status=400)
     except Exception as exc:
         logger.error("API create template: %s", exc)
-        return JsonResponse({'success': False, 'error': str(exc)}, status=500)
+        return JsonResponse({'success': False, 'error': 'An internal error occurred. Check server logs.'}, status=500)
 
     skipped = _set_template_profiles(template, data.get('profiles', []) or [])
     SNMPDeploymentState.mark_config_changed()
@@ -1186,7 +1256,7 @@ def _update_template(request, template_id):
         return JsonResponse({'success': False, 'error': errors}, status=400)
     except Exception as exc:
         logger.error("API update template %s: %s", template_id, exc)
-        return JsonResponse({'success': False, 'error': str(exc)}, status=500)
+        return JsonResponse({'success': False, 'error': 'An internal error occurred. Check server logs.'}, status=500)
 
     skipped = []
     if 'profiles' in data:
@@ -1236,7 +1306,9 @@ def deploy_status(request):
         return JsonResponse({'success': True, 'has_changes': has_changes})
     except Exception as exc:
         logger.error("API deploy status: %s", exc)
-        return JsonResponse({'success': True, 'has_changes': True})
+        # H4 fix: returning success:True on exception was misleading.
+        # Return 500 so callers can distinguish an error from a real status.
+        return JsonResponse({'success': False, 'error': 'An internal error occurred. Check server logs.'}, status=500)
 
 
 @csrf_exempt
@@ -1255,7 +1327,7 @@ def deploy_diff(request):
         return GetDeployDiff(request)
     except Exception as exc:
         logger.error("API deploy diff: %s", exc)
-        return JsonResponse({'success': False, 'error': str(exc)}, status=500)
+        return JsonResponse({'success': False, 'error': 'An internal error occurred. Check server logs.'}, status=500)
 
 
 @csrf_exempt
@@ -1277,4 +1349,4 @@ def deploy_apply(request):
         return DeployConfiguration(request)
     except Exception as exc:
         logger.error("API deploy apply: %s", exc)
-        return JsonResponse({'success': False, 'error': str(exc)}, status=500)
+        return JsonResponse({'success': False, 'error': 'An internal error occurred. Check server logs.'}, status=500)

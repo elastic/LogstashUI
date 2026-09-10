@@ -23,6 +23,7 @@ DELETE /api/security/keys/{id}/             key_detail       (admin)
 """
 
 import logging
+from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
@@ -98,12 +99,17 @@ def bootstrap_view(request):
            plaintext key is available.
     """
     if request.method == 'GET':
-        return JsonResponse({'bootstrapped': User.objects.exists()})
+        # M4 fix: include a human-readable message alongside the boolean flag.
+        bootstrapped = User.objects.exists()
+        return JsonResponse({
+            'bootstrapped': bootstrapped,
+            'message': 'System is bootstrapped.' if bootstrapped else 'System is not bootstrapped. POST to this endpoint to create the first admin user.',
+        })
 
     if request.method == 'POST':
         return _do_bootstrap(request)
 
-    return JsonResponse({'error': 'Method not allowed'}, status=405)
+    return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
 
 
 def _do_bootstrap(request):
@@ -162,6 +168,9 @@ def _do_bootstrap(request):
 
             if create_key:
                 key, raw_token = ApiKey.issue_for_user(user, name=key_name)
+                # M5 fix: include top-level 'key' alias alongside 'api_key' for
+                # docs compatibility.
+                response_data['key'] = raw_token
                 response_data['api_key'] = {
                     'id': key.id,
                     'name': key.name,
@@ -173,7 +182,7 @@ def _do_bootstrap(request):
 
     except Exception as exc:
         logger.error("API bootstrap failed: %s", exc)
-        return JsonResponse({'success': False, 'error': str(exc)}, status=500)
+        return JsonResponse({'success': False, 'error': 'An internal error occurred. Check server logs.'}, status=500)
 
 
 # ---------------------------------------------------------------------------
@@ -191,7 +200,7 @@ def me_view(request):
         API key.
     """
     if request.method != 'GET':
-        return JsonResponse({'error': 'Method not allowed'}, status=405)
+        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
 
     data = _user_data(request.user)
 
@@ -227,7 +236,7 @@ def user_list(request):
     if request.method == 'POST':
         return _create_user(request)
 
-    return JsonResponse({'error': 'Method not allowed'}, status=405)
+    return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
 
 
 def _create_user(request):
@@ -235,7 +244,9 @@ def _create_user(request):
     username = (data.get('username') or '').strip()
     password = data.get('password') or ''
     email = (data.get('email') or '').strip()
-    role = (data.get('role') or 'admin').strip()
+    # H7 fix: default role was 'admin', which silently escalated any omitted role.
+    # Default to 'readonly' so new users without an explicit role are non-privileged.
+    role = (data.get('role') or 'readonly').strip()
 
     if not username:
         return JsonResponse({'success': False, 'error': 'username is required.'}, status=400)
@@ -296,12 +307,22 @@ def user_detail(request, user_id):
     if request.method == 'DELETE':
         return _delete_user(request, user)
 
-    return JsonResponse({'error': 'Method not allowed'}, status=405)
+    return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
 
 
 def _update_user(request, user):
     data = parse_request_body(request)
     changed = []
+
+    # M6 fix: email was silently ignored on PUT; now accepted.
+    new_email = data.get('email')
+    if new_email is not None:
+        new_email = str(new_email).strip()
+        if new_email != user.email:
+            user.email = new_email
+            user.save(update_fields=['email'])
+            changed.append('email')
+            logger.info("API: '%s' updated email for '%s'.", request.user.username, user.username)
 
     # Role update
     new_role = data.get('role')
@@ -340,11 +361,16 @@ def _update_user(request, user):
 def _delete_user(request, user):
     if user == request.user:
         return JsonResponse({'success': False, 'error': 'You cannot delete your own account.'}, status=400)
-    if User.objects.count() <= 1:
-        return JsonResponse({'success': False, 'error': 'Cannot delete the last user in the system.'}, status=400)
 
-    username = user.username
-    user.delete()
+    # H11 fix: use select_for_update() inside an atomic block to eliminate the
+    # TOCTOU race between the count check and the delete.
+    with transaction.atomic():
+        if User.objects.select_for_update().count() <= 1:
+            return JsonResponse({'success': False, 'error': 'Cannot delete the last user in the system.'}, status=400)
+
+        username = user.username
+        user.delete()
+
     logger.warning("API: user '%s' deleted by '%s'.", username, request.user.username)
     return JsonResponse({'success': True, 'message': f"User '{username}' deleted."})
 
@@ -380,7 +406,8 @@ def key_list(request):
 def _create_key(request):
     data = parse_request_body(request)
     name = (data.get('name') or '').strip()
-    expires_days = data.get('expires_days')
+    # M1 fix: accept both 'expires_days' and 'expires_in_days' (docs used the latter).
+    expires_days = data.get('expires_days') if data.get('expires_days') is not None else data.get('expires_in_days')
 
     if not name:
         return JsonResponse({'success': False, 'error': 'name is required.'}, status=400)
@@ -390,7 +417,8 @@ def _create_key(request):
     expires_at = None
     if expires_days is not None:
         try:
-            expires_at = timezone.now() + timezone.timedelta(days=int(expires_days))
+            # H1 fix: timezone.timedelta does not exist; use datetime.timedelta.
+            expires_at = timezone.now() + timedelta(days=int(expires_days))
         except (ValueError, TypeError):
             return JsonResponse({'success': False, 'error': 'expires_days must be an integer.'}, status=400)
 
@@ -418,7 +446,7 @@ def key_revoke(request, key_id):
         for audit purposes. Use DELETE to remove it entirely.
     """
     if request.method != 'POST':
-        return JsonResponse({'error': 'Method not allowed'}, status=405)
+        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
 
     try:
         key = ApiKey.objects.select_related('user').get(id=key_id, user__isnull=False)
@@ -447,7 +475,7 @@ def key_detail(request, key_id):
     DELETE /api/security/keys/{id}/  — hard delete. Permanent.
     """
     if request.method != 'DELETE':
-        return JsonResponse({'error': 'Method not allowed'}, status=405)
+        return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
 
     try:
         key = ApiKey.objects.select_related('user').get(id=key_id, user__isnull=False)
