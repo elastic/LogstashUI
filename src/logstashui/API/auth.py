@@ -78,4 +78,4 @@ def parse_request_body(request):
         except (json.JSONDecodeError, ValueError):
             logger.warning("parse_request_body: invalid JSON body — ignoring")
             return {}
-return request.POST.dict()
+    return request.POST.dict()
