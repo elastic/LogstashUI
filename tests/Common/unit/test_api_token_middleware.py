@@ -55,6 +55,37 @@ def _post(client, raw=None):
     return client.post(ADD_CONNECTION, BODY, content_type=FORM_CT, **kwargs)
 
 
+@pytest.mark.parametrize('state', ['active', 'revoked', 'expired', 'inactive_owner'])
+def test_legacy_token_upgrades_only_when_authentication_is_allowed(admin_token, request_factory, state):
+    """Legacy tokens upgrade through middleware without bypassing access checks."""
+    from unittest.mock import patch
+    from django.contrib.auth.hashers import make_password
+    from Common.middleware import _resolve_api_token
+
+    token, raw = admin_token
+    legacy = make_password(ApiKey.parse_token(raw)[1])
+    updates = {'api_key': legacy}
+    if state == 'revoked':
+        updates['revoked_at'] = timezone.now()
+    elif state == 'expired':
+        updates['expires_at'] = timezone.now() - timedelta(seconds=1)
+    elif state == 'inactive_owner':
+        User.objects.filter(pk=token.user_id).update(is_active=False)
+    ApiKey.objects.filter(pk=token.pk).update(**updates)
+    request = request_factory.get('/', HTTP_AUTHORIZATION=f'ApiKey {raw}')
+
+    result = _resolve_api_token(request)
+    token.refresh_from_db()
+    if state == 'active':
+        assert result.pk == token.pk
+        assert token.api_key.startswith('api_sha256$')
+        with patch('PipelineManager.models.check_password', side_effect=AssertionError('slow hasher')):
+            assert _resolve_api_token(request).pk == token.pk
+    else:
+        assert result == 'invalid'
+        assert token.api_key == legacy
+
+
 @pytest.mark.django_db
 class TestTokenAccepted:
     def test_valid_token_reaches_the_view(self, csrf_client, admin_token, monkeypatch):

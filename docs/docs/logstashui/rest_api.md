@@ -31,6 +31,16 @@ lsui_<prefix>_<secret>
 The secret portion is shown **exactly once** — only a hash is stored server-side. If you lose it,
 revoke it and create a new one.
 
+Generated API secrets contain 256 bits of randomness and are stored as SHA-256
+digests, verified with a constant-time comparison. Existing PBKDF2 token hashes
+upgrade after successful authentication; the token value does not change.
+Human login passwords continue to use Django's password hashing.
+
+When upgrading from a release that only understands PBKDF2 tokens, replace all UI
+workers together: older workers cannot verify upgraded token hashes. Rolling back
+to such a release requires reissuing affected tokens or restoring compatible
+stored hashes from a backup.
+
 A key acts as the user who created it and inherits that account's role. A key created by a
 `readonly` user can read but not write. Revocation takes effect on the next request.
 
