@@ -112,7 +112,7 @@ def _fake_pymysql():
 
 
 def test_conn_max_age_applied(monkeypatch, tmp_path):
-    """LOGSTASHUI_DB_CONN_MAX_AGE overrides the default 60s for postgres."""
+    """Persistent connection lifetime is configurable with pooling disabled."""
     for key in (
         "LOGSTASHUI_DB_ENGINE",
         "LOGSTASHUI_DB_HOST",
@@ -127,6 +127,7 @@ def test_conn_max_age_applied(monkeypatch, tmp_path):
     monkeypatch.setenv("LOGSTASHUI_DB_HOST", "db.example")
     monkeypatch.setenv("LOGSTASHUI_DB_USER", "lsui")
     monkeypatch.setenv("LOGSTASHUI_DB_CONN_MAX_AGE", "120")
+    monkeypatch.setenv("LOGSTASHUI_DB_POOL_MAX_SIZE", "0")
     monkeypatch.setattr("LogstashUI.database._import_or_raise", lambda *a, **k: None)
     db = build_databases(tmp_path)["default"]
     assert db["CONN_MAX_AGE"] == 120
