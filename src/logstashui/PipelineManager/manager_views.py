@@ -6,6 +6,7 @@
 
 from django.shortcuts import render
 from django.http import HttpResponse, StreamingHttpResponse
+from django.db import connections as db_connections
 
 from django.conf import settings
 
@@ -473,15 +474,18 @@ def agent_status_stream(request):
                     }
                     for conn in connections
                 ])
+                # Return pool slots before the stream waits for its next event.
+                db_connections.close_all()
                 yield f"data: {payload}\n\n"
                 time.sleep(5)
         except GeneratorExit:
             pass
+        finally:
+            db_connections.close_all()
 
     response = StreamingHttpResponse(_event_stream(), content_type='text/event-stream')
     response['Cache-Control'] = 'no-cache'
     response['X-Accel-Buffering'] = 'no'   # prevent nginx from buffering the stream
     return response
-
 
 

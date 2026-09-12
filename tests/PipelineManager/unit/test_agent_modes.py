@@ -31,6 +31,30 @@ from PipelineManager.agent_modes import (
 from PipelineManager.models import Connection, EnrollmentToken, Policy
 
 
+@pytest.mark.parametrize('fails', [False, True])
+def test_background_probe_returns_connections(fails):
+    """Return pooled connections even when the background probe fails."""
+    from unittest.mock import patch
+    from PipelineManager.agent_modes import refresh_embedded_connection_async
+
+    with (
+        patch('threading.Thread') as thread,
+        patch('PipelineManager.agent_modes.ensure_embedded_connection') as probe,
+        patch('django.db.connections.close_all') as close,
+    ):
+        refresh_embedded_connection_async()
+        thread.return_value.start.assert_called_once()
+        target = thread.call_args.kwargs['target']
+        if fails:
+            probe.side_effect = RuntimeError('probe failed')
+            with pytest.raises(RuntimeError, match='probe failed'):
+                target()
+        else:
+            target()
+        probe.assert_called_once()
+        close.assert_called_once()
+
+
 @pytest.fixture
 def admin_client(db):
     User = get_user_model()

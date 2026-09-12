@@ -60,6 +60,43 @@ def ready_artifact(cache_dir, db):
     ), body
 
 
+@pytest.fixture
+def connection_checkout(db, monkeypatch):
+    """Track SQL checkout/release boundaries without requiring PostgreSQL."""
+    from django.db import connection, connections
+
+    held = [False]
+
+    def track(execute, sql, params, many, context):
+        held[0] = True
+        return execute(sql, params, many, context)
+
+    monkeypatch.setattr(connections, 'close_all', lambda: held.__setitem__(0, False))
+    with connection.execute_wrapper(track):
+        yield held
+
+
+@pytest.mark.parametrize('filename,headers', [
+    (TARBALL, {}),
+    (TARBALL, {'HTTP_RANGE': 'bytes=10-19'}),
+    (CHECKSUM, {}),
+])
+def test_serving_releases_connection_before_streaming(
+    request_factory, agent, ready_artifact, connection_checkout, filename, headers
+):
+    """Authentication and serve-count writes finish before file streaming."""
+    connection, raw = agent
+    request = request_factory.get('/', HTTP_AUTHORIZATION=f'ApiKey {raw}', **headers)
+    response = artifact_lib.serve_artifact(request, connection.pk, filename)
+    try:
+        assert response.status_code in (200, 206)
+        assert not connection_checkout[0]
+        assert b''.join(response.streaming_content)
+        assert not connection_checkout[0]
+    finally:
+        response.close()
+
+
 def _get(client, connection, filename, raw, **extra):
     return client.get(
         f'/ConnectionManager/LogstashArtifact/{connection.id}/{filename}',
@@ -534,18 +571,23 @@ class TestServeAccounting:
 
 @pytest.mark.django_db
 class TestFetch:
-    def test_verifies_sha512_and_publishes(self, cache_dir, monkeypatch):
+    def test_verifies_sha512_and_publishes(self, cache_dir, monkeypatch, connection_checkout):
         import hashlib
 
         body = b'tarball-bytes' * 100
         digest = hashlib.sha512(body).hexdigest()
-        _install_fake_upstream(monkeypatch, body, digest)
+        def assert_released():
+            assert not connection_checkout[0]
+
+        monkeypatch.setattr(artifact_lib, 'HEARTBEAT_INTERVAL', 0)
+        _install_fake_upstream(monkeypatch, body, digest, before_io=assert_released)
         artifact = LogstashArtifact.objects.create(
             filename=TARBALL, version='9.4.3', arch='linux-x86_64'
         )
 
         artifact_lib._fetch(artifact.pk)
 
+        assert_released()
         artifact.refresh_from_db()
         assert artifact.status == LogstashArtifact.Status.READY
         assert artifact.sha512 == digest
@@ -567,8 +609,9 @@ class TestFetch:
         assert not (cache_dir / TARBALL).exists()
         assert not (cache_dir / f'{TARBALL}.part').exists()
 
-    def test_upstream_error_is_recorded(self, cache_dir, monkeypatch):
+    def test_upstream_error_is_recorded(self, cache_dir, monkeypatch, connection_checkout):
         def _boom(*_a, **_kw):
+            assert not connection_checkout[0]
             raise RuntimeError('connection refused')
 
         monkeypatch.setattr(artifact_lib.requests, 'get', _boom)
@@ -578,6 +621,7 @@ class TestFetch:
 
         artifact_lib._fetch(artifact.pk)
 
+        assert not connection_checkout[0]
         artifact.refresh_from_db()
         assert artifact.status == LogstashArtifact.Status.FAILED
         assert 'connection refused' in artifact.error
@@ -607,7 +651,7 @@ class TestFetch:
             f'https://mirror.invalid/ls/{TARBALL}'
 
 
-def _install_fake_upstream(monkeypatch, body, checksum_hex):
+def _install_fake_upstream(monkeypatch, body, checksum_hex, before_io=None):
     """Stand in for artifacts.elastic.co: one streamed tarball, one sidecar."""
     class _StreamResponse:
         status_code = 200
@@ -617,7 +661,12 @@ def _install_fake_upstream(monkeypatch, body, checksum_hex):
             pass
 
         def iter_content(self, chunk_size=None):
-            yield body
+            for chunk in (body[:len(body) // 2], body[len(body) // 2:]):
+                if before_io:
+                    before_io()
+                yield chunk
+            if before_io:
+                before_io()
 
         def __enter__(self):
             return self
@@ -634,6 +683,8 @@ def _install_fake_upstream(monkeypatch, body, checksum_hex):
             pass
 
     def _get(url, **kwargs):
+        if before_io:
+            before_io()
         return _StreamResponse() if kwargs.get('stream') else _TextResponse()
 
     monkeypatch.setattr(artifact_lib.requests, 'get', _get)
@@ -641,6 +692,36 @@ def _install_fake_upstream(monkeypatch, body, checksum_hex):
 
 @pytest.mark.django_db
 class TestImportAndSweep:
+    def test_import_releases_connection_between_reads(self, cache_dir, monkeypatch, connection_checkout):
+        """Local hashing also returns pool slots after progress updates."""
+        from contextlib import contextmanager
+        from types import SimpleNamespace
+
+        (cache_dir / TARBALL).write_bytes(b'imported-bytes')
+        artifact = LogstashArtifact.objects.create(
+            filename=TARBALL, version='9.4.3', arch='linux-x86_64',
+            status=LogstashArtifact.Status.IMPORTING,
+        )
+
+        @contextmanager
+        def checked_open(path, mode='r', **kwargs):
+            assert not connection_checkout[0]
+            with open(path, mode, **kwargs) as handle:
+                def read(size):
+                    assert not connection_checkout[0]
+                    return handle.read(size)
+
+                yield SimpleNamespace(read=read) if mode == 'rb' else handle
+
+        monkeypatch.setattr(artifact_lib, 'open', checked_open, raising=False)
+        monkeypatch.setattr(artifact_lib, 'FETCH_CHUNK', 4)
+        monkeypatch.setattr(artifact_lib, 'HEARTBEAT_INTERVAL', 0)
+        artifact_lib._verify_import(artifact.pk)
+
+        assert not connection_checkout[0]
+        artifact.refresh_from_db()
+        assert artifact.status == LogstashArtifact.Status.READY
+
     def test_import_registers_a_hand_placed_tarball(
         self, cache_dir, monkeypatch, django_capture_on_commit_callbacks
     ):

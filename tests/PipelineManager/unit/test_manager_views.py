@@ -9,6 +9,49 @@ from unittest.mock import patch, MagicMock
 import json
 import pytest
 
+
+def test_status_stream_returns_connections_before_each_event_and_on_disconnect(db):
+    """Streams release pool slots before yielding and sleeping."""
+    from PipelineManager.manager_views import agent_status_stream
+
+    with (
+        patch('PipelineManager.agent_modes.ensure_embedded_connection'),
+        patch.object(Connection.objects, 'filter') as query,
+        patch('PipelineManager.manager_views.db_connections.close_all') as close,
+        patch('PipelineManager.manager_views.time.sleep') as sleep,
+    ):
+        query.return_value.values.return_value = []
+        sleep.side_effect = lambda seconds: close.assert_called_once()
+        response = agent_status_stream.__wrapped__(None)
+        stream = iter(response.streaming_content)
+        try:
+            assert next(stream) == b'data: []\n\n'
+            close.assert_called_once()
+            assert next(stream) == b'data: []\n\n'
+            assert close.call_count == 2
+            sleep.assert_called_once_with(5)
+        finally:
+            response.close()
+        assert close.call_count == 3
+
+
+def test_status_stream_returns_connections_on_query_failure(db):
+    """A failed event cannot leave its database connection checked out."""
+    from PipelineManager.manager_views import agent_status_stream
+
+    with (
+        patch('PipelineManager.agent_modes.ensure_embedded_connection'),
+        patch.object(Connection.objects, 'filter', side_effect=RuntimeError('query failed')),
+        patch('PipelineManager.manager_views.db_connections.close_all') as close,
+    ):
+        response = agent_status_stream.__wrapped__(None)
+        try:
+            with pytest.raises(RuntimeError, match='query failed'):
+                next(iter(response.streaming_content))
+            close.assert_called_once()
+        finally:
+            response.close()
+
 # ============================================================================
 # Connection CRUD Tests
 # ============================================================================
