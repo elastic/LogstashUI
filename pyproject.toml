@@ -98,6 +98,7 @@ exclude = [
 "src/logstashui/Site" = "Site"
 "src/logstashui/Documentation" = "Documentation"
 "src/logstashui/AI" = "AI"
+"src/logstashui/API" = "API"
 "src/logstashui/theme" = "theme"
 "src/logstashui/Common" = "Common"
 "docs/docs" = "Documentation/content/docs"
