@@ -744,10 +744,15 @@ def test_pipeline_manager_hides_embedded_agent(admin_client, system_policies, mo
     ensure_embedded_connection()
     resp = admin_client.get('/ConnectionManager/')
     assert resp.status_code == 200
-    names = [c['name'] for c in resp.context['connections']]
+    # The page shell no longer contains a `connections` context var — the table
+    # is loaded asynchronously via GetConnectionsTable.  Verify the API hides
+    # the embedded connection instead.
+    api_resp = admin_client.get('/ConnectionManager/GetConnectionsTable/')
+    assert api_resp.status_code == 200
+    names = [c['name'] for c in api_resp.json()['connections']]
     assert 'embedded' not in names
+    # The static HTML shell must never contain the pseudo-agent name either
     html = resp.content.decode()
-    # Table must not render the docker pseudo-agent; sim picker is a different page
     assert 'embedded-local' not in html
 
 
