@@ -67,15 +67,8 @@ It should be noted that at this time, Windows cannot run LogstashUI natively via
 ## Requirements
 
 ### System Requirements
-**Minimum:**
-- 8 GB RAM
-- 4 CPU Cores
 
-**Why these requirements?**
-
-LogstashUI can run on smaller instances for light usage, especially when only using the editor or basic configuration workflows. The minimum requirements above are intended to provide a reliable baseline for common usage and heavier operations like pipeline simulation and multiple instances of Logstash Agent.
-
-If you choose to run LogstashUI with fewer resources, it will likely work fine, but performance can vary depending on the operation. If the UI feels slow, simulations take too long, or agent operations appear delayed, increase CPU and memory before troubleshooting further.
+Start with **8 GB RAM and 4 vCPUs**. See the [Deployment Recommendations](docs/docs/logstashui/general/deployment-recs.md) for more details.
 
 ## How to Deploy
 
