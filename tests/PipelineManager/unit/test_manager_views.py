@@ -9,6 +9,49 @@ from unittest.mock import patch, MagicMock
 import json
 import pytest
 
+
+def test_status_stream_returns_connections_before_each_event_and_on_disconnect(db):
+    """Streams release pool slots before yielding and sleeping."""
+    from PipelineManager.manager_views import agent_status_stream
+
+    with (
+        patch('PipelineManager.agent_modes.ensure_embedded_connection'),
+        patch.object(Connection.objects, 'filter') as query,
+        patch('PipelineManager.manager_views.db_connections.close_all') as close,
+        patch('PipelineManager.manager_views.time.sleep') as sleep,
+    ):
+        query.return_value.values.return_value = []
+        sleep.side_effect = lambda seconds: close.assert_called_once()
+        response = agent_status_stream.__wrapped__(None)
+        stream = iter(response.streaming_content)
+        try:
+            assert next(stream) == b'data: []\n\n'
+            close.assert_called_once()
+            assert next(stream) == b'data: []\n\n'
+            assert close.call_count == 2
+            sleep.assert_called_once_with(5)
+        finally:
+            response.close()
+        assert close.call_count == 3
+
+
+def test_status_stream_returns_connections_on_query_failure(db):
+    """A failed event cannot leave its database connection checked out."""
+    from PipelineManager.manager_views import agent_status_stream
+
+    with (
+        patch('PipelineManager.agent_modes.ensure_embedded_connection'),
+        patch.object(Connection.objects, 'filter', side_effect=RuntimeError('query failed')),
+        patch('PipelineManager.manager_views.db_connections.close_all') as close,
+    ):
+        response = agent_status_stream.__wrapped__(None)
+        try:
+            with pytest.raises(RuntimeError, match='query failed'):
+                next(iter(response.streaming_content))
+            close.assert_called_once()
+        finally:
+            response.close()
+
 # ============================================================================
 # Connection CRUD Tests
 # ============================================================================
@@ -107,7 +150,7 @@ class TestConnectionCRUD:
         )
 
     def test_delete_connection(self, authenticated_client, test_connection):
-        """Test connection deletion"""
+        """Test connection deletion — view now returns JSON for the JS table."""
         connection_id = test_connection.id
 
         response = authenticated_client.post(
@@ -115,7 +158,8 @@ class TestConnectionCRUD:
         )
 
         assert response.status_code == 200
-        assert b"Connection deleted successfully!" in response.content
+        data = response.json()
+        assert data.get("success") is True
 
         # Verify connection was deleted
         assert not Connection.objects.filter(id=connection_id).exists()
@@ -557,12 +601,12 @@ class TestPipelineManagerPage:
     def test_context_has_connections(self, authenticated_client, test_connection):
         response = authenticated_client.get("/ConnectionManager/")
         assert response.status_code == 200
-        assert "connections" in response.context
+        # connections are now loaded via GetConnectionsTable, not in context
+        assert "connections" not in response.context
         assert "has_connections" in response.context
         assert response.context["has_connections"] is True
 
     def test_agent_row_has_ls_pill_and_unreleased(self, authenticated_client, db):
-        from django.conf import settings
         from PipelineManager.models import Connection, Policy
 
         policy = Policy.objects.create(
@@ -587,11 +631,11 @@ class TestPipelineManagerPage:
                 "logstash_api": {"version": "9.4.3"},
             },
         )
-        response = authenticated_client.get("/ConnectionManager/")
-        html = response.content.decode()
-        assert "LS 9.4.3" in html
-        assert "unreleased version" in html
-        assert "upgradeAgent(" not in html
+        # Rows are now rendered client-side via GetConnectionsTable API
+        data = authenticated_client.get("/ConnectionManager/GetConnectionsTable/").json()
+        conn = next(c for c in data["connections"] if c["name"] == "Ahead Agent")
+        assert conn["logstash_version"] == "9.4.3"
+        assert conn["agent_version_relation"] == "newer"
 
     def test_older_agent_shows_upgrade_not_unreleased(self, authenticated_client, db):
         from PipelineManager.models import Connection, Policy
@@ -614,11 +658,10 @@ class TestPipelineManagerPage:
             policy=policy,
             status_blob={"agent_version": "0.4.0"},
         )
-        html = authenticated_client.get("/ConnectionManager/").content.decode()
-        assert "upgradeAgent(" in html
-        assert "unreleased version" not in html
-        after_name = html.split("Old Agent", 1)[1][:800]
-        assert "LS " not in after_name
+        data = authenticated_client.get("/ConnectionManager/GetConnectionsTable/").json()
+        conn = next(c for c in data["connections"] if c["name"] == "Old Agent")
+        assert conn["agent_version_relation"] in ("older", "unknown")
+        assert conn["logstash_version"] == ""
 
 
 # ============================================================================

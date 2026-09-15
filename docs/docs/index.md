@@ -92,6 +92,7 @@ New to LogstashUI? Start here:
 #### General
 - **[General Overview](/docs/docs/logstashui/general/index.md)**
   - **[Deploying LogstashUI](/docs/docs/logstashui/general/deploy.md)** - All deployment options
+  - **[Deployment Recommendations](/docs/docs/logstashui/general/deployment-recs.md)** - Starting resources and measured check-in throughput
   - **[Building from Source](/docs/docs/logstashui/general/build.md)** - Source builds and local development
   - **[Updating LogstashUI](/docs/docs/logstashui/general/updating.md)** - How to update to latest version
 

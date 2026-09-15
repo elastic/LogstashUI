@@ -26,6 +26,7 @@ def _clear_db_env(monkeypatch):
         "LOGSTASHUI_DB_SSL_CA",
         "LOGSTASHUI_DB_CONN_MAX_AGE",
         "LOGSTASHUI_DB_CONN_HEALTH_CHECKS",
+        "LOGSTASHUI_DB_POOL_MAX_SIZE",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -91,10 +92,40 @@ def test_build_databases_postgresql(tmp_path, monkeypatch):
     assert db["PORT"] == "5432"
     assert db["USER"] == "lsui"
     assert db["PASSWORD"] == "s3cret"
-    assert db["CONN_MAX_AGE"] == 60
+    assert db["CONN_MAX_AGE"] == 0
+    assert db["OPTIONS"]["pool"] == {"min_size": 0, "max_size": 10, "timeout": 10}
     assert db["CONN_HEALTH_CHECKS"] is True
     assert db["OPTIONS"]["sslmode"] == "require"
     assert db["OPTIONS"]["sslrootcert"] == "/etc/ssl/db-ca.pem"
+
+
+@pytest.mark.parametrize('size', [0, 3, 20])
+def test_postgres_pool_bounds(tmp_path, monkeypatch, size):
+    _clear_db_env(monkeypatch)
+    monkeypatch.setenv('LOGSTASHUI_DB_ENGINE', 'postgresql')
+    monkeypatch.setenv('LOGSTASHUI_DB_HOST', 'db.example')
+    monkeypatch.setenv('LOGSTASHUI_DB_USER', 'lsui')
+    monkeypatch.setenv('LOGSTASHUI_DB_POOL_MAX_SIZE', str(size))
+    monkeypatch.setenv('LOGSTASHUI_DB_CONN_MAX_AGE', '120')
+    monkeypatch.setattr('LogstashUI.database._import_or_raise', lambda *a, **k: None)
+    db = build_databases(tmp_path)['default']
+    if size:
+        assert db['OPTIONS']['pool']['max_size'] == size
+        assert db['CONN_MAX_AGE'] == 0
+    else:
+        assert 'pool' not in db['OPTIONS']
+        assert db['CONN_MAX_AGE'] == 120
+
+
+def test_postgres_pool_rejects_negative_size(tmp_path, monkeypatch):
+    _clear_db_env(monkeypatch)
+    monkeypatch.setenv('LOGSTASHUI_DB_ENGINE', 'postgresql')
+    monkeypatch.setenv('LOGSTASHUI_DB_HOST', 'db.example')
+    monkeypatch.setenv('LOGSTASHUI_DB_USER', 'lsui')
+    monkeypatch.setenv('LOGSTASHUI_DB_POOL_MAX_SIZE', '-1')
+    monkeypatch.setattr('LogstashUI.database._import_or_raise', lambda *a, **k: None)
+    with pytest.raises(RuntimeError, match='LOGSTASHUI_DB_POOL_MAX_SIZE'):
+        build_databases(tmp_path)
 
 
 def test_build_databases_mysql_mariadb_alias(tmp_path, monkeypatch):

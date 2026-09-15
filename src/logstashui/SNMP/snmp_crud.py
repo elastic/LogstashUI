@@ -799,6 +799,21 @@ def _network_pipeline_names(network):
     return names
 
 
+def agent_snmp_names(connection):
+    """Resolve pipeline and credential names from one set of agent networks."""
+    pipelines, keys = set(), set()
+    if connection:
+        networks = Network.objects.filter(
+            agent_connection=connection, deployment_mode='AGENT'
+        ).select_related('connection', 'credential', 'discovery_credential').prefetch_related(
+            'devices__credential', 'devices__device_template'
+        )
+        for network in networks:
+            pipelines.update(_network_pipeline_names(network))
+            keys.update(_network_keystore_key_names(network))
+    return pipelines, keys
+
+
 def agent_snmp_pipeline_names(connection):
     """Return SNMP pipeline names one agent should host.
 
@@ -815,23 +830,6 @@ def agent_snmp_pipeline_names(connection):
     for network in networks:
         names.update(_network_pipeline_names(network))
     return names
-
-
-def agent_snmp_keystore_keys(connection):
-    """Return SNMP keystore key names one agent needs, without decrypting.
-
-    Same agent-scoping rule as `agent_snmp_pipeline_names`. Safe to run on every
-    check-in because only encrypted-column presence is inspected.
-    """
-    if not connection:
-        return set()
-    keys = set()
-    networks = Network.objects.filter(
-        agent_connection=connection, deployment_mode='AGENT'
-    ).select_related('connection', 'credential', 'discovery_credential').prefetch_related('devices__credential')
-    for network in networks:
-        keys.update(_network_keystore_key_names(network))
-    return keys
 
 
 def _reconcile_policy_snmp_keystore(policy):

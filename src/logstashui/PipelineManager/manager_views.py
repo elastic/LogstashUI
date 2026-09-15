@@ -6,6 +6,7 @@
 
 from django.shortcuts import render
 from django.http import HttpResponse, StreamingHttpResponse
+from django.db import connections as db_connections
 
 from django.conf import settings
 
@@ -75,150 +76,41 @@ def AgentPolicies(request):
 
 
 def PipelineManager(request):
-    """Render the connections page with grouped pipeline tables."""
-    context = {}
-    # Refresh sticky embedded row (probe + last_check_in) in the background.
-    # The probe is a blocking HTTP call; a daemon thread means the page renders
-    # immediately and the SSE stream picks up the result shortly after.
-    try:
-        from PipelineManager.agent_modes import refresh_embedded_connection_async
+    """Render the connections page shell.
 
+    The connection rows are loaded asynchronously by ``connections_table.js``
+    via :func:`~PipelineManager.connections_crud.GetConnectionsTable`.
+    This view only needs to know whether *any* connections exist so it can
+    choose between the empty-state and the table shell.
+    """
+    # Refresh sticky embedded row in the background (probe is blocking; daemon
+    # thread keeps page render fast and SSE picks up result shortly after).
+    try:
+        from PipelineManager.agent_modes import (
+            is_embedded_connection,
+            refresh_embedded_connection_async,
+        )
         refresh_embedded_connection_async()
     except Exception:
         pass
 
-    from PipelineManager.agent_modes import is_embedded_connection
-    from PipelineManager.agent_versions import (
-        agent_version_relation,
-        resolve_running_logstash_version,
-    )
+    try:
+        from PipelineManager.agent_modes import is_embedded_connection
 
-    connections = [
-        conn
-        for conn in ConnectionTable.objects.values(
-            "connection_type", "name", "host", "cloud_id", "cloud_url", "pk",
-            "policy__name", "policy_id", "policy__policy_type", "agent_id",
-            "last_check_in", "status_blob", "desired_agent_version",
-            "logstash_version_resolved",
+        has_connections = any(
+            not is_embedded_connection(c)
+            for c in ConnectionTable.objects.values(
+                'connection_type', 'agent_id', 'policy__policy_type'
+            )
         )
-        if not is_embedded_connection(conn)
-    ]
-    
-    # Add is_online flag based on last_check_in time (within 10 minutes)
-    now = datetime.now(timezone.utc)
-    for conn in connections:
-        if conn['last_check_in']:
-            time_diff = now - conn['last_check_in']
-            conn['is_online'] = time_diff.total_seconds() < 600  # 10 minutes = 600 seconds
-        else:
-            conn['is_online'] = False
-        # Adopt the authoritative health-report status when the node-info root
-        # reports "unknown" (keeps the page-load fallback inspect card in sync
-        # with the live AgentInspect endpoint).
-        _normalize_status_blob_api_status(conn.get('status_blob'))
+    except Exception:
+        has_connections = ConnectionTable.objects.exists()
 
-        blob = conn.get("status_blob") if isinstance(conn.get("status_blob"), dict) else None
-        agent_ver = blob.get("agent_version") if blob else None
-        conn["logstash_version"] = resolve_running_logstash_version(
-            logstash_version_resolved=conn.get("logstash_version_resolved"),
-            status_blob=blob,
-        )
-        conn["agent_version_relation"] = agent_version_relation(
-            agent_ver, settings.__PREFERRED_LS_AGENT_VERSION__
-        )
-    
-    # Sort connections: centralized first, then by policy name
-    # This groups agents with the same policy together
-    def sort_key(conn):
-        if conn['connection_type'] == 'CENTRALIZED':
-            return (0, '')  # Centralized first
-        else:
-            return (1, conn['policy__name'] or 'zzz_no_policy')  # Then by policy name
-    
-    connections.sort(key=sort_key)
-    
-    # Add grouping metadata for visual styling
-    # Treat each connection (centralized or agent policy) as its own group
-    prev_policy = None
-    policy_color_index = 0
-    colors = ['blue', 'green', 'purple', 'pink', 'yellow', 'cyan']
-    
-    for i, conn in enumerate(connections):
-        if conn['connection_type'] == 'AGENT':
-            current_policy = conn['policy__name'] or 'No Policy'
-        else:
-            # Each centralized connection is its own unique "policy"
-            current_policy = f"CENTRALIZED_{conn['pk']}"
-        
-        # Check if this is the first row of a policy group
-        if current_policy != prev_policy:
-            conn['is_group_start'] = True
-            # Assign a color to this policy group
-            conn['group_color'] = colors[policy_color_index % len(colors)]
-            policy_color_index += 1
-        else:
-            conn['is_group_start'] = False
-            # Use the same color as the previous connection in the group
-            conn['group_color'] = connections[i-1]['group_color']
-        
-        # Check if this is the last row of a policy group
-        is_last = (i == len(connections) - 1)
-        if not is_last:
-            next_conn = connections[i + 1]
-            if next_conn['connection_type'] == 'AGENT':
-                next_policy = next_conn.get('policy__name') or 'No Policy'
-            else:
-                next_policy = f"CENTRALIZED_{next_conn['pk']}"
-            conn['is_group_end'] = (current_policy != next_policy)
-        else:
-            conn['is_group_end'] = True
-        
-        prev_policy = current_policy
-
-    # Feature badges per connection:
-    #  - CPM: Centralized connections always; Agents whose policy enables
-    #    xpack.management (centralized pipeline management via logstash.yml)
-    #  - LogstashAgent: every agent connection
-    #  - SNMP: agents that have Agent-mode SNMP networks assigned to them
-    from .models import Policy
-    from SNMP.models import Network
-
-    policy_ids = {c['policy_id'] for c in connections if c.get('policy_id')}
-    policy_cpm = {}
-    if policy_ids:
-        for pid, yml in Policy.objects.filter(id__in=policy_ids).values_list('id', 'logstash_yml'):
-            policy_cpm[pid] = _logstash_yml_cpm_enabled(yml)
-
-    # Any connection referenced by the SNMP Network table gets the SNMP flag.
-    # This covers both the Elasticsearch output connection (Network.connection,
-    # used by CENTRALIZED networks) and the agent connection
-    # (Network.agent_connection, used by AGENT networks). We can determine this
-    # purely from our own DB without calling out to Elasticsearch.
-    snmp_connection_ids = set(
-        Network.objects.values_list('connection_id', flat=True)
-    )
-    snmp_connection_ids.update(
-        Network.objects.exclude(agent_connection_id__isnull=True)
-        .values_list('agent_connection_id', flat=True)
-    )
-    snmp_connection_ids.discard(None)
-
-    for conn in connections:
-        if conn['connection_type'] == 'CENTRALIZED':
-            conn['feature_cpm'] = True
-            conn['feature_agent'] = False
-            conn['feature_snmp'] = conn['pk'] in snmp_connection_ids
-        else:
-            conn['feature_agent'] = True
-            conn['feature_cpm'] = policy_cpm.get(conn.get('policy_id'), False)
-            conn['feature_snmp'] = conn['pk'] in snmp_connection_ids
-
-    context['connections'] = connections
-    context['has_connections'] = len(connections) > 0
-    context['form'] = ConnectionForm()
-    context['preferred_agent_version'] = settings.__PREFERRED_LS_AGENT_VERSION__
-
-    return render(request, "pipeline_manager.html", context=context)
+    return render(request, "pipeline_manager.html", {
+        'has_connections': has_connections,
+        'form': ConnectionForm(),
+        'preferred_agent_version': settings.__PREFERRED_LS_AGENT_VERSION__,
+    })
 
 def test_connectivity(connection_id):
     """Test connectivity to an Elasticsearch connection.
@@ -473,15 +365,18 @@ def agent_status_stream(request):
                     }
                     for conn in connections
                 ])
+                # Return pool slots before the stream waits for its next event.
+                db_connections.close_all()
                 yield f"data: {payload}\n\n"
                 time.sleep(5)
         except GeneratorExit:
             pass
+        finally:
+            db_connections.close_all()
 
     response = StreamingHttpResponse(_event_stream(), content_type='text/event-stream')
     response['Cache-Control'] = 'no-cache'
     response['X-Accel-Buffering'] = 'no'   # prevent nginx from buffering the stream
     return response
-
 
 

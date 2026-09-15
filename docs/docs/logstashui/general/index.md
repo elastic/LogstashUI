@@ -56,6 +56,7 @@ Keep LogstashUI up to date with the latest features and fixes.
 
 ## Quick Links
 
+- **[Deployment Recommendations](/docs/docs/logstashui/general/deployment-recs.md)** - Recommended starting resources and measured check-in throughput
 - **[Getting Started](/docs/docs/getting_started.md)** - Initial setup and first steps
 - **[Configuration](/docs/docs/logstashui/configuration/index.md)** - Configure LogstashUI settings
 - **[LogstashUI Overview](/docs/docs/logstashui/index.md)** - Feature overview and introduction

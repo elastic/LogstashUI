@@ -184,6 +184,8 @@ def _fetch(pk, otel_context=None):
 def _fetch_inner(pk):
     artifact = LogstashArtifact.objects.get(pk=pk)
     base = upstream_base_url()
+    # Keep pool slots available while upstream requests and file I/O wait.
+    django.db.connections.close_all()
     tarball_url = artifact.resolve_source_url(base)
     checksum_url = f"{tarball_url}.sha512"
 
@@ -205,6 +207,7 @@ def _fetch_inner(pk):
         LogstashArtifact.objects.filter(pk=pk).update(
             size_bytes=int(total) if total and total.isdigit() else None,
         )
+        django.db.connections.close_all()
         with open(part, 'wb') as handle:
             for chunk in response.iter_content(chunk_size=FETCH_CHUNK):
                 if not chunk:
@@ -215,11 +218,11 @@ def _fetch_inner(pk):
                 now = time.monotonic()
                 if now - last_beat >= HEARTBEAT_INTERVAL:
                     last_beat = now
-                    django.db.close_old_connections()
                     LogstashArtifact.objects.filter(pk=pk).update(
                         bytes_downloaded=downloaded,
                         heartbeat_at=timezone.now(),
                     )
+                    django.db.connections.close_all()
             handle.flush()
             os.fsync(handle.fileno())
 
@@ -403,6 +406,7 @@ def _verify_import(pk):
     """
     try:
         artifact = LogstashArtifact.objects.get(pk=pk)
+        django.db.connections.close_all()
         path = artifact_path(artifact.filename)
         digest = hashlib.sha512()
         total = 0
@@ -417,10 +421,10 @@ def _verify_import(pk):
                 now = time.monotonic()
                 if now - last_beat >= HEARTBEAT_INTERVAL:
                     last_beat = now
-                    django.db.close_old_connections()
                     LogstashArtifact.objects.filter(pk=pk).update(
                         bytes_downloaded=total, heartbeat_at=timezone.now()
                     )
+                    django.db.connections.close_all()
 
         actual = digest.hexdigest()
         expected = _read_local_checksum(artifact)
@@ -614,9 +618,8 @@ def _authenticate_agent(request, connection_id):
 
     Same inline sequence as the other agent endpoints; the only difference is
     that ``connection_id`` arrives in the URL, because a GET has no body to put
-    it in. It has to come from somewhere: an agent key is a bare PBKDF2 hash with
-    no lookup column, so the header alone cannot identify a row without hashing
-    against every key in the table.
+    it in. Unlike user API tokens, agent keys contain no public lookup prefix,
+    so callers supply ``connection_id`` for an indexed lookup.
 
     Args:
         connection_id: Agent ``Connection`` primary key from the URL.
@@ -812,4 +815,6 @@ def _stream_file(request, artifact, path, is_checksum):
             serve_count=F('serve_count') + 1,
             last_served_at=timezone.now(),
         )
+    # FileResponse streams after the view returns, possibly for many minutes.
+    django.db.connections.close_all()
     return response

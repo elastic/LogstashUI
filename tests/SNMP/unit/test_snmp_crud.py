@@ -2483,3 +2483,27 @@ class TestDeviceVisualizationData:
         assert metrics['Uptime'] == 0
         assert metrics['CPU'] == []
         assert metrics['Memory'] == []
+
+
+def test_shared_agent_snmp_lookup_matches_existing_scoping(test_network, test_device, django_assert_num_queries):
+    from SNMP.snmp_crud import agent_snmp_names, agent_snmp_pipeline_names
+    from PipelineManager.agent_api import _snmp_changes_available, _managed_rollup
+    from PipelineManager.models import Policy
+
+    policy = Policy.objects.create(name='Shared lookup policy')
+    agent = Connection.objects.create(name='SNMP owner', connection_type='AGENT', host='localhost', policy=policy)
+    other = Connection.objects.create(name='Other owner', connection_type='AGENT', host='localhost', policy=policy)
+    Network.objects.filter(pk=test_network.pk).update(deployment_mode='AGENT', agent_connection=agent)
+    expected = (agent_snmp_pipeline_names(agent), {
+        f'snmp_{test_device.credential_id}_v2',
+        f'snmp_es_{test_network.connection_id}_user',
+        f'snmp_es_{test_network.connection_id}_password',
+    })
+    assert expected[0] and expected[1]
+    assert agent_snmp_names(agent) == expected
+    with django_assert_num_queries(1):
+        assert agent_snmp_names(other) == (set(), set())
+    Network.objects.filter(pk=test_network.pk).update(agent_connection=None)
+    with django_assert_num_queries(1):
+        assert _snmp_changes_available(agent, policy, _managed_rollup({'old-pipeline': 'old-hash'}, {}))
+    assert not _snmp_changes_available(agent, policy, _managed_rollup({}, {}))

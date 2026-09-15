@@ -115,7 +115,8 @@ Booleans accept `true`/`false`, `1`/`0`, `yes`/`no`, `on`/`off`.
 | `LOGSTASHUI_DB_PASSWORD` | empty | Put in a Secret / `chmod 640` EnvironmentFile |
 | `LOGSTASHUI_DB_SSLMODE` | postgres: `prefer` | `disable` `allow` `prefer` `require` `verify-ca` `verify-full` |
 | `LOGSTASHUI_DB_SSL_CA` | empty | CA file for mysql TLS and postgres `verify-*` |
-| `LOGSTASHUI_DB_CONN_MAX_AGE` | `60` | Persistent connections (seconds); `0` closes per request |
+| `LOGSTASHUI_DB_CONN_MAX_AGE` | `60` | Persistent connections (seconds); forced to `0` with PostgreSQL pooling so requests return connections to the pool |
+| `LOGSTASHUI_DB_POOL_MAX_SIZE` | `10` | PostgreSQL connections per worker; requests wait up to 10 seconds for a slot. `0` disables pooling |
 | `LOGSTASHUI_DB_CONN_HEALTH_CHECKS` | `true` | Django `CONN_HEALTH_CHECKS` |
 
 Floors: PostgreSQL 14+, MariaDB 10.6+, MySQL 8.0+. Create MySQL/MariaDB as `utf8mb4` / `utf8mb4_bin` so unique names match SQLite/Postgres case-sensitivity. Full engine docs, env defaults, and SQL examples: [Database](/docs/docs/logstashui/database/index.md). Migration (offline + BETA CLI): [Migration](/docs/docs/logstashui/database/migration.md).
@@ -126,7 +127,7 @@ Floors: PostgreSQL 14+, MariaDB 10.6+, MySQL 8.0+. Create MySQL/MariaDB as `utf8
 
 **SQLite scale:** `logstashui serve` logs a warning when engine is sqlite and `LOGSTASHUI_WORKERS` > 1. Use PostgreSQL or MySQL/MariaDB for concurrent agents. Startup still succeeds.
 
-**Connections:** gunicorn remains gevent (`--worker-connections 1000`). Keep `LOGSTASHUI_WORKERS` × in-flight requests under the server `max_connections`. PgBouncer (or equivalent) is optional, not required.
+**Connections:** gunicorn remains gevent (`--worker-connections 1000`). PostgreSQL uses a bounded psycopg pool: by default two workers use at most 20 pooled connections. Budget `LOGSTASHUI_WORKERS` × `LOGSTASHUI_DB_POOL_MAX_SIZE` across all UI instances, leaving room for management commands and other database clients. Requests return connections to the pool on completion. PgBouncer (or equivalent) is optional. With pooling disabled, each concurrent database-using request can open its own connection.
 
 No `DATABASE_URL`. No YAML.
 
