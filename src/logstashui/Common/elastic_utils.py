@@ -675,6 +675,20 @@ _ELASTIC_CLOUD_HOST = re.compile(
     re.IGNORECASE,
 )
 
+# Legacy Elastic Cloud hostname: {id}[.{es|kb}].{region}.{provider}.cloud.es.io
+# The TLD is always ".es.io"; the optional service label ("es" or "kb") sits
+# between the deployment ID and the region, NOT at the end of the host.  A
+# naïve find('.es.') on this format would hit the TLD and produce ".kb.io",
+# which is wrong.
+_ELASTIC_CLOUD_ESIO_HOST = re.compile(
+    r'^(?P<name>[^.]+)'
+    r'(?:\.(?P<svc>es|kb))?'
+    r'\.(?P<region>[a-z0-9-]+)'
+    r'\.(?P<provider>aws|gcp|azure)'
+    r'\.cloud\.es\.io$',
+    re.IGNORECASE,
+)
+
 # Ports that belong to Elasticsearch, not the Kibana pretty-URL origin.
 _ES_ONLY_PORTS = {9200, 9243}
 
@@ -688,6 +702,17 @@ def normalize_kibana_url(url):
     ``.kb.``) to the matching Kibana host so Agent Builder calls do not sit on
     Elasticsearch until the HTTP timeout.
 
+    Handles three Elastic Cloud host formats:
+
+    * ``{id}[.{es|kb}].{region}.{provider}.elastic.cloud`` — modern hosted /
+      serverless (matched by ``_ELASTIC_CLOUD_HOST``).
+    * ``{id}.{es|kb}.{region}.{provider}.cloud.es.io`` — legacy hosted with an
+      explicit service label (matched by ``_ELASTIC_CLOUD_ESIO_HOST``).  The
+      ``.es.io`` TLD is preserved; only the service label is changed to ``kb``.
+    * Bare ``{id}.{region}.{provider}.cloud.es.io`` — legacy without a service
+      label.  No rewrite is attempted because the Kibana URL cannot be derived
+      mechanically (and a naïve find/replace would corrupt the TLD).
+
     Args:
         url: User-supplied or connection-derived URL. Empty values pass through.
 
@@ -697,6 +722,12 @@ def normalize_kibana_url(url):
     Examples:
         normalize_kibana_url("https://my.es.us-east-1.aws.elastic.cloud:9243")
         # "https://my.kb.us-east-1.aws.elastic.cloud"
+
+        normalize_kibana_url("https://abc.es.eu-central-1.aws.cloud.es.io:9243")
+        # "https://abc.kb.eu-central-1.aws.cloud.es.io"
+
+        normalize_kibana_url("https://abc.eu-central-1.aws.cloud.es.io")
+        # "https://abc.eu-central-1.aws.cloud.es.io"  (no service label — unchanged)
     """
     if not url:
         return url
@@ -718,21 +749,40 @@ def normalize_kibana_url(url):
         scheme = 'https'
 
     port = parsed.port
-    match = _ELASTIC_CLOUD_HOST.match(host)
     rewritten = False
 
+    # ── 1. Modern elastic.cloud ──────────────────────────────────────────────
+    match = _ELASTIC_CLOUD_HOST.match(host)
     if match and (match.group('svc') or '').lower() != 'kb':
         host = (
             f"{match.group('name')}.kb.{match.group('region')}."
             f"{match.group('provider')}.elastic.cloud"
         )
         rewritten = True
-    else:
-        lowered = host.lower()
-        idx = lowered.find('.es.')
-        if idx != -1:
-            host = host[:idx] + '.kb.' + host[idx + 4:]
-            rewritten = True
+
+    # ── 2. Legacy *.cloud.es.io ──────────────────────────────────────────────
+    elif not match:
+        esio_match = _ELASTIC_CLOUD_ESIO_HOST.match(host)
+        if esio_match:
+            svc = (esio_match.group('svc') or '').lower()
+            if svc == 'es':
+                # Replace the service label only; keep the .es.io TLD intact.
+                host = (
+                    f"{esio_match.group('name')}.kb"
+                    f".{esio_match.group('region')}"
+                    f".{esio_match.group('provider')}.cloud.es.io"
+                )
+                rewritten = True
+            # svc == 'kb' → already Kibana; no svc label → can't derive Kibana URL safely.
+        else:
+            # ── 3. Generic fallback: find an explicit .es. service label ─────
+            # Guard: skip hosts whose only ".es." occurrence is the ".es.io" TLD
+            # suffix — that is NOT a service label and must not be rewritten.
+            lowered = host.lower()
+            idx = lowered.find('.es.')
+            if idx != -1 and not lowered.endswith('.es.io'):
+                host = host[:idx] + '.kb.' + host[idx + 4:]
+                rewritten = True
 
     if rewritten and port in _ES_ONLY_PORTS:
         port = None
