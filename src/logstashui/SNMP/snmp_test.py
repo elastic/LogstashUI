@@ -26,6 +26,7 @@ from pysnmp.hlapi.v3arch.asyncio import (
     ContextData,
     ObjectType,
     ObjectIdentity,
+    bulk_cmd,
     get_cmd,
     next_cmd,
     usmHMACMD5AuthProtocol,
@@ -775,7 +776,21 @@ def RunSNMPTest(request):
 
 
 async def _perform_full_walk_async(host, port, credential, start_oid='1.3.6.1'):
-    """Walk the MIB tree from `start_oid` asynchronously."""
+    """Walk the MIB tree from ``start_oid`` asynchronously.
+
+    Uses GETBULK (SNMPv2c/v3) for fast multi-OID-per-request walking, falling
+    back to GETNEXT for SNMPv1.
+
+    Args:
+        host: Device IP or hostname.
+        port: UDP port.
+        credential: Credential row used to build auth data.
+        start_oid: Root OID to walk from; defaults to ``1.3.6.1``.
+
+    Returns:
+        Dict with ``results`` (list of ``{oid, value}`` dicts) and an optional
+        ``error`` key if the walk was interrupted.
+    """
     try:
         auth_data = _create_auth_data(credential)
     except Exception as e:
@@ -789,19 +804,31 @@ async def _perform_full_walk_async(host, port, credential, start_oid='1.3.6.1'):
     snmp_engine = SnmpEngine()
     results = []
     current_oid = start_oid
-    max_iterations = 10000
     oid_prefix = start_oid + '.'
+    use_bulk = credential.version in ('2c', '3')
+    bulk_size = 25  # OIDs fetched per GETBULK request
 
-    for _ in range(max_iterations):
+    while True:
         try:
-            errorIndication, errorStatus, errorIndex, varBinds = await next_cmd(
-                snmp_engine,
-                auth_data,
-                transport,
-                ContextData(),
-                ObjectType(ObjectIdentity(current_oid)),
-                lexicographic_mode=False
-            )
+            if use_bulk:
+                errorIndication, errorStatus, errorIndex, varBinds = await bulk_cmd(
+                    snmp_engine,
+                    auth_data,
+                    transport,
+                    ContextData(),
+                    0,          # nonRepeaters
+                    bulk_size,  # maxRepetitions
+                    ObjectType(ObjectIdentity(current_oid)),
+                )
+            else:
+                errorIndication, errorStatus, errorIndex, varBinds = await next_cmd(
+                    snmp_engine,
+                    auth_data,
+                    transport,
+                    ContextData(),
+                    ObjectType(ObjectIdentity(current_oid)),
+                    lexicographic_mode=False,
+                )
         except Exception as e:
             return {'error': f'SNMP error: {str(e)}', 'results': results}
 
@@ -818,19 +845,20 @@ async def _perform_full_walk_async(host, port, credential, start_oid='1.3.6.1'):
         if not varBinds:
             break
 
-        varBind = varBinds[0]
-        next_oid_str = str(varBind[0])
+        last_oid = None
+        for varBind in varBinds:
+            oid_str = str(varBind[0])
+            if not oid_str.startswith(oid_prefix):
+                # Walked past the subtree — signal outer loop to stop
+                last_oid = None
+                break
+            results.append({'oid': oid_str, 'value': _format_snmp_value(varBind[1])})
+            last_oid = oid_str
 
-        # Stop if we've walked past the starting subtree
-        if not next_oid_str.startswith(oid_prefix):
+        if last_oid is None:
             break
 
-        results.append({
-            'oid': next_oid_str,
-            'value': _format_snmp_value(varBind[1])
-        })
-
-        current_oid = next_oid_str
+        current_oid = last_oid
 
     return {'results': results}
 
