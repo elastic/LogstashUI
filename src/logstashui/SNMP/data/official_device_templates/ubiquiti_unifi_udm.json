@@ -9,7 +9,9 @@
   "profiles": [
     "generic_interfaces",
     "generic_system",
-    "generic_ucd_system_metrics"
+    "generic_ucd_system_metrics",
+    "generic_host_system_metrics",
+    "generic_lm_sensors"
   ],
   "matching_rules": [
     "UDM"

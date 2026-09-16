@@ -89,6 +89,7 @@ CPU, memory, and load fields. Standard source is **UCD-SNMP-MIB** (Net-SNMP, Lin
 | `system.cpu.raw.kernel` | `1.3.6.1.4.1.2021.11.55.0` | UCD-SNMP-MIB | Raw CPU ticks spent in kernel interrupt context |
 | `system.cpu.raw.interrupt` | `1.3.6.1.4.1.2021.11.56.0` | UCD-SNMP-MIB | Raw CPU ticks spent handling hardware interrupts |
 | `system.cpu.num_cpus` | `1.3.6.1.4.1.2021.11.67.0` | UCD-SNMP-MIB | Number of CPU cores |
+| `system.cpu.raw.total` | vendor | — | Total CPU tick snapshot (idle + busy combined) for platforms that expose only idle and total counters rather than per-state breakdowns (e.g. Edgecore/UniFi switches via `1.3.6.1.4.1.4413.1.1.1.1.4.2.0`). CPU% must be derived externally as `(total − idle) / total`. |
 | `system.load.1` | `1.3.6.1.4.1.2021.10.1.3.1` | UCD-SNMP-MIB | 1-minute load average |
 | `system.load.5` | `1.3.6.1.4.1.2021.10.1.3.2` | UCD-SNMP-MIB | 5-minute load average |
 | `system.load.15` | `1.3.6.1.4.1.2021.10.1.3.3` | UCD-SNMP-MIB | 15-minute load average |

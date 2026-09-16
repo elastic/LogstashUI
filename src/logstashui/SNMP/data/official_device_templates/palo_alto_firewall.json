@@ -12,7 +12,8 @@
     "generic_host_system_metrics",
     "generic_interfaces",
     "generic_ip_addr",
-    "generic_system"
+    "generic_system",
+    "generic_entity_psu"
   ],
   "matching_rules": [
     "Palo Alto Networks"

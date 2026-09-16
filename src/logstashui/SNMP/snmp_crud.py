@@ -3959,6 +3959,91 @@ def _get_device_fans(device, es_connection):
     return visualization_data
 
 
+def _get_device_power_supplies(device, es_connection):
+    """Fetch the latest power supply record for each slot from Elasticsearch.
+
+    Handles both state-bearing sources (iDRAC) and inventory-only sources
+    (ENTITY-MIB via generic_entity_psu, where state is absent).
+
+    Args:
+        device: Device row.
+        es_connection: Elasticsearch client.
+
+    Returns:
+        Dict with a ``power_supplies`` list; each entry is a flattened
+        ``component.power_supply`` dict from the most-recent matching document.
+
+    Examples:
+        >>> data = _get_device_power_supplies(device, es)
+        >>> data['power_supplies'][0]
+        {'location': 'Power Supply 0', 'description': 'WS-C2960X PSU', 'serial_no': 'DCB182071M8', 'state': None}
+    """
+    results = es_connection.search(
+        size=0,
+        index="metrics-snmp*",
+        sort=[{"@timestamp": {"order": "desc"}}],
+        query={
+            "bool": {
+                "filter": [
+                    {
+                        "range": {
+                            "@timestamp": {
+                                "gte": "now-6h"
+                            }
+                        }
+                    },
+                    _device_host_filter(device),
+                    {
+                        "term": {
+                            "event.category": "component.power_supply"
+                        }
+                    }
+                ]
+            }
+        },
+        aggregations={
+            "power_supplies": {
+                "terms": {
+                    "field": "component.power_supply.location",
+                    "size": 100
+                },
+                "aggregations": {
+                    "top_psu_doc": {
+                        "top_hits": {
+                            "size": 1,
+                            "sort": [{"@timestamp": {"order": "desc"}}],
+                            "_source": [
+                                "component.power_supply.location",
+                                "component.power_supply.description",
+                                "component.power_supply.serial_no",
+                                "component.power_supply.state"
+                            ]
+                        }
+                    }
+                }
+            }
+        }
+    )
+
+    visualization_data = {
+        "power_supplies": []
+    }
+
+    for bucket in results['aggregations']['power_supplies']['buckets']:
+        for doc in bucket['top_psu_doc']['hits']['hits']:
+            psu = doc['_source'].get('component', {}).get('power_supply', {})
+            visualization_data['power_supplies'].append({
+                "location":    psu.get('location', bucket['key']),
+                "description": psu.get('description'),
+                "serial_no":   psu.get('serial_no'),
+                "state":       psu.get('state'),
+            })
+
+    visualization_data['power_supplies'].sort(key=lambda p: str(p.get('location') or ''))
+
+    return visualization_data
+
+
 def _get_device_sensors(device, es_connection):
     results = es_connection.search(
         size=0,
@@ -4399,6 +4484,8 @@ def generate_visualizations(visualizations, device, es_connection):
         visualization_data['filesystems'] = _get_device_filesystems(device, es_connection)
     if "printer.supply" in visualizations:
         visualization_data['printer_supplies'] = _get_device_printer_supplies(device, es_connection)
+    if "component.power_supply" in visualizations:
+        visualization_data['power_supplies'] = _get_device_power_supplies(device, es_connection)
 
     return visualization_data
 

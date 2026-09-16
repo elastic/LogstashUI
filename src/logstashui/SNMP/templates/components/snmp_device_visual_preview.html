@@ -96,10 +96,10 @@
 
       </div>
 
-      <!-- Sensors and Fans Row -->
-      <div class="grid grid-cols-2 gap-6 mt-6 device-sensors-section" style="display: none;">
+      <!-- Sensors, Fans and Power Supplies Row -->
+      <div class="grid grid-cols-3 gap-6 mt-6 device-sensors-section" style="display: none;">
         
-        <!-- Sensors Card (50% Width) -->
+        <!-- Sensors Card (1/3 Width) -->
         <div class="bg-gray-700/50 rounded-lg p-4">
           <h3 class="text-sm font-semibold text-gray-300 uppercase mb-3 flex items-center">
             <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -112,7 +112,7 @@
           </div>
         </div>
 
-        <!-- Fans Card (50% Width) -->
+        <!-- Fans Card (1/3 Width) -->
         <div class="bg-gray-700/50 rounded-lg p-4">
           <h3 class="text-sm font-semibold text-gray-300 uppercase mb-3 flex items-center">
             <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -122,6 +122,20 @@
           </h3>
           <div class="fans-container grid grid-cols-1 md:grid-cols-2 gap-3 max-h-96 overflow-y-auto">
             <!-- Fan cards will be dynamically inserted here -->
+          </div>
+        </div>
+
+        <!-- Power Supplies Card (1/3 Width) -->
+        <div class="bg-gray-700/50 rounded-lg p-4 device-power-supplies-col">
+          <h3 class="text-sm font-semibold text-gray-300 uppercase mb-3 flex items-center">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                d="M3 7h18M3 7a2 2 0 00-2 2v8a2 2 0 002 2h18a2 2 0 002-2V9a2 2 0 00-2-2M3 7V5a2 2 0 012-2h14a2 2 0 012 2v2" />
+            </svg>
+            Power Supplies
+          </h3>
+          <div class="power-supplies-container grid grid-cols-1 md:grid-cols-2 gap-3 max-h-96 overflow-y-auto">
+            <!-- PSU cards will be dynamically inserted here -->
           </div>
         </div>
 

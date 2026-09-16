@@ -206,41 +206,48 @@ function renderDevicePreview(deviceId, device, visualizations) {
     }
   }
 
-  // Render sensors if available
-  if (visualizations && visualizations.sensors) {
+  // Render sensors / fans / power supplies — always show the row if any one of the
+  // three has data; show a "not detecting" placeholder for the others.
+  {
     const sensorsSection = contentDiv.querySelector('.device-sensors-section');
     const sensorsContainer = contentDiv.querySelector('.sensors-container');
-    // The sensors data is nested in visualizations.sensors.sensors
-    const sensorsArray = visualizations.sensors.sensors || [];
-
-    if (sensorsArray.length > 0 && sensorsSection && sensorsContainer) {
-      sensorsSection.style.display = 'grid';
-      sensorsContainer.innerHTML = '';
-
-      sensorsArray.forEach(sensor => {
-        const sensorCard = createSensorCard(sensor);
-        sensorsContainer.appendChild(sensorCard);
-      });
-    } else {
-      console.error('Not rendering sensors. Array length:', sensorsArray.length, 'Section:', !!sensorsSection, 'Container:', !!sensorsContainer);
-    }
-  }
-
-  // Render fans if available
-  if (visualizations && visualizations.fans) {
-    const sensorsSection = contentDiv.querySelector('.device-sensors-section');
     const fansContainer = contentDiv.querySelector('.fans-container');
+    const psuContainer = contentDiv.querySelector('.power-supplies-container');
 
-    const fansArray = visualizations.fans.fans || [];
+    const sensorsArray = (visualizations && visualizations.sensors && visualizations.sensors.sensors) || [];
+    const fansArray    = (visualizations && visualizations.fans    && visualizations.fans.fans)       || [];
+    const psuArray     = (visualizations && visualizations.power_supplies && visualizations.power_supplies.power_supplies) || [];
 
-    if (fansArray.length > 0 && sensorsSection && fansContainer) {
+    const hasSensors = sensorsArray.length > 0;
+    const hasFans    = fansArray.length    > 0;
+    const hasPsu     = psuArray.length     > 0;
+
+    const noDataMsg = (label) =>
+      `<div class="flex items-center justify-center h-24 text-gray-400 text-sm italic">No ${label} data collected for this device</div>`;
+
+    if (hasSensors || hasFans || hasPsu) {
       sensorsSection.style.display = 'grid';
-      fansContainer.innerHTML = '';
 
-      fansArray.forEach(fan => {
-        const fanCard = createFanCard(fan);
-        fansContainer.appendChild(fanCard);
-      });
+      if (hasSensors) {
+        sensorsContainer.innerHTML = '';
+        sensorsArray.forEach(sensor => sensorsContainer.appendChild(createSensorCard(sensor)));
+      } else {
+        sensorsContainer.innerHTML = noDataMsg('temperature sensor');
+      }
+
+      if (hasFans) {
+        fansContainer.innerHTML = '';
+        fansArray.forEach(fan => fansContainer.appendChild(createFanCard(fan)));
+      } else {
+        fansContainer.innerHTML = noDataMsg('fan');
+      }
+
+      if (hasPsu) {
+        psuContainer.innerHTML = '';
+        psuArray.forEach(psu => psuContainer.appendChild(createPowerSupplyCard(psu)));
+      } else {
+        psuContainer.innerHTML = noDataMsg('power supply');
+      }
     }
   }
 
@@ -725,7 +732,11 @@ function createSensorCard(sensor) {
 
   const tempF = hasTemp ? (tempC * 9 / 5) + 32 : null;
   const thresholdF = hasThreshold ? (threshold * 9 / 5) + 32 : null;
-  const stateInfo = getSensorStateInfo(sensor.state);
+  // When state is absent (e.g. lm-sensors has no status field) but we have a
+  // reading, show a neutral blue "Reading" style instead of gray "Unknown".
+  const stateInfo = (sensor.state == null || sensor.state === '') && hasTemp
+    ? { label: 'Reading', borderClass: 'border-blue-500', badgeClass: 'bg-blue-900/40 text-blue-300', textClass: 'text-blue-400', gaugeClass: 'bg-blue-500' }
+    : getSensorStateInfo(sensor.state);
   const gaugeMax = hasThreshold ? threshold : 100;
   const percentage = hasTemp ? Math.min((tempC / gaugeMax) * 100, 100) : 0;
   const tempDisplay = hasTemp ? `${tempF.toFixed(1)}°F` : '—';
@@ -740,7 +751,7 @@ function createSensorCard(sensor) {
   card.className = 'bg-gray-800 rounded-lg p-3 border-l-4 ' + stateInfo.borderClass;
   card.innerHTML = `
     <div class="flex items-center justify-between mb-2">
-      <h4 class="text-sm font-medium text-white truncate">${escapeHtml(sensor.description)}</h4>
+      <h4 class="text-sm font-medium text-white truncate" title="${escapeHtml(sensor.description)}">${escapeHtml(sensor.description)}</h4>
       <span class="text-xs px-2 py-1 rounded ${stateInfo.badgeClass}">${stateInfo.label}</span>
     </div>
     
@@ -770,17 +781,32 @@ function createSensorCard(sensor) {
 function createFanCard(fan) {
   const card = document.createElement('div');
 
-  // Determine state color and label
-  const stateInfo = getSensorStateInfo(fan.state);
-
-  // Determine if fan should be spinning (normal or warning states)
-  const isOperational = parseInt(fan.state) === 1 || parseInt(fan.state) === 2;
+  // Determine state color and label, with RPM-based inference when state is absent
+  const hasState = fan.state != null && fan.state !== '' && !Number.isNaN(parseInt(fan.state));
   const hasRpm = fan.rpm != null && fan.rpm !== '';
+  const rpm = hasRpm ? Number(fan.rpm) : null;
+
+  let stateInfo;
+  if (hasState) {
+    stateInfo = getSensorStateInfo(fan.state);
+  } else if (hasRpm) {
+    // lm-sensors: infer from RPM
+    stateInfo = rpm > 0
+      ? { label: 'Spinning',  borderClass: 'border-green-500', badgeClass: 'bg-green-900/40 text-green-300', textClass: 'text-green-400' }
+      : { label: 'Idle',      borderClass: 'border-gray-500',  badgeClass: 'bg-gray-700 text-gray-400',      textClass: 'text-gray-400' };
+  } else {
+    stateInfo = getSensorStateInfo(null);
+  }
+
+  // Sub-label line under the RPM — only shown when we have an explicit state
+  const isOperational = hasState && (parseInt(fan.state) === 1 || parseInt(fan.state) === 2);
+  const showSubLabel = hasState;
+  const subLabel = showSubLabel ? (isOperational ? 'Operational' : 'Not Running') : '';
 
   card.className = 'bg-gray-800 rounded-lg p-3 border-l-4 min-h-[160px] flex flex-col ' + stateInfo.borderClass;
   card.innerHTML = `
     <div class="flex items-center justify-between mb-3">
-      <h4 class="text-sm font-medium text-white truncate">${escapeHtml(fan.description)}</h4>
+      <h4 class="text-sm font-medium text-white truncate" title="${escapeHtml(fan.description)}">${escapeHtml(fan.description)}</h4>
       <span class="text-xs px-2 py-1 rounded ${stateInfo.badgeClass}">${stateInfo.label}</span>
     </div>
     
@@ -790,9 +816,7 @@ function createFanCard(fan) {
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
       </svg>
       ${hasRpm ? `<div class="text-lg font-bold ${stateInfo.textClass} mt-2">${escapeHtml(String(fan.rpm))} RPM</div>` : ''}
-      <div class="text-xs text-gray-400 mt-2 text-center">
-        ${isOperational ? 'Operational' : 'Not Running'}
-      </div>
+      ${showSubLabel ? `<div class="text-xs text-gray-400 mt-2 text-center">${subLabel}</div>` : ''}
     </div>
   `;
 
@@ -826,6 +850,53 @@ function inferSupplyColor(description) {
   if (d.includes('fuser'))   return { swatch: 'bg-purple-500', label: 'Fuser',  bar: 'bg-purple-500', text: 'text-purple-400', border: 'border-purple-500' };
   if (d.includes('drum'))    return { swatch: 'bg-indigo-500', label: 'Drum',   bar: 'bg-indigo-500', text: 'text-indigo-400', border: 'border-indigo-500' };
   return null;
+}
+
+// Decode component power-supply state integer → display metadata
+function getPsuStateInfo(state) {
+  const s = parseInt(state);
+  if (isNaN(s)) {
+    // Inventory-only record (ENTITY-MIB has no state sensor)
+    return { label: 'Unknown', borderClass: 'border-gray-500', badgeClass: 'bg-gray-700 text-gray-300', textClass: 'text-gray-400' };
+  }
+  const map = {
+    1: { label: 'Present',   borderClass: 'border-green-500', badgeClass: 'bg-green-900/50 text-green-300', textClass: 'text-green-400' },
+    2: { label: 'Not Present', borderClass: 'border-gray-500', badgeClass: 'bg-gray-700 text-gray-400',   textClass: 'text-gray-500' },
+    3: { label: 'Present',   borderClass: 'border-green-500', badgeClass: 'bg-green-900/50 text-green-300', textClass: 'text-green-400' },
+    4: { label: 'Powered Off', borderClass: 'border-yellow-500', badgeClass: 'bg-yellow-900/50 text-yellow-300', textClass: 'text-yellow-400' },
+    5: { label: 'Warning',   borderClass: 'border-yellow-500', badgeClass: 'bg-yellow-900/50 text-yellow-300', textClass: 'text-yellow-400' },
+    6: { label: 'Critical',  borderClass: 'border-orange-500', badgeClass: 'bg-orange-900/50 text-orange-300', textClass: 'text-orange-400' },
+    7: { label: 'Failed',    borderClass: 'border-red-500',    badgeClass: 'bg-red-900/50 text-red-300',    textClass: 'text-red-400' },
+  };
+  return map[s] || { label: `State ${s}`, borderClass: 'border-gray-500', badgeClass: 'bg-gray-700 text-gray-300', textClass: 'text-gray-400' };
+}
+
+// Create a power supply card (inventory or state-bearing)
+function createPowerSupplyCard(psu) {
+  const card = document.createElement('div');
+
+  const stateInfo = getPsuStateInfo(psu.state);
+  const location    = psu.location    ? escapeHtml(String(psu.location))    : '—';
+  const description = psu.description ? escapeHtml(String(psu.description)) : null;
+  const serialNo    = psu.serial_no   ? escapeHtml(String(psu.serial_no))   : null;
+
+  card.className = 'bg-gray-800 rounded-lg p-3 border-l-4 min-w-[160px] flex flex-col gap-2 ' + stateInfo.borderClass;
+  card.innerHTML = `
+    <div class="flex items-center justify-between gap-2">
+      <h4 class="text-sm font-medium text-white truncate flex-1" title="${location}">${location}</h4>
+      <span class="text-xs px-2 py-1 rounded whitespace-nowrap ${stateInfo.badgeClass}">${stateInfo.label}</span>
+    </div>
+    <div class="flex justify-center my-1">
+      <svg class="w-10 h-10 ${stateInfo.textClass}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+          d="M3 7h18M3 7a2 2 0 00-2 2v8a2 2 0 002 2h18a2 2 0 002-2V9a2 2 0 00-2-2M3 7V5a2 2 0 012-2h14a2 2 0 012 2v2" />
+      </svg>
+    </div>
+    ${description ? `<div class="text-xs text-gray-300 truncate" title="${description}">${description}</div>` : ''}
+    ${serialNo    ? `<div class="text-xs text-gray-500 truncate" title="S/N: ${serialNo}">S/N: ${serialNo}</div>` : ''}
+  `;
+
+  return card;
 }
 
 // Create a printer supply card with a level gauge and toner-color awareness
@@ -1102,26 +1173,26 @@ function createNeighborCard(neighbor) {
         <svg class="w-4 h-4 text-indigo-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
         </svg>
-        <span class="text-sm font-semibold text-white truncate">${escapeHtml(neighbor.device_id || 'Unknown')}</span>
+        <span class="text-sm font-semibold text-white truncate" title="${escapeHtml(neighbor.device_id || 'Unknown')}">${escapeHtml(neighbor.device_id || 'Unknown')}</span>
       </div>
-      ${neighbor.address ? `<span class="text-xs text-gray-400 font-mono flex-shrink-0">${escapeHtml(neighbor.address)}</span>` : ''}
+      ${neighbor.address ? `<span class="text-xs text-gray-400 font-mono flex-shrink-0" title="${escapeHtml(neighbor.address)}">${escapeHtml(neighbor.address)}</span>` : ''}
     </div>
 
     <div class="space-y-1 text-xs mb-2">
       ${neighbor.port ? `
       <div class="flex items-center gap-1.5">
         <span class="text-gray-500 w-16 flex-shrink-0">Remote Port</span>
-        <span class="text-gray-200 font-mono truncate">${escapeHtml(neighbor.port)}</span>
+        <span class="text-gray-200 font-mono truncate" title="${escapeHtml(neighbor.port)}">${escapeHtml(neighbor.port)}</span>
       </div>` : ''}
       ${platform ? `
       <div class="flex items-center gap-1.5">
         <span class="text-gray-500 w-16 flex-shrink-0">Platform</span>
-        <span class="text-gray-200 truncate">${escapeHtml(platform)}</span>
+        <span class="text-gray-200 truncate" title="${escapeHtml(platform)}">${escapeHtml(platform)}</span>
       </div>` : ''}
       ${versionShort ? `
       <div class="flex items-center gap-1.5">
         <span class="text-gray-500 w-16 flex-shrink-0">Version</span>
-        <span class="text-gray-400 truncate italic">${escapeHtml(versionShort)}</span>
+        <span class="text-gray-400 truncate italic" title="${escapeHtml(versionShort)}">${escapeHtml(versionShort)}</span>
       </div>` : ''}
     </div>
 

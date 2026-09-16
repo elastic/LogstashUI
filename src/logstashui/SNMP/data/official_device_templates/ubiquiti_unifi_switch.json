@@ -9,7 +9,8 @@
   "profiles": [
     "generic_interfaces",
     "generic_system",
-    "ubiquiti_unifi_switch"
+    "ubiquiti_unifi_switch",
+    "ubiquiti_unifi_switch_system"
   ],
   "matching_rules": [
     "US-"

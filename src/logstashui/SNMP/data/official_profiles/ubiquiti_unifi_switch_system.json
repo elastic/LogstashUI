@@ -1,0 +1,14 @@
+{
+  "official_key": "ubiquiti_unifi_switch_system",
+  "name": "ubiquiti_unifi_switch_system",
+  "description": "CPU raw tick counters for Ubiquiti UniFi switches running the Edgecore platform (sysObjectID 1.3.6.1.4.1.4413). Collects idle ticks and total ticks as snapshot gauges. CPU utilization percentage must be derived externally as (total - idle) / total because the existing normalizer operations do not support complement-ratio computation. Memory is not exposed by this platform via SNMP.",
+  "vendor": "Ubiquiti",
+  "product": "UniFi Switch",
+  "model": "Any",
+  "get": {
+    "system.cpu.raw.idle": "1.3.6.1.4.1.4413.1.1.1.1.4.1.0",
+    "system.cpu.raw.total": "1.3.6.1.4.1.4413.1.1.1.1.4.2.0"
+  },
+  "walk": {},
+  "table": {}
+}

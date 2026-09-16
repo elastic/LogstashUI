@@ -12,7 +12,8 @@
     "cisco_sensors",
     "cisco_system_metrics",
     "generic_interfaces",
-    "generic_system"
+    "generic_system",
+    "generic_entity_psu"
   ],
   "matching_rules": [
     "Cisco IOS Software"

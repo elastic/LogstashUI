@@ -1,0 +1,37 @@
+{
+  "official_key": "generic_lm_sensors",
+  "name": "generic_lm_sensors",
+  "description": "Fan RPM and temperature sensor readings via the UCD-SNMP LM-SENSORS MIB (1.3.6.1.4.1.2021.13.16) for Linux and embedded devices running net-snmp with the lmSensors module enabled. Fan values are direct RPM integers. Temperature values from lmTempSensorsValue are in millidegrees Celsius and are normalized to degrees Celsius via multiply 0.001.",
+  "vendor": "Any",
+  "product": "Any",
+  "model": "Any",
+  "get": {},
+  "walk": {},
+  "table": {
+    "component.fan": {
+      "columns": {
+        "description": "1.3.6.1.4.1.2021.13.16.3.1.2",
+        "rpm": "1.3.6.1.4.1.2021.13.16.3.1.3"
+      }
+    },
+    "component.sensor": {
+      "columns": {
+        "description": "1.3.6.1.4.1.2021.13.16.2.1.2",
+        "temp.celsius": "1.3.6.1.4.1.2021.13.16.2.1.3"
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "component.sensor",
+        "field": "component.sensor.temp.celsius"
+      },
+      "params": {
+        "multiply_value": 0.001
+      }
+    }
+  ]
+}
