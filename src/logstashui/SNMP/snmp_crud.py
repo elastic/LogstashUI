@@ -3910,9 +3910,12 @@ def _get_device_metrics(device, es_connection):
                     "aggregations": {
                         "physical": {
                             "top_hits": {
-                                "size": 1,
-                                "sort": [{"system.filesystem.index": {"order": "asc"}}],
-                                "_source": ["@timestamp", "system.filesystem.used.pct"]
+                                "size": 10,
+                                "_source": [
+                                    "@timestamp",
+                                    "system.filesystem.index",
+                                    "system.filesystem.used.pct"
+                                ]
                             }
                         }
                     }
@@ -3922,13 +3925,27 @@ def _get_device_metrics(device, es_connection):
 
         buckets = memory_results.get('aggregations', {}).get('by_poll', {}).get('buckets', [])
         for bucket in buckets:
-            for doc in bucket['physical']['hits']['hits']:
-                try:
-                    pct = doc['_source']['system']['filesystem']['used']['pct']
-                except (KeyError, TypeError):
-                    continue
-                visualization_data['Memory'].append(pct)
-                visualization_data['MemoryTime'].append(doc['_source']['@timestamp'])
+            hits = bucket['physical']['hits']['hits']
+            # Sort by system.filesystem.index in Python if the field is present,
+            # so we consistently pick the lowest-indexed RAM row (physical memory).
+            # Avoids sorting on a field that may not be mapped in every ES index.
+            if any(
+                'index' in h.get('_source', {}).get('system', {}).get('filesystem', {})
+                for h in hits
+            ):
+                hits = sorted(
+                    hits,
+                    key=lambda h: h['_source']['system']['filesystem'].get('index', 0)
+                )
+            if not hits:
+                continue
+            doc = hits[0]
+            try:
+                pct = doc['_source']['system']['filesystem']['used']['pct']
+            except (KeyError, TypeError):
+                continue
+            visualization_data['Memory'].append(pct)
+            visualization_data['MemoryTime'].append(doc['_source']['@timestamp'])
 
         if visualization_data['Memory']:
             visualization_data['MemorySource'] = 'hrStorageRam'
