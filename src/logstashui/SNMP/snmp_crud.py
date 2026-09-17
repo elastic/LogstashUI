@@ -3492,8 +3492,25 @@ def GetDeviceVisualization(request, device_id):
 def GetDiscoveredDevices(request):
     """Query `logs-snmp.discovery-*` for hosts seen in the last 15 minutes.
 
-    Aggregates by `host.ip` and returns top hits per host.
+    Aggregates by ``host.ip`` and returns top hits per host.
+
+    Query params:
+        show_non_snmp (str): ``"true"`` to also include hosts where SNMP
+            timed-out but DNS resolved a real hostname.  Defaults to
+            ``"false"``.  Hosts with ``_snmpfailure`` *and* where
+            ``host.hostname`` equals ``host.ip`` (no DNS resolution either)
+            are always silently dropped.
+
+    Returns:
+        JsonResponse: ``{"success": True, "devices": [...], "total": int}``.
+        Each device dict includes a boolean ``snmp_responded`` field.
+
+    Example::
+
+        GET /SNMP/DiscoveredDevices/?show_non_snmp=true
     """
+    show_non_snmp = request.GET.get('show_non_snmp', 'false').lower() == 'true'
+
     try:
 
         # Only query connections that are assigned to SNMP networks
@@ -3520,23 +3537,41 @@ def GetDiscoveredDevices(request):
             try:
                 es = get_elastic_connection(connection.id)
 
-                # Build Elasticsearch query
+                # Build Elasticsearch query.
+                # When show_non_snmp is False (default) exclude docs that the
+                # Logstash SNMP input tagged with _snmpfailure — those devices
+                # did not respond via SNMP.  When True we fetch everything and
+                # do the finer-grained classification in Python below.
+                bool_query: dict = {
+                    "must": [
+                        {
+                            "range": {
+                                "@timestamp": {
+                                    "gte": fifteen_minutes_ago.isoformat(),
+                                    "lte": now.isoformat()
+                                }
+                            }
+                        }
+                    ]
+                }
+                if not show_non_snmp:
+                    bool_query["must_not"] = [{"term": {"tags": "_snmpfailure"}}]
+
+                source_fields = [
+                    "host.sysname",
+                    "host.hostname",
+                    "host.ip",
+                    "network.name",
+                    "@timestamp",
+                    "observer.sys_descr",
+                ]
+                if show_non_snmp:
+                    # Need tags to classify DNS-only vs junk rows
+                    source_fields.append("tags")
+
                 query = {
                     "size": 0,
-                    "query": {
-                        "bool": {
-                            "must": [
-                                {
-                                    "range": {
-                                        "@timestamp": {
-                                            "gte": fifteen_minutes_ago.isoformat(),
-                                            "lte": now.isoformat()
-                                        }
-                                    }
-                                }
-                            ]
-                        }
-                    },
+                    "query": {"bool": bool_query},
                     "aggs": {
                         "devices_by_host": {
                             "terms": {
@@ -3547,23 +3582,8 @@ def GetDiscoveredDevices(request):
                                 "latest_doc": {
                                     "top_hits": {
                                         "size": 1,
-                                        "sort": [
-                                            {
-                                                "@timestamp": {
-                                                    "order": "desc"
-                                                }
-                                            }
-                                        ],
-                                        "_source": {
-                                            "includes": [
-                                                "host.sysname",
-                                                "host.hostname",
-                                                "host.ip",
-                                                "network.name",
-                                                "@timestamp",
-                                                "observer.sys_descr"
-                                            ]
-                                        }
+                                        "sort": [{"@timestamp": {"order": "desc"}}],
+                                        "_source": {"includes": source_fields}
                                     }
                                 }
                             }
@@ -3586,6 +3606,21 @@ def GetDiscoveredDevices(request):
                             hits = bucket['latest_doc']['hits']['hits']
                             if hits:
                                 source = hits[0]['_source']
+                                host_ip = source.get('host', {}).get('ip', '')
+                                host_hostname = source.get('host', {}).get('hostname', '')
+
+                                # Classify the doc when show_non_snmp is active.
+                                # _snmpfailure + DNS also failed (hostname==ip) →
+                                # pure junk with no signal; always drop silently.
+                                # _snmpfailure + DNS resolved a real hostname →
+                                # DNS-only device; include with snmp_responded=False.
+                                tags = source.get('tags', []) or []
+                                snmp_failed = '_snmpfailure' in tags
+                                if snmp_failed and host_ip == host_hostname:
+                                    # No SNMP response, no DNS resolution — useless
+                                    continue
+                                snmp_responded = not snmp_failed
+
                                 network_name = source.get('network', {}).get('name', '')
 
                                 # Query the Network model to get the discovery credential
@@ -3631,9 +3666,9 @@ def GetDiscoveredDevices(request):
                                 
                                 device = {
                                     'host_name': source.get('host', {}).get('sysname', 'Unknown'),
-                                    'host_hostname': source.get('host', {}).get('hostname', ''),
+                                    'host_hostname': host_hostname,
                                     'sys_descr': sys_descr,
-                                    'host_ip': source.get('host', {}).get('ip', ''),
+                                    'host_ip': host_ip,
                                     'network_name': network_name,
                                     'network_id': network_id,
                                     'credential_id': credential_id,
@@ -3641,7 +3676,8 @@ def GetDiscoveredDevices(request):
                                     'connection_name': connection.name,
                                     'connection_id': connection.id,
                                     'suggested_template_id': suggested_template_ids[0] if suggested_template_ids else None,
-                                    'suggested_template_name': suggested_template_name
+                                    'suggested_template_name': suggested_template_name,
+                                    'snmp_responded': snmp_responded,
                                 }
                                 all_discovered_devices.append(device)
 

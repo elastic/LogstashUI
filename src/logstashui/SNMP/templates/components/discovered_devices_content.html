@@ -52,6 +52,15 @@
     </div>
   </div>
 
+  <!-- DNS-only toggle -->
+  <div class="flex items-center gap-2 mb-3 text-sm text-gray-400">
+    <label class="flex items-center gap-2 cursor-pointer select-none">
+      <input type="checkbox" id="showNonSnmpToggle" onchange="toggleNonSnmpDevices()"
+             class="toggle toggle-sm toggle-warning" />
+      <span>Show devices found via DNS only (no SNMP response)</span>
+    </label>
+  </div>
+
   <div class="bg-gray-900/50 rounded-lg overflow-x-auto border border-gray-700">
     <table class="table w-full min-w-max">
       <thead>

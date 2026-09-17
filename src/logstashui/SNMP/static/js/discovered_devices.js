@@ -6,6 +6,10 @@
 
 // Discovered Devices Modal Functions
 
+// Whether to include DNS-resolved devices that did not respond via SNMP.
+// Toggled by the checkbox in discovered_devices_content.html.
+let _showNonSnmpDevices = false;
+
 function openDiscoveredDevicesModal() {
     const modal = document.getElementById('discoveredDevicesModal');
     if (!modal) return;
@@ -23,6 +27,13 @@ function closeDiscoveredDevicesModal() {
     document.body.style.overflow = 'auto';
 }
 
+/** Toggle DNS-only device visibility and reload the table. */
+function toggleNonSnmpDevices() {
+    const checkbox = document.getElementById('showNonSnmpToggle');
+    _showNonSnmpDevices = checkbox ? checkbox.checked : !_showNonSnmpDevices;
+    loadDiscoveredDevices();
+}
+
 function loadDiscoveredDevices() {
     // Show loading state
     document.getElementById('discoveredDevicesLoading').classList.remove('hidden');
@@ -31,7 +42,8 @@ function loadDiscoveredDevices() {
     document.getElementById('discoveredDevicesTable').classList.add('hidden');
     
     // Fetch discovered devices from API
-    fetch('/SNMP/DiscoveredDevices/', {
+    const url = `/SNMP/DiscoveredDevices/?show_non_snmp=${_showNonSnmpDevices}`;
+    fetch(url, {
         method: 'GET',
         headers: {
             'Content-Type': 'application/json',
@@ -140,12 +152,23 @@ function populateDiscoveredDevicesTable(devices) {
         // Prepare OS description for tooltip (sysDescr from SNMP)
         const sysDescr = device.sys_descr || 'No description available';
         const hostName = device.host_name || 'N/A';
-        
+
+        // DNS-only devices: SNMP timed out but DNS resolved the hostname.
+        // Show an amber badge and dim the row so they stand apart from real
+        // SNMP-discovered devices.
+        const isDnsOnly = device.snmp_responded === false;
+        if (isDnsOnly) {
+            row.className = 'hover:bg-gray-700/50 opacity-60';
+        }
+        const dnsOnlyBadge = isDnsOnly
+            ? `<span class="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-500/20 text-amber-300 border border-amber-500/40" title="This host was found via DNS but did not respond to SNMP">DNS only</span>`
+            : '';
+
         row.innerHTML = `
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                 <span class="device-name-tooltip cursor-help border-b border-dotted border-gray-500 hover:border-blue-400 hover:text-blue-300 transition-colors" data-tooltip="${escapeHtml(sysDescr)}">
                     ${escapeHtml(hostName)}
-                </span>
+                </span>${dnsOnlyBadge}
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                 ${hostnameCell}
