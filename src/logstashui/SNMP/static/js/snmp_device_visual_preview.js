@@ -741,36 +741,36 @@ function createSensorCard(sensor) {
   const percentage = hasTemp ? Math.min((tempC / gaugeMax) * 100, 100) : 0;
   const tempDisplay = hasTemp ? `${tempF.toFixed(1)}°F` : '—';
   const tempCDisplay = hasTemp ? `${tempC}°C` : '—';
-  const thresholdTop = hasThreshold
-    ? `<div class="text-xs text-gray-400">Threshold: ${thresholdF.toFixed(1)}°F</div>`
-    : `<div class="text-xs text-gray-400"></div>`;
-  const thresholdBottom = hasThreshold
-    ? `<div class="text-xs text-gray-400">Threshold: ${threshold}°C</div>`
-    : `<div class="text-xs text-gray-400"></div>`;
+  // Compact inline threshold string (e.g. "/ 85°F")
+  const thresholdInline = hasThreshold
+    ? `<span class="text-xs text-gray-500 ml-1">/ ${thresholdF.toFixed(0)}°F</span>`
+    : '';
+  const thresholdCInline = hasThreshold
+    ? `<span class="text-xs text-gray-500 ml-1">/ ${threshold}°C</span>`
+    : '';
 
-  card.className = 'bg-gray-800 rounded-lg p-3 border-l-4 ' + stateInfo.borderClass;
+  card.className = 'bg-gray-800 rounded-lg p-2 border-l-4 ' + stateInfo.borderClass;
   card.innerHTML = `
-    <div class="flex items-center justify-between mb-2">
-      <h4 class="text-sm font-medium text-white truncate" title="${escapeHtml(sensor.description)}">${escapeHtml(sensor.description)}</h4>
-      <span class="text-xs px-2 py-1 rounded ${stateInfo.badgeClass}">${stateInfo.label}</span>
+    <!-- Header row: label + badge -->
+    <div class="flex items-center justify-between gap-2 mb-1.5">
+      <h4 class="text-xs font-medium text-white truncate" title="${escapeHtml(sensor.description)}">${escapeHtml(sensor.description)}</h4>
+      <span class="text-xs px-1.5 py-0.5 rounded flex-shrink-0 ${stateInfo.badgeClass}">${stateInfo.label}</span>
     </div>
-    
-    <!-- Temperature values above gauge -->
-    <div class="flex items-center justify-between mb-1">
-      <div class="text-2xl font-bold ${stateInfo.textClass}">${tempDisplay}</div>
-      ${thresholdTop}
-    </div>
-    
-    <!-- Temperature Gauge -->
-    <div class="relative w-full h-2 bg-gray-700 rounded-full overflow-hidden mb-1">
-      <div class="absolute h-full ${stateInfo.gaugeClass} transition-all duration-300" 
-           style="width: ${percentage}%"></div>
-    </div>
-    
-    <!-- Temperature values below gauge -->
-    <div class="flex items-center justify-between">
-      <div class="text-sm text-gray-400">${tempCDisplay}</div>
-      ${thresholdBottom}
+
+    <!-- Temp value + gauge on one compact block -->
+    <div class="flex items-center gap-3">
+      <!-- Primary temp -->
+      <div class="flex-shrink-0">
+        <span class="text-lg font-bold leading-none ${stateInfo.textClass}">${tempDisplay}</span>${thresholdInline}
+        <div class="text-xs text-gray-400 mt-0.5">${tempCDisplay}${thresholdCInline}</div>
+      </div>
+      <!-- Gauge fills remaining width -->
+      <div class="flex-1">
+        <div class="relative w-full h-1.5 bg-gray-700 rounded-full overflow-hidden">
+          <div class="absolute h-full ${stateInfo.gaugeClass} transition-all duration-300"
+               style="width: ${percentage}%"></div>
+        </div>
+      </div>
     </div>
   `;
 
@@ -803,21 +803,19 @@ function createFanCard(fan) {
   const showSubLabel = hasState;
   const subLabel = showSubLabel ? (isOperational ? 'Operational' : 'Not Running') : '';
 
-  card.className = 'bg-gray-800 rounded-lg p-3 border-l-4 min-h-[160px] flex flex-col ' + stateInfo.borderClass;
+  card.className = 'bg-gray-800 rounded-lg p-2 border-l-4 flex flex-col items-center justify-center gap-1 ' + stateInfo.borderClass;
   card.innerHTML = `
-    <div class="flex items-center justify-between mb-3">
-      <h4 class="text-sm font-medium text-white truncate" title="${escapeHtml(fan.description)}">${escapeHtml(fan.description)}</h4>
-      <span class="text-xs px-2 py-1 rounded ${stateInfo.badgeClass}">${stateInfo.label}</span>
-    </div>
-    
-    <!-- Fan Icon -->
-    <div class="flex flex-col items-center justify-center flex-1">
-      <svg class="w-12 h-12 ${stateInfo.textClass}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-      </svg>
-      ${hasRpm ? `<div class="text-lg font-bold ${stateInfo.textClass} mt-2">${escapeHtml(String(fan.rpm))} RPM</div>` : ''}
-      ${showSubLabel ? `<div class="text-xs text-gray-400 mt-2 text-center">${subLabel}</div>` : ''}
-    </div>
+    <!-- Fan icon -->
+    <svg class="w-8 h-8 ${stateInfo.textClass}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+    </svg>
+
+    <!-- RPM -->
+    ${hasRpm ? `<div class="text-sm font-semibold ${stateInfo.textClass} leading-none">${escapeHtml(String(fan.rpm))} RPM</div>` : ''}
+    ${showSubLabel ? `<div class="text-xs text-gray-400 text-center leading-none">${subLabel}</div>` : ''}
+
+    <!-- Description -->
+    <h4 class="text-xs text-gray-400 text-center truncate w-full px-1 mt-0.5" title="${escapeHtml(fan.description)}">${escapeHtml(fan.description)}</h4>
   `;
 
   return card;
@@ -880,20 +878,18 @@ function createPowerSupplyCard(psu) {
   const description = psu.description ? escapeHtml(String(psu.description)) : null;
   const serialNo    = psu.serial_no   ? escapeHtml(String(psu.serial_no))   : null;
 
-  card.className = 'bg-gray-800 rounded-lg p-3 border-l-4 min-w-[160px] flex flex-col gap-2 ' + stateInfo.borderClass;
+  card.className = 'bg-gray-800 rounded-lg p-2 border-l-4 flex flex-col items-center justify-center gap-1 ' + stateInfo.borderClass;
   card.innerHTML = `
-    <div class="flex items-center justify-between gap-2">
-      <h4 class="text-sm font-medium text-white truncate flex-1" title="${location}">${location}</h4>
-      <span class="text-xs px-2 py-1 rounded whitespace-nowrap ${stateInfo.badgeClass}">${stateInfo.label}</span>
-    </div>
-    <div class="flex justify-center my-1">
-      <svg class="w-10 h-10 ${stateInfo.textClass}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-          d="M3 7h18M3 7a2 2 0 00-2 2v8a2 2 0 002 2h18a2 2 0 002-2V9a2 2 0 00-2-2M3 7V5a2 2 0 012-2h14a2 2 0 012 2v2" />
-      </svg>
-    </div>
-    ${description ? `<div class="text-xs text-gray-300 truncate" title="${description}">${description}</div>` : ''}
-    ${serialNo    ? `<div class="text-xs text-gray-500 truncate" title="S/N: ${serialNo}">S/N: ${serialNo}</div>` : ''}
+    <!-- PSU icon -->
+    <svg class="w-7 h-7 ${stateInfo.textClass}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+        d="M3 7h18M3 7a2 2 0 00-2 2v8a2 2 0 002 2h18a2 2 0 002-2V9a2 2 0 00-2-2M3 7V5a2 2 0 012-2h14a2 2 0 012 2v2" />
+    </svg>
+
+    <!-- Label (description if set, otherwise location) -->
+    <h4 class="text-xs font-medium text-white text-center truncate w-full px-1 leading-none mt-0.5"
+        title="${description || location}">${description || location}</h4>
+    ${serialNo ? `<div class="text-xs text-gray-500 text-center truncate w-full px-1 leading-none" title="S/N: ${serialNo}">S/N: ${serialNo}</div>` : ''}
   `;
 
   return card;
