@@ -1,0 +1,40 @@
+{
+  "official_key": "eaton_ups",
+  "name": "eaton_ups",
+  "description": "Eaton-specific enrichments on top of generic_ups_mib: identity fields, scalar output load, ambient and remote environment temperature/humidity from XUPS-MIB (1.3.6.1.4.1.534.1), and serial number from the Powerware legacy MIB (1.3.6.1.4.1.705.1). Compatible with Eaton 9PX, 9SX, 9E, 93E, 9130, 5PX, and similar models.",
+  "vendor": "Eaton",
+  "product": "Any",
+  "model": "Any",
+  "get": {
+    "observer.model":                    "1.3.6.1.4.1.534.1.1.2.0",
+    "observer.firmware_version":         "1.3.6.1.4.1.534.1.1.3.0",
+    "observer.serial_number":            "1.3.6.1.4.1.705.1.1.7.0",
+    "ups.input.source":                  "1.3.6.1.4.1.534.1.3.5.0",
+    "ups.output.load_pct":               "1.3.6.1.4.1.534.1.4.1.0",
+    "ups.env.temperature_c":             "1.3.6.1.4.1.534.1.6.1.0",
+    "ups.env.remote_temperature_c":      "1.3.6.1.4.1.534.1.6.3.0",
+    "ups.env.humidity_pct":              "1.3.6.1.4.1.534.1.6.2.0"
+  },
+  "walk": {},
+  "table": {},
+  "normalizers": [
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "get",
+        "field": "ups.input.source"
+      },
+      "params": {
+        "mapping": {
+          "1": "other",
+          "2": "none",
+          "3": "normal",
+          "4": "bypass",
+          "5": "battery",
+          "6": "booster",
+          "7": "reducer"
+        }
+      }
+    }
+  ]
+}

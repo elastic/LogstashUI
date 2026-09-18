@@ -1,0 +1,22 @@
+{
+  "official_key": "eaton_ups",
+  "name": "eaton_ups",
+  "type": "UPS",
+  "description": "Battery health, runtime, per-phase input/output power, ambient temperature, and active alarms for Eaton UPS devices (9PX, 9SX, 9E, 93E, 9130, 5PX, and compatible).",
+  "vendor": "Eaton",
+  "product": "Any",
+  "model": "Any",
+  "profiles": [
+    "generic_system",
+    "generic_ups_mib",
+    "eaton_ups"
+  ],
+  "matching_rules": [
+    "EATON",
+    "Eaton",
+    "9PX",
+    "93E",
+    "9SX",
+    "5PX"
+  ]
+}

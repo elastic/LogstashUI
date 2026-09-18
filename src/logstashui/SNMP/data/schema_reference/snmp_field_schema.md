@@ -24,8 +24,11 @@ GET scalar fields have no table prefix. Table fields are written as `<table>.<fi
 - [Server Hardware — Temperature](#server-hardware--temperature)
 - [Server Hardware — Power Supply](#server-hardware--power-supply)
 - [Server Hardware — RAID Controller](#server-hardware--raid-controller)
+- [Environmental Sensors](#environmental-sensors)
 - [UPS / Power](#ups--power)
+- [PDU (Power Distribution Unit)](#pdu-power-distribution-unit)
 - [Storage Volumes](#storage-volumes)
+- [Juniper MX-series](#juniper-mx-series)
 - [Fibre Channel — Ports](#fibre-channel--ports)
 - [Fibre Channel — Name Server](#fibre-channel--name-server)
 - [Printers](#printers)
@@ -425,6 +428,28 @@ RAID controller inventory and state. Table: `component.raid_controller`.
 
 ---
 
+## Environmental Sensors
+
+Ambient temperature, humidity, and probe identity for dedicated environmental monitoring devices (e.g. Geist WatchDog / Vertiv). Source: vendor enterprise MIBs.
+
+**GET scalars (built-in/internal sensor):**
+
+| Field | OID | MIB | Description |
+|---|---|---|---|
+| `env.sensor_label` | vendor | Geist MIB | Label or location string of the built-in sensor unit |
+| `env.temperature_c` | vendor | Geist MIB | Built-in ambient temperature in Celsius (raw values are tenths — normalize with multiply 0.1) |
+| `env.humidity_pct` | vendor | Geist MIB | Built-in relative humidity as integer percentage 0–100 |
+
+**Table: `component.sensor`** — one row per external temperature probe:
+
+| Field | OID | MIB | Description |
+|---|---|---|---|
+| `component.sensor.description` | vendor | Geist MIB | Probe label / location name |
+| `component.sensor.online` | vendor | Geist MIB | Probe availability (1=online) |
+| `component.sensor.temp.celsius` | vendor | Geist MIB | Probe temperature in Celsius (normalize with multiply 0.1 from tenths) |
+
+---
+
 ## UPS / Power
 
 Battery, input/output phase, and environment data for UPS devices. Source: **XUPS-MIB** (Eaton/Powerware).
@@ -467,6 +492,43 @@ Battery, input/output phase, and environment data for UPS devices. Source: **XUP
 | `ups.output.phase.current` | `1.3.6.1.4.1.534.1.4.4.1.3` | XUPS-MIB | Phase output current in amps |
 | `ups.output.phase.load` | `1.3.6.1.4.1.534.1.4.4.1.4` | XUPS-MIB | Per-phase load |
 | `ups.output.phase.power` | `1.3.6.1.4.1.534.1.4.4.1.5` | XUPS-MIB | Per-phase output power in watts |
+
+---
+
+## PDU (Power Distribution Unit)
+
+Phase input power, bank circuit-breaker current, outlet state, and optional per-outlet metering for APC rPDU2 managed rack PDUs. Source: **APC PowerNet MIB** (`1.3.6.1.4.1.318.1.1.26`).
+
+**GET scalars:**
+
+| Field | OID | MIB | Description |
+|---|---|---|---|
+| `pdu.phase.load_state` | `1.3.6.1.4.1.318.1.1.26.4.3.1.4.1` | PowerNet-MIB | Phase load state enum (1=normal, 3=nearOverload, 4=overload, 5=notPresent) |
+| `pdu.phase.current_01a` | `1.3.6.1.4.1.318.1.1.26.4.3.1.5.1` | PowerNet-MIB | Phase current in tenths of an ampere (divide by 10 for amps); −1 = not supported |
+| `pdu.phase.voltage_v` | `1.3.6.1.4.1.318.1.1.26.4.3.1.6.1` | PowerNet-MIB | Phase input voltage in volts; −1 = not supported |
+| `pdu.phase.energy_wh` | `1.3.6.1.4.1.318.1.1.26.4.3.1.9.1` | PowerNet-MIB | Cumulative phase energy in watt-hours; −1 = not supported |
+| `pdu.bank.load_state` | `1.3.6.1.4.1.318.1.1.26.6.3.1.4.1` | PowerNet-MIB | Bank/breaker load state enum (same values as phase) |
+| `pdu.bank.current_01a` | `1.3.6.1.4.1.318.1.1.26.6.3.1.5.1` | PowerNet-MIB | Bank current in tenths of an ampere; available on all rPDU2 models |
+| `pdu.alarms.active_count` | `1.3.6.1.4.1.318.2.2.1.0` | PowerNet-MIB | Number of currently active alarms |
+
+**Table: `pdu.outlet`** — one row per outlet (all rPDU2 models):
+
+| Field | OID | MIB | Description |
+|---|---|---|---|
+| `pdu.outlet.index` | `1.3.6.1.4.1.318.1.1.26.9.2.1.1.1` | PowerNet-MIB | Outlet number (1-based) |
+| `pdu.outlet.name` | `1.3.6.1.4.1.318.1.1.26.9.2.1.1.3` | PowerNet-MIB | Configured outlet label (e.g. hostname of connected device) |
+| `pdu.outlet.state` | `1.3.6.1.4.1.318.1.1.26.9.2.1.1.5` | PowerNet-MIB | Outlet switched state (0=on, 1=off) |
+
+**Table: `pdu.outlet.metered`** — one row per metered outlet (AP8641 and similar; zero rows on non-metered models):
+
+| Field | OID | MIB | Description |
+|---|---|---|---|
+| `pdu.outlet.metered.index` | `1.3.6.1.4.1.318.1.1.26.9.4.3.1.1` | PowerNet-MIB | Outlet number (1-based) |
+| `pdu.outlet.metered.load_state` | `1.3.6.1.4.1.318.1.1.26.9.4.3.1.5` | PowerNet-MIB | Per-outlet load state enum |
+| `pdu.outlet.metered.current_01a` | `1.3.6.1.4.1.318.1.1.26.9.4.3.1.6` | PowerNet-MIB | Per-outlet current in tenths of an ampere |
+| `pdu.outlet.metered.power_w` | `1.3.6.1.4.1.318.1.1.26.9.4.3.1.7` | PowerNet-MIB | Per-outlet apparent power in watts |
+| `pdu.outlet.metered.energy_wh` | `1.3.6.1.4.1.318.1.1.26.9.4.3.1.8` | PowerNet-MIB | Per-outlet cumulative energy in watt-hours |
+| `pdu.outlet.metered.connector_type` | `1.3.6.1.4.1.318.1.1.26.9.4.3.1.12` | PowerNet-MIB | IEC connector type string (e.g. C13, C19) |
 
 ---
 
@@ -513,6 +575,31 @@ Per-volume I/O, capacity, and latency histograms. Table: `component.volume`. Sou
 | `component.volume.disk.vol_used.high` | `1.3.6.1.4.1.37447.1.2.1.53` | NIMBLE-MIB | Disk space used by volume data high 32 bits |
 | `component.volume.disk.snap_used.low` | `1.3.6.1.4.1.37447.1.2.1.54` | NIMBLE-MIB | Disk space used by snapshots low 32 bits |
 | `component.volume.disk.snap_used.high` | `1.3.6.1.4.1.37447.1.2.1.55` | NIMBLE-MIB | Disk space used by snapshots high 32 bits |
+
+---
+
+## Juniper MX-series
+
+Per-component operating metrics for Juniper MX-series routers. Source: **JUNIPER-MIB** (`1.3.6.1.4.1.2636`).
+
+**GET scalars:**
+
+| Field | OID | MIB | Description |
+|---|---|---|---|
+| `observer.model` | `1.3.6.1.4.1.2636.3.1.2.0` | JUNIPER-MIB jnxBoxDescr | Full chassis description string (e.g. "Juniper MX960 Internet Backbone Router") |
+| `observer.serial_number` | `1.3.6.1.4.1.2636.3.1.3.0` | JUNIPER-MIB jnxBoxSerialNo | Chassis serial number |
+
+**Table: `juniper.component`** — one row per hardware component (chassis, PEMs, FPCs, MICs, fan trays). Source: **jnxOperatingTable** (`1.3.6.1.4.1.2636.3.1.13`). Index is a 4-tuple: component-type, slot, PIC, port.
+
+| Field | OID (column base) | MIB | Description |
+|---|---|---|---|
+| `juniper.component.descr` | `1.3.6.1.4.1.2636.3.1.13.1.5` | jnxOperatingDescr | Human-readable component description (e.g. "FPC: MPC Type 2 3D @ 0", "Top Fan Tray", "PEM 0") |
+| `juniper.component.state` | `1.3.6.1.4.1.2636.3.1.13.1.2` | jnxOperatingState | Operating state enum: 1=unknown, 2=running, 3=ready, 4=reset, 5=runningAtFullSpeed, 6=down, 7=standby |
+| `juniper.component.temp_c` | `1.3.6.1.4.1.2636.3.1.13.1.6` | jnxOperatingTemp | Component temperature in Celsius (0 if not applicable) |
+| `juniper.component.memory_pct` | `1.3.6.1.4.1.2636.3.1.13.1.7` | jnxOperatingMemory | Memory utilisation 0–100% (0 for non-CPU components) |
+| `juniper.component.cpu_pct` | `1.3.6.1.4.1.2636.3.1.13.1.8` | jnxOperatingCPU | Instantaneous CPU utilisation 0–100% |
+| `juniper.component.cpu_1min_pct` | `1.3.6.1.4.1.2636.3.1.13.1.11` | jnxOperatingCPU1MinAvg | 1-minute CPU utilisation average 0–100% |
+| `juniper.component.cpu_5min_pct` | `1.3.6.1.4.1.2636.3.1.13.1.12` | jnxOperatingCPU5MinAvg | 5-minute CPU utilisation average 0–100% |
 
 ---
 
@@ -611,3 +698,50 @@ Toner, page counts, trays, covers, and alerts. Source: **Printer-MIB** (RFC 3805
 |---|---|---|---|
 | `printer.alert.code` | `1.3.6.1.2.1.43.15.1.1.2` | Printer-MIB | Alert code enum (jammed, tonerLow, offline, etc.) |
 | `printer.alert.description` | `1.3.6.1.2.1.43.15.1.1.3` | Printer-MIB | Human-readable alert description |
+
+---
+
+## Wireless Controller
+
+Controller-level aggregates, per-AP status, and per-radio channel data for Aruba 7000/7200-series wireless LAN controllers. Source: **Aruba enterprise MIB** (`1.3.6.1.4.1.14823.2.2.1`).
+
+**GET scalars:**
+
+| Field | OID | MIB | Description |
+|---|---|---|---|
+| `wireless.controller.ap_count` | `1.3.6.1.4.1.14823.2.2.1.2.1.21.0` | ArubaOS-MIB | Total number of APs currently registered to this controller |
+| `wireless.controller.client_count` | `1.3.6.1.4.1.14823.2.2.1.2.1.23.0` | ArubaOS-MIB | Total number of associated wireless clients |
+| `system.memory.total.kb` | `1.3.6.1.4.1.14823.2.2.1.1.1.11.1.2.1` | ArubaOS-MIB | Total system memory in KB (Aruba-native; single-row table polled as scalar) |
+| `system.memory.actual.used.kb` | `1.3.6.1.4.1.14823.2.2.1.1.1.11.1.3.1` | ArubaOS-MIB | Used system memory in KB |
+| `system.memory.actual.free.kb` | `1.3.6.1.4.1.14823.2.2.1.1.1.11.1.4.1` | ArubaOS-MIB | Free system memory in KB |
+
+**Table: `component.cpu`** — one row per CPU core (Supervisor + Network Processors):
+
+| Field | OID | MIB | Description |
+|---|---|---|---|
+| `component.cpu.name` | `1.3.6.1.4.1.14823.2.2.1.1.1.9.1.2` | ArubaOS-MIB | CPU label (e.g. "Supervisor Card CPU", "Network Processor CPU8") |
+| `component.cpu.load_pct` | `1.3.6.1.4.1.14823.2.2.1.1.1.9.1.3` | ArubaOS-MIB | CPU utilization 0–100; normalizer converts to 0–1 in `system.cpu.total.norm.pct` |
+
+**Table: `system.filesystem`** — one row per mounted filesystem:
+
+| Field | OID | MIB | Description |
+|---|---|---|---|
+| `system.filesystem.mount_point` | `1.3.6.1.4.1.14823.2.2.1.1.1.10.1.5` | ArubaOS-MIB | Mount path (e.g. /tmp, /flash, /flash1) |
+| `system.filesystem.total.bytes` | `1.3.6.1.4.1.14823.2.2.1.1.1.10.1.3` | ArubaOS-MIB | Total filesystem size in MB (normalizer multiplies by 1 048 576 → bytes in-place) |
+| `system.filesystem.used.bytes` | `1.3.6.1.4.1.14823.2.2.1.1.1.10.1.4` | ArubaOS-MIB | Used filesystem space in MB (normalizer multiplies by 1 048 576 → bytes in-place; ratio normalizer produces `used.pct`) |
+
+**Table: `wireless.ap`** — one row per registered AP (indexed by AP MAC address):
+
+| Field | OID | MIB | Description |
+|---|---|---|---|
+| `wireless.ap.ip` | `1.3.6.1.4.1.14823.2.2.1.5.2.1.4.1.2` | ArubaOS-MIB | AP management IP address |
+| `wireless.ap.name` | `1.3.6.1.4.1.14823.2.2.1.5.2.1.4.1.3` | ArubaOS-MIB | Configured AP name |
+| `wireless.ap.serial` | `1.3.6.1.4.1.14823.2.2.1.5.2.1.4.1.6` | ArubaOS-MIB | AP serial number |
+| `wireless.ap.status` | `1.3.6.1.4.1.14823.2.2.1.5.2.1.4.1.19` | ArubaOS-MIB | AP state enum (1=up, 2=down) |
+
+**Table: `wireless.ap.radio`** — one row per radio per AP (indexed by AP MAC + radio index):
+
+| Field | OID | MIB | Description |
+|---|---|---|---|
+| `wireless.ap.radio.band` | `1.3.6.1.4.1.14823.2.2.1.5.2.1.5.1.2` | ArubaOS-MIB | Radio band enum (1=2.4 GHz, 3=5 GHz) |
+| `wireless.ap.radio.channel` | `1.3.6.1.4.1.14823.2.2.1.5.2.1.5.1.3` | ArubaOS-MIB | Active channel number |
