@@ -313,6 +313,10 @@ def UpdateCredential(request, credential_id):
         credential.description = request.POST.get('description', credential.description)
         credential.version = request.POST.get('version', credential.version)
 
+        # Stash existing secrets before clearing so we can preserve them when
+        # the form posts an empty value (UI leaves sensitive fields blank on edit).
+        old_community = credential.community
+
         # Clear all version-specific fields first
         credential.community = ''
         credential.security_name = ''
@@ -324,7 +328,8 @@ def UpdateCredential(request, credential_id):
 
         # Set version-specific fields
         if credential.version in ['1', '2c']:
-            credential.community = request.POST.get('community', 'public')
+            community = request.POST.get('community', '').strip()
+            credential.community = community if community else old_community
         elif credential.version == '3':
             credential.security_name = request.POST.get('security_name')
             credential.security_level = request.POST.get('security_level')
