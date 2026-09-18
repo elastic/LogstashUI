@@ -12,6 +12,7 @@ from django.http import JsonResponse, HttpResponse
 from django.core.exceptions import ValidationError
 from django.conf import settings
 from django.db.models import Q, Prefetch
+from django.db.models.functions import Lower
 
 from Common.encryption import decrypt_credential
 from Common.elastic_utils import get_elastic_connection
@@ -2751,10 +2752,38 @@ def GetDevices(request):
         if network_filter:
             queryset = queryset.filter(network_id=network_filter)
 
-        # Apply sorting
-        valid_sort_fields = ['name', '-name', 'ip_address', '-ip_address', 'hostname', '-hostname', 'created_at', '-created_at']
+        # Apply sorting — all text fields use Lower() for case-insensitive ordering.
+        # created_at is non-text so it uses the plain field name.
+        _text_sort_fields = {
+            'name': Lower('name'),
+            'ip_address': Lower('ip_address'),
+            'hostname': Lower('hostname'),
+            'credential__name': Lower('credential__name'),
+            'network__name': Lower('network__name'),
+            'device_template__name': Lower('device_template__name'),
+        }
+        valid_sort_fields = (
+            [f for f in _text_sort_fields]
+            + [f'-{f}' for f in _text_sort_fields]
+            + ['created_at', '-created_at', 'location', '-location']
+        )
         if sort_by in valid_sort_fields:
-            queryset = queryset.order_by(sort_by)
+            stripped = sort_by.lstrip('-')
+            descending = sort_by.startswith('-')
+            if sort_by in ('location', '-location'):
+                if descending:
+                    queryset = queryset.order_by(
+                        Lower('site').desc(), Lower('building').desc(), Lower('room').desc()
+                    )
+                else:
+                    queryset = queryset.order_by(
+                        Lower('site'), Lower('building'), Lower('room')
+                    )
+            elif stripped == 'created_at':
+                queryset = queryset.order_by(sort_by)
+            else:
+                expr = _text_sort_fields[stripped]
+                queryset = queryset.order_by(expr.desc() if descending else expr)
 
         # Manual pagination using limit/offset to avoid expensive COUNT queries
         # We fetch page_size + 1 to determine if there's a next page
