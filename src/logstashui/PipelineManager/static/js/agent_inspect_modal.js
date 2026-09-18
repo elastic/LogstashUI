@@ -80,20 +80,32 @@ document.addEventListener('keydown', function(e) {
 // ── Collapsible Card Functionality ──────────────────────────────────────────
 
 function toggleAgentCard(headerElement) {
-    const card = headerElement.closest('.agent-inspect-card');
+    const card    = headerElement.closest('.agent-inspect-card');
     const content = card.querySelector('.card-content');
     const chevron = card.querySelector('.card-chevron');
-    
-    if (content.style.maxHeight && content.style.maxHeight !== '0px') {
-        // Collapse
+
+    const isOpen = content.style.maxHeight !== '0px' && content.style.maxHeight !== '';
+
+    if (isOpen) {
+        // Collapse: snapshot real height first so the CSS transition has a start point
+        content.style.overflow  = 'hidden';
+        content.style.maxHeight = content.scrollHeight + 'px';
+        content.getBoundingClientRect(); // force reflow before animating to 0
         content.style.maxHeight = '0px';
-        content.style.opacity = '0';
+        content.style.opacity   = '0';
         chevron.style.transform = 'rotate(-90deg)';
     } else {
-        // Expand
+        // Expand: animate open, then release the height cap so inner sub-lists
+        // (logger entry rows) can reveal without hitting a stale ceiling.
+        content.style.overflow  = 'hidden';
         content.style.maxHeight = content.scrollHeight + 'px';
-        content.style.opacity = '1';
+        content.style.opacity   = '1';
         chevron.style.transform = 'rotate(0deg)';
+        content.addEventListener('transitionend', function onEnd() {
+            content.style.maxHeight = 'none';
+            content.style.overflow  = 'visible';
+            content.removeEventListener('transitionend', onEnd);
+        }, { once: true });
     }
 }
 
@@ -110,17 +122,19 @@ function initializeAgentCards() {
         
         // Add transition styles
         content.style.transition = 'max-height 0.3s ease, opacity 0.3s ease';
-        content.style.overflow = 'hidden';
-        
+
         if (isGreen) {
-            // Green cards start collapsed
+            // Collapsed: height cap + clip
+            content.style.overflow  = 'hidden';
             content.style.maxHeight = '0px';
-            content.style.opacity = '0';
+            content.style.opacity   = '0';
             chevron.style.transform = 'rotate(-90deg)';
         } else {
-            // Non-green cards start expanded
-            content.style.maxHeight = content.scrollHeight + 'px';
-            content.style.opacity = '1';
+            // Expanded: no height cap so inner sub-lists can reveal freely,
+            // and overflow:visible so the inner overflow-y-auto scroll works.
+            content.style.overflow  = 'visible';
+            content.style.maxHeight = 'none';
+            content.style.opacity   = '1';
             chevron.style.transform = 'rotate(0deg)';
         }
     });

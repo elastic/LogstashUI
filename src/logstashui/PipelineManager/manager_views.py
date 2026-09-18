@@ -338,6 +338,41 @@ def _normalize_logstash_api_status(connection):
     connection.status_blob = blob
 
 
+def _group_log_entries(entries):
+    """Group log entries by logger name, inject ``ts_formatted``, sort by count desc.
+
+    Args:
+        entries: List of log entry dicts, each with keys ``ts`` (epoch ms),
+            ``logger``, and ``message``.
+
+    Returns:
+        List of ``(logger_name, entries)`` tuples sorted by descending count.
+        Each entry dict is augmented with a ``ts_formatted`` key
+        (``HH:MM:SS UTC`` string, or ``None`` if ``ts`` is absent/invalid).
+
+    Example:
+        >>> entries = [
+        ...     {"ts": 1726668000000, "logger": "org.example.Foo", "message": "boom"},
+        ...     {"ts": 1726668001000, "logger": "org.example.Foo", "message": "boom2"},
+        ... ]
+        >>> _group_log_entries(entries)
+        [("org.example.Foo", [{"ts": ..., "ts_formatted": "14:00:00 UTC", ...}, ...])]
+    """
+    from collections import defaultdict
+
+    groups = defaultdict(list)
+    for entry in (entries or []):
+        ts = entry.get('ts')
+        ts_fmt = None
+        if ts:
+            try:
+                ts_fmt = datetime.fromtimestamp(ts / 1000, tz=timezone.utc).strftime('%H:%M:%S UTC')
+            except Exception:
+                pass
+        groups[entry.get('logger') or '(unknown)'].append({**entry, 'ts_formatted': ts_fmt})
+    return sorted(groups.items(), key=lambda x: -len(x[1]))
+
+
 @require_admin_role
 def get_agent_inspect(request, connection_id):
     """Return fresh HTML for the agent inspect flyout.
@@ -374,10 +409,28 @@ def get_agent_inspect(request, connection_id):
 
     _normalize_logstash_api_status(connection)
 
+    # Pre-group logwatcher entries by logger for the template.
+    logwatcher_grouped = None
+    lw_blob = None
+    if connection.status_blob and isinstance(connection.status_blob, dict):
+        lw_blob = connection.status_blob.get('logwatcher')
+    elif hasattr(connection.status_blob, '__getitem__'):
+        try:
+            lw_blob = connection.status_blob['logwatcher']
+        except (KeyError, TypeError):
+            pass
+
+    if lw_blob:
+        logwatcher_grouped = {
+            'errors':   _group_log_entries(lw_blob.get('errors_since_last_checkin')),
+            'warnings': _group_log_entries(lw_blob.get('warnings_since_last_checkin')),
+            'fatals':   _group_log_entries(lw_blob.get('fatals_since_last_checkin')),
+        }
+
     return render(
         request,
         'components/pipeline_manager/agent_inspect_content.html',
-        {'connection': connection},
+        {'connection': connection, 'logwatcher_grouped': logwatcher_grouped},
     )
 
 
