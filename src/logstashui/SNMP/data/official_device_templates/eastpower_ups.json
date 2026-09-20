@@ -1,0 +1,20 @@
+{
+  "official_key": "eastpower_ups",
+  "name": "eastpower_ups",
+  "type": "UPS",
+  "description": "Battery health, runtime, per-phase input/output power, and active alarms for EAST Power (Eastpower) UPS devices using the standard UPS-MIB. The iStars SNMP management card (enterprise OID 1.3.6.1.4.1.40614) exposes full UPS-MIB coverage including bypass, test, and config subtrees. Compatible with EAST EA9080 and similar iStars-managed models.",
+  "vendor": "Eastpower",
+  "product": "Any",
+  "model": "Any",
+  "profiles": [
+    "generic_system",
+    "generic_ups_mib"
+  ],
+  "matching_rules": [
+    "EAST",
+    "iStars",
+    "EA9080",
+    "Eastpower",
+    "40614"
+  ]
+}

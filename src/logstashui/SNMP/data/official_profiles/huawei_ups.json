@@ -1,0 +1,111 @@
+{
+  "official_key": "huawei_ups",
+  "name": "huawei_ups",
+  "description": "Complete normalized polling profile for Huawei UPS devices. Uses standard UPS-MIB OIDs where supported and Huawei OIDs for battery capacity and runtime, which return -1 through UPS-MIB on the UPS5000. Compatible with Huawei UPS5000-E and similar models.",
+  "vendor": "Huawei",
+  "product": "Any",
+  "model": "Any",
+  "get": {
+    "observer.vendor":           "1.3.6.1.2.1.33.1.1.1.0",
+    "observer.model":            "1.3.6.1.2.1.33.1.1.2.0",
+    "observer.firmware_version": "1.3.6.1.2.1.33.1.1.3.0",
+    "observer.serial_number":    "1.3.6.1.4.1.2011.6.174.1.2.100.1.5.1",
+    "ups.battery.status":                 "1.3.6.1.2.1.33.1.2.1.0",
+    "ups.battery.seconds_on_battery":     "1.3.6.1.2.1.33.1.2.2.0",
+    "ups.battery.time_remaining_minutes": "1.3.6.1.4.1.2011.6.174.1.12.1.0",
+    "ups.battery.capacity_pct":           "1.3.6.1.4.1.2011.6.174.1.6.100.1.3.1",
+    "ups.battery.voltage":                "1.3.6.1.2.1.33.1.2.5.0",
+    "ups.battery.current_amps":           "1.3.6.1.2.1.33.1.2.6.0",
+    "ups.input.num_phases":               "1.3.6.1.2.1.33.1.3.2.0",
+    "ups.output.source":                  "1.3.6.1.2.1.33.1.4.1.0",
+    "ups.output.frequency_hz":            "1.3.6.1.2.1.33.1.4.2.0",
+    "ups.output.num_phases":              "1.3.6.1.2.1.33.1.4.3.0",
+    "ups.alarms.present":                 "1.3.6.1.2.1.33.1.6.1.0"
+  },
+  "walk": {},
+  "table": {
+    "ups.input.phase": {
+      "columns": {
+        "frequency_hz": "1.3.6.1.2.1.33.1.3.3.1.2",
+        "voltage":      "1.3.6.1.2.1.33.1.3.3.1.3",
+        "current_amps": "1.3.6.1.2.1.33.1.3.3.1.4"
+      }
+    },
+    "ups.output.phase": {
+      "columns": {
+        "voltage":      "1.3.6.1.2.1.33.1.4.4.1.2",
+        "current_amps": "1.3.6.1.2.1.33.1.4.4.1.3",
+        "power_w":      "1.3.6.1.2.1.33.1.4.4.1.4",
+        "load_pct":     "1.3.6.1.2.1.33.1.4.4.1.5"
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "translate",
+      "target": {"scope": "get", "field": "ups.battery.status"},
+      "params": {
+        "mapping": {
+          "1": "unknown",
+          "2": "normal",
+          "3": "low_battery",
+          "4": "depleted"
+        }
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {"scope": "get", "field": "ups.output.source"},
+      "params": {
+        "mapping": {
+          "1": "other",
+          "2": "none",
+          "3": "normal",
+          "4": "bypass",
+          "5": "battery",
+          "6": "booster",
+          "7": "reducer"
+        }
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {"scope": "get", "field": "ups.battery.voltage"},
+      "params": {"multiply_value": 0.1}
+    },
+    {
+      "operation": "multiply",
+      "target": {"scope": "get", "field": "ups.battery.current_amps"},
+      "params": {"multiply_value": 0.1}
+    },
+    {
+      "operation": "multiply",
+      "target": {"scope": "get", "field": "ups.output.frequency_hz"},
+      "params": {"multiply_value": 0.1}
+    },
+    {
+      "operation": "multiply",
+      "target": {"scope": "table", "table": "ups.input.phase", "field": "ups.input.phase.frequency_hz"},
+      "params": {"multiply_value": 0.1}
+    },
+    {
+      "operation": "multiply",
+      "target": {"scope": "table", "table": "ups.input.phase", "field": "ups.input.phase.current_amps"},
+      "params": {"multiply_value": 0.1}
+    },
+    {
+      "operation": "multiply",
+      "target": {"scope": "table", "table": "ups.output.phase", "field": "ups.output.phase.current_amps"},
+      "params": {"multiply_value": 0.1}
+    },
+    {
+      "operation": "average",
+      "target": {
+        "scope": "table",
+        "table": "ups.output.phase",
+        "field": "ups.output.phase.load_pct"
+      },
+      "params": {"output_field": "ups.output.load_pct"}
+    }
+  ]
+}
