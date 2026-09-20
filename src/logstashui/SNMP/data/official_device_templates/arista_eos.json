@@ -1,0 +1,24 @@
+{
+  "official_key": "arista_eos",
+  "name": "arista_eos",
+  "type": "Switch",
+  "description": "System identity, full interface counters, LLDP neighbors, OSPF adjacencies, per-sensor temperature/fan/PSU readings via ENTITY-SENSOR-MIB, PSU inventory, and CPU/memory from HOST-RESOURCES-MIB for Arista EOS switches and routers (DCS-7xxx series).",
+  "vendor": "Arista Networks",
+  "product": "Any",
+  "model": "Any",
+  "profiles": [
+    "generic_system",
+    "generic_interfaces",
+    "generic_lldp",
+    "generic_ospf",
+    "generic_entity_sensor",
+    "generic_entity_psu",
+    "generic_host_system_metrics",
+    "arista_eos"
+  ],
+  "matching_rules": [
+    "Arista Networks EOS",
+    "Arista Networks DCS",
+    "Arista EOS"
+  ]
+}

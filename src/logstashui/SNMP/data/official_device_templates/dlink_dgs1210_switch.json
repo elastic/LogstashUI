@@ -1,0 +1,19 @@
+{
+  "official_key": "dlink_dgs1210_switch",
+  "name": "dlink_dgs1210_switch",
+  "type": "Switch",
+  "description": "System identity, interface counters, LLDP neighbors, CPU and memory utilisation, and D-Link-specific firmware version, hardware revision, and serial number for D-Link DGS-1210 series smart managed switches.",
+  "vendor": "D-Link",
+  "product": "DGS-1210",
+  "model": "Any",
+  "profiles": [
+    "generic_system",
+    "generic_interfaces",
+    "generic_lldp",
+    "dlink_dgs1210",
+    "dlink_dgs1210_system_metrics"
+  ],
+  "matching_rules": [
+    "DGS-1210"
+  ]
+}

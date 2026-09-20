@@ -1,0 +1,50 @@
+{
+  "official_key": "geist_environment",
+  "name": "geist_environment",
+  "description": "Geist WatchDog environmental monitor (sold under Vertiv): device identity, built-in temperature and humidity sensor as scalars, and external temperature probe readings as a sensor table. Temperature raw values are in tenths of a degree Celsius (multiply 0.1). Source: Geist enterprise MIB (1.3.6.1.4.1.21239.5.1).",
+  "vendor": "Vertiv",
+  "product": "WatchDog",
+  "model": "Any",
+  "get": {
+    "observer.model": "1.3.6.1.4.1.21239.5.1.1.1.0",
+    "observer.firmware_version": "1.3.6.1.4.1.21239.5.1.1.2.0",
+    "observer.serial_number": "1.3.6.1.4.1.21239.5.1.1.10.0",
+    "observer.mac_address": "1.3.6.1.4.1.21239.5.1.1.4.0",
+    "env.sensor_label": "1.3.6.1.4.1.21239.5.1.2.1.3.1",
+    "env.temperature_c": "1.3.6.1.4.1.21239.5.1.2.1.5.1",
+    "env.humidity_pct": "1.3.6.1.4.1.21239.5.1.2.1.6.1"
+  },
+  "walk": {},
+  "table": {
+    "component.sensor": {
+      "columns": {
+        "description": "1.3.6.1.4.1.21239.5.1.4.1.3",
+        "online": "1.3.6.1.4.1.21239.5.1.4.1.4",
+        "temp.celsius": "1.3.6.1.4.1.21239.5.1.4.1.5"
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "env.temperature_c"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "component.sensor",
+        "field": "component.sensor.temp.celsius"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    }
+  ]
+}
