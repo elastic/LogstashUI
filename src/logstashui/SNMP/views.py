@@ -665,6 +665,77 @@ def InstallSNMPIndexTemplate(request):
 
 
 @require_admin_role
+def RolloverSNMPDataStream(request):
+    """Roll over the SNMP metrics data stream on each supplied connection.
+
+    Should be called *after* a successful ``InstallSNMPIndexTemplate`` so that
+    new backing indices are created with the updated mappings.  Rolling over
+    before the template is installed has no effect on mappings.
+
+    Args:
+        connection_ids: List of Elasticsearch connection primary keys.
+        data_stream_name (optional): Override the default data stream name
+            ``"metrics-snmp.polling-default"``.
+
+    Returns:
+        JSON ``{success, results: [{connection_id, connection_name,
+        rolled_over, error?}]}``.
+
+    Examples:
+        POST /SNMP/RolloverSNMPDataStream/
+        {"connection_ids": [1]}
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, Exception):
+        return JsonResponse({'error': 'Invalid JSON body'}, status=400)
+
+    connection_ids = data.get('connection_ids', [])
+    if not connection_ids:
+        return JsonResponse({'error': 'connection_ids is required'}, status=400)
+
+    from Common.elastic_utils import rollover_data_stream
+    from PipelineManager.models import Connection
+
+    # Allow the caller to target a specific data stream; default to the SNMP one.
+    data_stream_name = data.get('data_stream_name', 'metrics-snmp.polling-default')
+
+    overall_success = True
+    results = []
+    for conn_id in connection_ids:
+        try:
+            conn = Connection.objects.get(id=int(conn_id))
+            response = rollover_data_stream(int(conn_id), data_stream_name)
+            results.append({
+                'connection_id': conn_id,
+                'connection_name': conn.name,
+                'rolled_over': response.get('rolled_over', True),
+                'success': True,
+            })
+        except Connection.DoesNotExist:
+            overall_success = False
+            results.append({
+                'connection_id': conn_id,
+                'connection_name': f'Connection {conn_id}',
+                'success': False,
+                'error': f'Connection {conn_id} not found',
+            })
+        except Exception as e:
+            overall_success = False
+            results.append({
+                'connection_id': conn_id,
+                'connection_name': f'Connection {conn_id}',
+                'success': False,
+                'error': str(e),
+            })
+
+    return JsonResponse({'success': overall_success, 'results': results})
+
+
+@require_admin_role
 def ImportAIGeneratedDefinitions(request):
     """Persist profiles and a device template produced by GenerateTemplateAndProfiles.
 

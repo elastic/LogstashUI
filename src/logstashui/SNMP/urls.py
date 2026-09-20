@@ -89,5 +89,6 @@ urlpatterns = [
     # SNMP Index Template management endpoints
     path("CheckSNMPIndexTemplate/", views.CheckSNMPIndexTemplate, name="CheckSNMPIndexTemplate"),
     path("InstallSNMPIndexTemplate/", views.InstallSNMPIndexTemplate, name="InstallSNMPIndexTemplate"),
+    path("RolloverSNMPDataStream/", views.RolloverSNMPDataStream, name="RolloverSNMPDataStream"),
 
 ]

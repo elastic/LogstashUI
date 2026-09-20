@@ -463,6 +463,36 @@ def create_index_template(connection_id, template_name, template_definition):
         raise
 
 
+def rollover_data_stream(connection_id, data_stream_name):
+    """Trigger a rollover on a data stream so new mappings take effect.
+
+    After updating an index template the new mappings only apply to backing
+    indices created *after* the update.  Calling rollover forces Elasticsearch
+    to open a fresh write index, so subsequent documents use the updated
+    mappings immediately.
+
+    Args:
+        connection_id: Primary key of a CENTRALIZED ``Connection``.
+        data_stream_name: Name of the data stream to roll over, e.g.
+            ``"metrics-snmp.polling-default"``.
+
+    Returns:
+        Elasticsearch rollover response as a dict.
+
+    Examples:
+        >>> result = rollover_data_stream(1, "metrics-snmp.polling-default")
+        >>> result["rolled_over"]
+        True
+    """
+    try:
+        es_client = get_elastic_connection(connection_id)
+        response = es_client.indices.rollover(alias=data_stream_name)
+        return dict(response)
+    except Exception as e:
+        logger.error(f"Error rolling over data stream '{data_stream_name}': {e}", exc_info=True)
+        raise
+
+
 def get_index_template(connection_id, template_name):
     """Fetch one installed index template by name.
 

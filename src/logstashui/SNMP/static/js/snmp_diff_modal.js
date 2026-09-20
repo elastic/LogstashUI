@@ -112,6 +112,10 @@ let _snmpNoChangesBlocked = false;
 // true when a pre-deploy validation error blocks the whole deploy
 let _snmpConfigBlocked = false;
 
+// true when at least one connection had installed_but_outdated status before the
+// last install — used to decide whether to show the rollover prompt afterward
+let _snmpTemplateWasOutdated = false;
+
 function _updateDeployButtonState() {
     const btn = document.getElementById('confirmDeployButton');
     if (!btn) return;
@@ -458,6 +462,10 @@ function _renderTemplateStatusPanel(results) {
         if (r.status === 'not_installed') hasMissing  = true;
         if (r.status === 'installed_but_outdated') hasOutdated = true;
 
+        // Track pre-install state so the rollover prompt only appears after an
+        // update (not after a first-time install where no old index exists).
+        if (r.status === 'installed_but_outdated') _snmpTemplateWasOutdated = true;
+
         const diffHint = r.differences && r.differences.length
             ? `<span class="text-xs text-gray-500 ml-1">(${r.differences.join(', ')})</span>`
             : '';
@@ -528,14 +536,15 @@ async function checkSNMPIndexTemplateStatus(connectionIds) {
 async function installSNMPIndexTemplate() {
     if (!_snmpDiffConnectionIds || _snmpDiffConnectionIds.length === 0) return;
 
-    const btn   = document.getElementById('snmpTemplateInstallBtn');
-    const label = document.getElementById('snmpTemplateInstallBtnLabel');
+    const btn     = document.getElementById('snmpTemplateInstallBtn');
+    const label   = document.getElementById('snmpTemplateInstallBtnLabel');
     const loading = document.getElementById('snmpTemplateStatusLoading');
 
     if (btn)   btn.disabled = true;
     if (label) label.textContent = 'Installing…';
     if (loading) loading.classList.remove('hidden');
 
+    let installSucceeded = false;
     try {
         const response = await fetch('/SNMP/InstallSNMPIndexTemplate/', {
             method: 'POST',
@@ -557,14 +566,74 @@ async function installSNMPIndexTemplate() {
             const firstError = (result.results || []).find(r => !r.success);
             showToast(firstError ? firstError.error : 'Template install failed', 'error');
         } else {
-            showToast('SNMP index template installed successfully', 'success');
+            installSucceeded = true;
+            showToast('SNMP index template updated — roll over the data stream to apply new mappings', 'success');
         }
     } catch (err) {
         showToast(`Template install failed: ${err.message}`, 'error');
     } finally {
         if (btn) btn.disabled = false;
-        // Re-check status after install attempt
-        await checkSNMPIndexTemplateStatus(_snmpDiffConnectionIds);
+        if (loading) loading.classList.add('hidden');
+
+        if (installSucceeded) {
+            // Only prompt for rollover when this was an *update* to an already-installed
+            // template. A brand-new install creates a fresh backing index with the
+            // correct mappings, so there is nothing to roll over.
+            if (_snmpTemplateWasOutdated) {
+                const rolloverPanel = document.getElementById('snmpRolloverPanel');
+                if (rolloverPanel) rolloverPanel.classList.remove('hidden');
+            }
+            // Re-check so the status badge reflects "installed" (not "outdated")
+            await checkSNMPIndexTemplateStatus(_snmpDiffConnectionIds);
+        } else {
+            await checkSNMPIndexTemplateStatus(_snmpDiffConnectionIds);
+        }
+    }
+}
+
+async function rolloverSNMPDataStream() {
+    if (!_snmpDiffConnectionIds || _snmpDiffConnectionIds.length === 0) return;
+
+    const btn     = document.getElementById('snmpRolloverBtn');
+    const label   = document.getElementById('snmpRolloverBtnLabel');
+    const loading = document.getElementById('snmpRolloverLoading');
+    const panel   = document.getElementById('snmpRolloverPanel');
+
+    if (btn)   btn.disabled = true;
+    if (label) label.textContent = 'Rolling over…';
+    if (loading) loading.classList.remove('hidden');
+
+    try {
+        const response = await fetch('/SNMP/RolloverSNMPDataStream/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+            },
+            body: JSON.stringify({ connection_ids: _snmpDiffConnectionIds }),
+        });
+
+        if (response.status === 403) {
+            showToast('Access denied: Admin role required', 'error');
+            return;
+        }
+
+        const result = await response.json();
+
+        if (!result.success) {
+            const firstError = (result.results || []).find(r => !r.success);
+            showToast(firstError ? firstError.error : 'Rollover failed', 'error');
+        } else {
+            showToast('Data stream rolled over — new mappings are now active', 'success');
+            // Hide the rollover prompt; the job is done
+            if (panel) panel.classList.add('hidden');
+        }
+    } catch (err) {
+        showToast(`Rollover failed: ${err.message}`, 'error');
+    } finally {
+        if (btn)   btn.disabled = false;
+        if (label) label.textContent = 'Rollover Data Stream';
+        if (loading) loading.classList.add('hidden');
     }
 }
 
@@ -591,10 +660,11 @@ async function prepareSnmpDiffModal() {
     document.getElementById('snmpDiffContainer').classList.add('hidden');
 
     // Reset template status panel
-    _snmpDiffConnectionIds = [];
-    _snmpTemplateBlocked   = false;
-    _snmpNoChangesBlocked  = false;
-    _snmpConfigBlocked     = false;
+    _snmpDiffConnectionIds   = [];
+    _snmpTemplateBlocked     = false;
+    _snmpNoChangesBlocked    = false;
+    _snmpConfigBlocked       = false;
+    _snmpTemplateWasOutdated = false;
     const blockingBanner = document.getElementById('snmpDiffBlockingBanner');
     if (blockingBanner) { blockingBanner.classList.add('hidden'); blockingBanner.innerHTML = ''; }
     const keystoreCommandsSection = document.getElementById('snmpKeystoreCommandsSection');
@@ -605,6 +675,8 @@ async function prepareSnmpDiffModal() {
     if (templateList) templateList.innerHTML = '';
     const templateBtn = document.getElementById('snmpTemplateInstallBtn');
     if (templateBtn) templateBtn.classList.add('hidden');
+    const rolloverPanel = document.getElementById('snmpRolloverPanel');
+    if (rolloverPanel) rolloverPanel.classList.add('hidden');
     
     // Reset the deploy button to enabled state (in case it was disabled from a previous deployment)
     const confirmButton = document.getElementById('confirmDeployButton');
