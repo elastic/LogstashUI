@@ -127,9 +127,9 @@ def get_cdp_adjacencies(network_ids=None):
                                         }
                                     },
                                     {
-                                        "cdp_row_index": {
+                                        "neighbor_device_id": {
                                             "terms": {
-                                                "field": "network.neighbor.index"
+                                                "field": "network.neighbor.device_id"
                                             }
                                         }
                                     }
@@ -193,18 +193,36 @@ def get_cdp_adjacencies(network_ids=None):
                             doc_network_name = source.get('network', {}).get('name', '')
                             neighbor_data    = source.get('network', {}).get('neighbor', {})
                             table_index      = neighbor_data.get('index', '')
+                            neighbor_dev_id  = neighbor_data.get('device_id', '')
 
-                            # network.neighbor.index format: "ifIndex.cdpCacheIfIndex"
-                            if device_name and '.' in table_index:
-                                if_index = table_index.split('.')[0]
-                                interface_lookup_pairs.append((device_name, if_index, polled_address))
+                            # Determine local ifIndex for interface-name resolution.
+                            # CDP index format: "ifIndex.cdpCacheIndex" (dot-separated).
+                            # LLDP docs do not carry a local interface index field, so
+                            # interface name resolution is skipped for those entries.
+                            if device_name:
+                                if '.' in table_index:
+                                    # CDP: extract ifIndex from the left side of the dot
+                                    if_index = table_index.split('.')[0]
+                                else:
+                                    # LLDP (or other): no local interface index available
+                                    if_index = ''
 
-                                key = f"{device_name}:{table_index}"
+                                if if_index:
+                                    interface_lookup_pairs.append((device_name, if_index, polled_address))
+
+                                # Key must be unique per (device, neighbor).  For CDP,
+                                # table_index carries that uniqueness; for LLDP (no index)
+                                # the neighbor device_id serves as the unique discriminator —
+                                # the composite already deduplicates on
+                                # (host_name, neighbor_device_id).
+                                key = f"{device_name}:{neighbor_dev_id or table_index}"
                                 cdp_data_by_device_index[key] = {
                                     'neighbor': neighbor_data,
                                     'polled_address': polled_address,
                                     'host_hostname': host_hostname,
-                                    'doc_network_name': doc_network_name
+                                    'doc_network_name': doc_network_name,
+                                    'if_index': if_index,
+                                    'neighbor_dev_id': neighbor_dev_id,
                                 }
 
                 # Step 2b: Resolve local interface names via interface events
@@ -262,6 +280,7 @@ def get_cdp_adjacencies(network_ids=None):
                     polled_address   = entry['polled_address']
                     host_hostname    = entry['host_hostname']
                     doc_network_name = entry['doc_network_name']
+                    if_index         = entry.get('if_index', '')
 
                     # Prefer network.name from the document itself; fall back to DB lookup
                     network_name = doc_network_name or resolve_network(device_name, polled_address)
@@ -271,9 +290,12 @@ def get_cdp_adjacencies(network_ids=None):
                         logger.debug(f"Skipping {device_name} — network '{network_name}' not in filter scope")
                         continue
 
-                    if_index = table_index.split('.')[0] if '.' in table_index else table_index
                     friendly_interface_name = interface_name_lookup.get(
-                        f"{device_name}:{if_index}", table_index
+                        f"{device_name}:{if_index}",
+                        # For CDP: fall back to the raw "ifIndex.remIndex" table_index.
+                        # For LLDP: no local interface is known; use the remote device_id
+                        # (the second half of the key) so each neighbor gets a unique slot.
+                        entry.get('neighbor_dev_id') or table_index or if_index
                     )
 
                     adjacency_table.setdefault(network_name, {}).setdefault(device_name, {})

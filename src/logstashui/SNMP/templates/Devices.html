@@ -237,6 +237,9 @@
 <!-- Device Visual Preview Component -->
 {% include 'components/snmp_device_visual_preview.html' %}
 
+<!-- SNMP Profile Modal (opened from device expand profile badges) -->
+{% include 'components/snmp_profile_modal.html' %}
+
 <!-- Popup Modal -->
 {% include 'popup.html' %}
 
@@ -247,6 +250,8 @@
 </script>
 <script src="{% static 'js/devices_table.js' %}"></script>
 <script src="{% static 'js/snmp_device_visual_preview.js' %}"></script>
+<script src="{% static 'js/snmp_profile_modal_helpers.js' %}"></script>
+<script src="{% static 'js/snmp_profile_modal.js' %}"></script>
 <script src="{% static 'js/snmp_devices_modal.js' %}"></script>
 <script src="{% static 'js/snmp_credentials_modal.js' %}"></script>
 <script src="{% static 'js/snmp_network_modal.js' %}"></script>

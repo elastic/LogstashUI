@@ -3993,26 +3993,39 @@ def _get_device_metrics(device, es_connection):
 
 
 def _get_device_fans(device, es_connection):
-    results = es_connection.search(
+    """Fetch fan readings for a device.
+
+    Handles two data shapes:
+    - ``generic_lm_sensors`` format: ``event.category`` = ``component.fan`` with
+      ``component.fan.description`` and ``component.fan.rpm``.
+    - ``generic_entity_sensor`` (ENTITY-SENSOR-MIB) format: ``event.category`` =
+      ``component.sensor``, ``component.sensor.type`` = 10 (rpm), raw value in
+      ``component.sensor.value``.
+
+    Args:
+        device: Device row.
+        es_connection: Elasticsearch client.
+
+    Returns:
+        Dict with key ``fans`` containing a list of fan dicts, each with
+        ``description``, ``state``, and ``rpm``.
+
+    Examples:
+        >>> data = _get_device_fans(device, es)
+        >>> data['fans'][0]['rpm']
+        '2400'
+    """
+    # --- Query 1: lm-sensors format (component.fan category) ---
+    lm_results = es_connection.search(
         size=0,
         index="metrics-snmp*",
         sort=[{"@timestamp": {"order": "desc"}}],
         query={
             "bool": {
                 "filter": [
-                    {
-                        "range": {
-                            "@timestamp": {
-                                "gte": "now-6h"
-                            }
-                        }
-                    },
+                    {"range": {"@timestamp": {"gte": "now-6h"}}},
                     _device_host_filter(device),
-                    {
-                        "term": {
-                            "event.category": "component.fan"
-                        }
-                    }
+                    {"term": {"event.category": "component.fan"}},
                 ]
             }
         },
@@ -4034,16 +4047,75 @@ def _get_device_fans(device, es_connection):
         }
     )
 
-    visualization_data = {
-        "fans": []
-    }
-
-    for fan in results['aggregations']['fans']['buckets']:
+    fans = []
+    seen_descriptions = set()
+    for fan in lm_results['aggregations']['fans']['buckets']:
         for doc in fan['top_fan_doc']['hits']['hits']:
             fan_data = doc['_source'].get('component', {}).get('fan', {})
-            visualization_data['fans'].append(fan_data)
+            desc = fan_data.get('description')
+            if desc:
+                seen_descriptions.add(desc)
+            fans.append(fan_data)
 
-    return visualization_data
+    # --- Query 2: ENTITY-SENSOR-MIB format (type=10 rpm stored as component.sensor) ---
+    entity_results = es_connection.search(
+        size=200,
+        index="metrics-snmp*",
+        sort=[{"@timestamp": {"order": "desc"}}],
+        query={
+            "bool": {
+                "filter": [
+                    {"range": {"@timestamp": {"gte": "now-6h"}}},
+                    _device_host_filter(device),
+                    {"term": {"event.category": "component.sensor"}},
+                    {"term": {"component.sensor.type": 10}},
+                    {"exists": {"field": "component.sensor.value"}},
+                ]
+            }
+        }
+    )
+
+    unnamed_count = 0
+    seen_fingerprints = set()
+    for hit in entity_results['hits']['hits']:
+        sensor_raw = hit['_source'].get('component', {}).get('sensor', {})
+        raw_desc = sensor_raw.get('description') or ''
+        value = sensor_raw.get('value')
+        precision = sensor_raw.get('precision', 0)
+        oper_status = sensor_raw.get('oper_status')
+
+        # Deduplicate
+        if raw_desc:
+            if raw_desc in seen_descriptions:
+                continue
+            seen_descriptions.add(raw_desc)
+            display_desc = raw_desc
+        else:
+            fingerprint = (value, precision)
+            if fingerprint in seen_fingerprints:
+                continue
+            seen_fingerprints.add(fingerprint)
+            unnamed_count += 1
+            display_desc = f'Fan {unnamed_count}'
+
+        # Convert raw value to RPM (precision is usually 0 for RPM)
+        rpm = None
+        if value is not None:
+            try:
+                rpm = int(round(float(value) / (10 ** int(precision))))
+            except (ValueError, TypeError, OverflowError):
+                pass
+
+        # Map ENTITY-SENSOR-MIB oper_status: 1=ok→None (JS infers from rpm), 3=nonoperational→6
+        state = 6 if oper_status == 3 else None
+
+        fans.append({
+            'description': display_desc,
+            'state': state,
+            'rpm': str(rpm) if rpm is not None else None,
+        })
+
+    return {"fans": fans}
 
 
 def _get_device_power_supplies(device, es_connection):
@@ -4132,27 +4204,39 @@ def _get_device_power_supplies(device, es_connection):
 
 
 def _get_device_sensors(device, es_connection):
-    results = es_connection.search(
+    """Fetch temperature sensor readings for a device.
+
+    Handles two data shapes:
+    - ``generic_lm_sensors`` format: ``component.sensor.description`` +
+      ``component.sensor.temp.celsius`` already normalised.
+    - ``generic_entity_sensor`` (ENTITY-SENSOR-MIB) format: ``component.sensor.type``
+      (8 = celsius) + ``component.sensor.value`` / ``component.sensor.precision`` that
+      must be converted to degrees (value / 10^precision).
+
+    Args:
+        device: Device row.
+        es_connection: Elasticsearch client.
+
+    Returns:
+        Dict with key ``sensors`` containing a list of sensor dicts, each with
+        ``description``, ``state``, ``temp_celsius``, and ``temp_threshold``.
+
+    Examples:
+        >>> data = _get_device_sensors(device, es)
+        >>> data['sensors'][0]['temp_celsius']
+        28.2
+    """
+    # --- Query 1: lm-sensors format (explicit temp.celsius field) ---
+    lm_results = es_connection.search(
         size=0,
         index="metrics-snmp*",
-        sort=[{"@timestamp": {"order": "desc"}}],
         query={
-
             "bool": {
                 "filter": [
-                    {
-                        "range": {
-                            "@timestamp": {
-                                "gte": "now-6h"
-                            }
-                        }
-                    },
+                    {"range": {"@timestamp": {"gte": "now-6h"}}},
                     _device_host_filter(device),
-                    {
-                        "term": {
-                            "event.category": "component.sensor"
-                        }
-                    }
+                    {"term": {"event.category": "component.sensor"}},
+                    {"exists": {"field": "component.sensor.temp.celsius"}},
                 ]
             }
         },
@@ -4166,8 +4250,12 @@ def _get_device_sensors(device, es_connection):
                     "top_sensor_doc": {
                         "top_hits": {
                             "size": 1,
-                            "_source": ["component.sensor.state", "component.sensor.description",
-                                        "component.sensor.temp.celsius", "component.sensor.temp.threshold"]
+                            "_source": [
+                                "component.sensor.state",
+                                "component.sensor.description",
+                                "component.sensor.temp.celsius",
+                                "component.sensor.temp.threshold",
+                            ]
                         }
                     }
                 }
@@ -4175,22 +4263,89 @@ def _get_device_sensors(device, es_connection):
         }
     )
 
-    visualization_data = {
-        "sensors": []
-    }
-
-    for sensor in results['aggregations']['sensors']['buckets']:
+    sensors = []
+    seen_descriptions = set()
+    for sensor in lm_results['aggregations']['sensors']['buckets']:
         for doc in sensor['top_sensor_doc']['hits']['hits']:
             sensor_raw = doc['_source'].get('component', {}).get('sensor', {})
             temp = sensor_raw.get('temp', {})
-            visualization_data['sensors'].append({
-                'description': sensor_raw.get('description'),
+            desc = sensor_raw.get('description')
+            if desc:
+                seen_descriptions.add(desc)
+            sensors.append({
+                'description': desc,
                 'state': sensor_raw.get('state'),
                 'temp_celsius': temp.get('celsius'),
                 'temp_threshold': temp.get('threshold'),
             })
 
-    return visualization_data
+    # --- Query 2: ENTITY-SENSOR-MIB format (type=8 celsius, raw value + precision) ---
+    entity_results = es_connection.search(
+        size=200,
+        index="metrics-snmp*",
+        sort=[{"@timestamp": {"order": "desc"}}],
+        query={
+            "bool": {
+                "filter": [
+                    {"range": {"@timestamp": {"gte": "now-6h"}}},
+                    _device_host_filter(device),
+                    {"term": {"event.category": "component.sensor"}},
+                    {"term": {"component.sensor.type": 8}},
+                    {"exists": {"field": "component.sensor.value"}},
+                ],
+                "must_not": [
+                    {"exists": {"field": "component.sensor.temp.celsius"}}
+                ]
+            }
+        }
+    )
+
+    unnamed_count = 0
+    # Deduplicate by description when present; fall back to (value, precision) fingerprint
+    seen_fingerprints = set()
+    for hit in entity_results['hits']['hits']:
+        sensor_raw = hit['_source'].get('component', {}).get('sensor', {})
+        raw_desc = sensor_raw.get('description') or ''
+        value = sensor_raw.get('value')
+        precision = sensor_raw.get('precision', 0)
+        oper_status = sensor_raw.get('oper_status')
+
+        # Deduplicate
+        if raw_desc:
+            if raw_desc in seen_descriptions:
+                continue
+            seen_descriptions.add(raw_desc)
+            display_desc = raw_desc
+        else:
+            fingerprint = (value, precision)
+            if fingerprint in seen_fingerprints:
+                continue
+            seen_fingerprints.add(fingerprint)
+            unnamed_count += 1
+            display_desc = f'Temp Sensor {unnamed_count}'
+
+        # Convert raw value to celsius: value / 10^precision
+        temp_celsius = None
+        if value is not None:
+            try:
+                temp_celsius = round(float(value) / (10 ** int(precision)), int(precision))
+            except (ValueError, TypeError, OverflowError):
+                pass
+
+        # Map ENTITY-SENSOR-MIB oper_status to display state:
+        # 1=ok → None (JS infers "Reading" from temp value)
+        # 2=unavailable → None
+        # 3=nonoperational → 6 (Not Functioning)
+        state = 6 if oper_status == 3 else None
+
+        sensors.append({
+            'description': display_desc,
+            'state': state,
+            'temp_celsius': temp_celsius,
+            'temp_threshold': None,
+        })
+
+    return {"sensors": sensors}
 
 
 def _get_device_cpu_cores(device, es_connection):
@@ -4279,7 +4434,7 @@ def _get_device_neighbors(device, es_connection):
         aggregations={
             "neighbors": {
                 "terms": {
-                    "field": "network.neighbor.index",
+                    "field": "network.neighbor.device_id",
                     "size": 1000
                 },
                 "aggregations": {
@@ -4323,6 +4478,116 @@ def _get_device_neighbors(device, es_connection):
             })
 
     visualization_data['neighbors'].sort(key=lambda n: n['device_id'].lower())
+
+    return visualization_data
+
+
+def _get_device_wireless_aps(device, es_connection):
+    """Fetch the latest per-AP state from Elasticsearch for a wireless controller.
+
+    Queries the ``wireless.ap`` event category and returns one entry per AP,
+    sorted by AP name. Status values are expected to have been normalised to
+    the strings ``"up"`` / ``"down"`` by a translate normalizer in the profile.
+
+    Args:
+        device: The SNMP Device ORM object.
+        es_connection: An active Elasticsearch client.
+
+    Returns:
+        Dict with keys:
+            ``aps``  — list of dicts, each with ``index``, ``name``, ``ip``,
+                       ``serial``, ``status``.
+            ``up_count``   — int, number of APs with status ``"up"``.
+            ``down_count`` — int, number of APs with status ``"down"``.
+
+    Examples:
+        >>> data = _get_device_wireless_aps(device, es)
+        >>> data['up_count']
+        533
+    """
+    results = es_connection.search(
+        size=0,
+        index="metrics-snmp*",
+        query={
+            "bool": {
+                "filter": [
+                    {"range": {"@timestamp": {"gte": "now-6h"}}},
+                    _device_host_filter(device),
+                    {"term": {"event.category": "wireless.ap"}}
+                ]
+            }
+        },
+        aggregations={
+            "aps": {
+                "terms": {
+                    "field": "wireless.ap.index",
+                    "size": 2000
+                },
+                "aggregations": {
+                    "latest_doc": {
+                        "top_hits": {
+                            "size": 1,
+                            "sort": [{"@timestamp": {"order": "desc"}}],
+                            "_source": [
+                                "wireless.ap.index",
+                                "wireless.ap.name",
+                                "wireless.ap.ip",
+                                "wireless.ap.serial",
+                                "wireless.ap.status"
+                            ]
+                        }
+                    }
+                }
+            }
+        }
+    )
+
+    visualization_data = {"aps": [], "up_count": 0, "down_count": 0}
+
+    for bucket in results['aggregations']['aps']['buckets']:
+        for doc in bucket['latest_doc']['hits']['hits']:
+            ap = doc['_source'].get('wireless', {}).get('ap', {})
+            status = ap.get('status', '')
+            visualization_data['aps'].append({
+                "index": ap.get('index', bucket['key']),
+                "name": ap.get('name', ''),
+                "ip": ap.get('ip', ''),
+                "serial": ap.get('serial', ''),
+                "status": status
+            })
+            if status == 'up':
+                visualization_data['up_count'] += 1
+            elif status == 'down':
+                visualization_data['down_count'] += 1
+
+    visualization_data['aps'].sort(key=lambda a: (str(a['status']) not in ('down', '2'), a['name'].lower()))
+
+    # Fetch latest controller-level client count scalar from the metrics document
+    try:
+        scalar_result = es_connection.search(
+            size=1,
+            index="metrics-snmp*",
+            query={
+                "bool": {
+                    "filter": [
+                        {"range": {"@timestamp": {"gte": "now-6h"}}},
+                        _device_host_filter(device),
+                        {"term": {"event.category": "metrics"}},
+                        {"exists": {"field": "wireless.controller.client_count"}}
+                    ]
+                }
+            },
+            sort=[{"@timestamp": {"order": "desc"}}],
+            _source=["wireless.controller.client_count", "wireless.controller.ap_count"]
+        )
+        hits = scalar_result.get('hits', {}).get('hits', [])
+        if hits:
+            src = hits[0]['_source']
+            wc = src.get('wireless', {}).get('controller', {})
+            visualization_data['client_count'] = wc.get('client_count')
+            visualization_data['ap_count'] = wc.get('ap_count')
+    except Exception:
+        pass
 
     return visualization_data
 
@@ -4468,7 +4733,7 @@ def _get_device_filesystems(device, es_connection):
                 "allocation_units": fs.get('allocation_units', 0)
             })
 
-    visualization_data['filesystems'].sort(key=lambda f: f['mount_point'])
+    visualization_data['filesystems'].sort(key=lambda f: f.get('used_pct') or 0, reverse=True)
 
     return visualization_data
 
@@ -4541,6 +4806,484 @@ def _get_device_printer_supplies(device, es_connection):
     return visualization_data
 
 
+def _get_device_ups_metrics(device, es_connection):
+    """Fetch UPS battery health, runtime, and output metrics for the last six hours.
+
+    Queries ``event.category: metrics`` documents and extracts UPS-MIB fields
+    written by the ``generic_ups_mib`` (and vendor-specific) profiles.  The
+    most-recent document supplies the current-value snapshot; every document
+    with a ``ups.battery.capacity_pct`` value contributes to the trend series.
+
+    Args:
+        device: Device row.
+        es_connection: Elasticsearch client.
+
+    Returns:
+        Dict with the latest scalar values and a capacity trend time series::
+
+            {
+                'output_source': 'normal',
+                'battery_status': 'normal',
+                'battery_capacity_pct': 100,
+                'battery_time_remaining_minutes': 1092,
+                'battery_seconds_on_battery': 0,
+                'alarms_present': 0,
+                'output_load_pct': 21,
+                'battery_temperature_c': 25,
+                'CapacityTrend': [100, 99, ...],
+                'CapacityTrendTime': ['2026-09-18T...', ...],
+            }
+
+        Any field absent from ES is returned as ``None``; trend lists are empty
+        when no capacity data exists.
+
+    Example::
+
+        ups = _get_device_ups_metrics(device, es)
+        if ups['battery_capacity_pct'] is not None:
+            print(f"Battery at {ups['battery_capacity_pct']}%")
+    """
+    results = es_connection.search(
+        size=1000,
+        index="metrics-snmp*",
+        sort=[{"@timestamp": {"order": "desc"}}],
+        query={
+            "bool": {
+                "filter": [
+                    {"range": {"@timestamp": {"gte": "now-6h"}}},
+                    _device_host_filter(device),
+                    {"term": {"event.category": "metrics"}},
+                ]
+            }
+        },
+    )
+
+    data = {
+        'output_source': None,
+        'battery_status': None,
+        'battery_capacity_pct': None,
+        'battery_time_remaining_minutes': None,
+        'battery_seconds_on_battery': None,
+        'alarms_present': None,
+        'output_load_pct': None,
+        'battery_temperature_c': None,
+        'CapacityTrend': [],
+        'CapacityTrendTime': [],
+    }
+
+    def _sanitize_ups_int(value):
+        """Return None when value is a negative sentinel (UPS-MIB returns -1 for unsupported fields)."""
+        if value is None:
+            return None
+        try:
+            return None if int(value) < 0 else value
+        except (TypeError, ValueError):
+            return value
+
+    latest_set = False
+    for hit in results['hits']['hits']:
+        src = hit['_source']
+        ups = src.get('ups')
+        if not ups:
+            continue
+
+        if not latest_set:
+            battery = ups.get('battery') or {}
+            output = ups.get('output') or {}
+            alarms = ups.get('alarms') or {}
+            data['output_source'] = output.get('source')
+            data['battery_status'] = battery.get('status')
+            data['battery_capacity_pct'] = _sanitize_ups_int(battery.get('capacity_pct'))
+            data['battery_time_remaining_minutes'] = _sanitize_ups_int(battery.get('time_remaining_minutes'))
+            data['battery_seconds_on_battery'] = battery.get('seconds_on_battery')
+            data['alarms_present'] = alarms.get('present')
+            data['output_load_pct'] = output.get('load_pct')
+            data['battery_temperature_c'] = _sanitize_ups_int(battery.get('temperature_c'))
+            latest_set = True
+
+        capacity = _sanitize_ups_int((ups.get('battery') or {}).get('capacity_pct'))
+        if capacity is not None:
+            data['CapacityTrend'].append(capacity)
+            data['CapacityTrendTime'].append(src['@timestamp'])
+
+    return data
+
+
+def _get_device_fans_scalar(device, es_connection):
+    """Fetch fan health stored as get-OID scalars in metrics events.
+
+    Handles devices (e.g. NetApp 7-Mode) that expose a single chassis-level
+    fan-ok boolean and message string via ``component.fan.status`` and
+    ``component.fan.message`` inside the ``event.category = metrics`` document,
+    rather than emitting one event per fan as ``event.category = component.fan``.
+
+    Args:
+        device: Device row.
+        es_connection: Elasticsearch client.
+
+    Returns:
+        Dict with key ``fans`` containing at most one entry shaped like the
+        output of ``_get_device_fans``.
+
+    Examples:
+        >>> data = _get_device_fans_scalar(device, es)
+        >>> data['fans'][0]['description']
+        'Fans OK'
+    """
+    result = es_connection.search(
+        size=1,
+        index="metrics-snmp*",
+        sort=[{"@timestamp": {"order": "desc"}}],
+        query={
+            "bool": {
+                "filter": [
+                    {"range": {"@timestamp": {"gte": "now-6h"}}},
+                    _device_host_filter(device),
+                    {"term": {"event.category": "metrics"}},
+                    {"exists": {"field": "component.fan.status"}},
+                ]
+            }
+        },
+        _source=["component.fan.status", "component.fan.message"]
+    )
+    fans = []
+    for hit in result['hits']['hits']:
+        fan = hit['_source'].get('component', {}).get('fan', {})
+        status = fan.get('status', '')
+        message = fan.get('message', '')
+        # Map string status to integer state expected by getSensorStateInfo():
+        # 1=Normal (green), 3=Critical (red)
+        state = 1 if status == 'OK' else 3 if status == 'FAILED' else None
+        fans.append({
+            'description': message or 'System Fans',
+            'state': state,
+            'rpm': None,
+        })
+    return {'fans': fans}
+
+
+def _get_device_power_supplies_scalar(device, es_connection):
+    """Fetch PSU health stored as get-OID scalars in metrics events.
+
+    Handles devices (e.g. NetApp 7-Mode) that expose a single chassis-level
+    PSU-ok boolean and message string via ``component.power_supply.status`` and
+    ``component.power_supply.message`` inside the ``event.category = metrics``
+    document, rather than emitting one event per PSU.
+
+    Args:
+        device: Device row.
+        es_connection: Elasticsearch client.
+
+    Returns:
+        Dict with key ``power_supplies`` containing at most one entry shaped
+        like the output of ``_get_device_power_supplies``.
+
+    Examples:
+        >>> data = _get_device_power_supplies_scalar(device, es)
+        >>> data['power_supplies'][0]['description']
+        'Power Supplies OK'
+    """
+    result = es_connection.search(
+        size=1,
+        index="metrics-snmp*",
+        sort=[{"@timestamp": {"order": "desc"}}],
+        query={
+            "bool": {
+                "filter": [
+                    {"range": {"@timestamp": {"gte": "now-6h"}}},
+                    _device_host_filter(device),
+                    {"term": {"event.category": "metrics"}},
+                    {"exists": {"field": "component.power_supply.status"}},
+                ]
+            }
+        },
+        _source=["component.power_supply.status", "component.power_supply.message"]
+    )
+    power_supplies = []
+    for hit in result['hits']['hits']:
+        psu = hit['_source'].get('component', {}).get('power_supply', {})
+        status = psu.get('status', '')
+        message = psu.get('message', '')
+        # Map to existing PSU integer states used by getPsuStateInfo():
+        # 1=Present/OK (green), 7=Failed (red)
+        state = 1 if status == 'OK' else 7 if status == 'FAILED' else None
+        power_supplies.append({
+            'location': 'Power Supply',
+            'description': message or status or 'System PSU',
+            'serial_no': None,
+            'state': state,
+        })
+    return {'power_supplies': power_supplies}
+
+
+def _get_device_storage_capacity(device, es_connection):
+    """Fetch NetApp volume and aggregate capacity from vendor-specific events.
+
+    Queries ``storage.filesystem`` (NetApp dfTable) and ``storage.aggregate``
+    (aggrTable) event categories, converting KB values to bytes and normalising
+    into the same shape used by ``_get_device_filesystems`` so they can be
+    merged and rendered by the same FILESYSTEMS section.
+
+    Args:
+        device: Device row.
+        es_connection: Elasticsearch client.
+
+    Returns:
+        Dict with ``filesystems`` list.  Each entry contains ``mount_point``,
+        ``type``, ``used_pct`` (0-1), ``used_bytes``, and ``total_bytes``.
+
+    Examples:
+        >>> data = _get_device_storage_capacity(device, es)
+        >>> data['filesystems'][0]['mount_point']
+        '/vol/vol0'
+    """
+    items = []
+
+    # -- storage.filesystem: NetApp dfTable per-volume capacity --
+    df_results = es_connection.search(
+        size=0,
+        index="metrics-snmp*",
+        query={
+            "bool": {
+                "filter": [
+                    {"range": {"@timestamp": {"gte": "now-6h"}}},
+                    _device_host_filter(device),
+                    {"term": {"event.category": "storage.filesystem"}},
+                ]
+            }
+        },
+        aggregations={
+            "vols": {
+                "terms": {"field": "storage.filesystem.index", "size": 500},
+                "aggregations": {
+                    "latest": {
+                        "top_hits": {
+                            "size": 1,
+                            "sort": [{"@timestamp": {"order": "desc"}}],
+                            "_source": [
+                                "storage.filesystem.name",
+                                "storage.filesystem.used.pct",
+                                "storage.filesystem.used.kb",
+                                "storage.filesystem.total.kb",
+                                "storage.filesystem.mounted",
+                            ]
+                        }
+                    }
+                }
+            }
+        }
+    )
+
+    for bucket in df_results['aggregations']['vols']['buckets']:
+        for doc in bucket['latest']['hits']['hits']:
+            sf = doc['_source'].get('storage', {}).get('filesystem', {})
+            used_kb = sf.get('used', {}).get('kb') or 0
+            total_kb = sf.get('total', {}).get('kb') or 0
+            used_pct = sf.get('used', {}).get('pct') or 0
+            items.append({
+                'mount_point': sf.get('name') or f'Volume {bucket["key"]}',
+                'type': '1.3.6.1.2.1.25.2.1.4',  # hrStorageFixedDisk OID for UI compat
+                'used_pct': used_pct,
+                'used_bytes': int(used_kb) * 1024,
+                'total_bytes': int(total_kb) * 1024,
+                'allocation_units': 1024,
+            })
+
+    # -- storage.aggregate: NetApp aggregate capacity --
+    aggr_results = es_connection.search(
+        size=0,
+        index="metrics-snmp*",
+        query={
+            "bool": {
+                "filter": [
+                    {"range": {"@timestamp": {"gte": "now-6h"}}},
+                    _device_host_filter(device),
+                    {"term": {"event.category": "storage.aggregate"}},
+                ]
+            }
+        },
+        aggregations={
+            "aggrs": {
+                "terms": {"field": "storage.aggregate.index", "size": 100},
+                "aggregations": {
+                    "latest": {
+                        "top_hits": {
+                            "size": 1,
+                            "sort": [{"@timestamp": {"order": "desc"}}],
+                            "_source": [
+                                "storage.aggregate.name",
+                                "storage.aggregate.state",
+                                "storage.aggregate.used.pct",
+                                "storage.aggregate.used.kb",
+                                "storage.aggregate.total.kb",
+                            ]
+                        }
+                    }
+                }
+            }
+        }
+    )
+
+    for bucket in aggr_results['aggregations']['aggrs']['buckets']:
+        for doc in bucket['latest']['hits']['hits']:
+            sa = doc['_source'].get('storage', {}).get('aggregate', {})
+            used_kb = sa.get('used', {}).get('kb') or 0
+            total_kb = sa.get('total', {}).get('kb') or 0
+            used_pct = sa.get('used', {}).get('pct') or 0
+            name = sa.get('name') or f'Aggr {bucket["key"]}'
+            items.append({
+                'mount_point': f'Aggr: {name}',
+                'type': 'aggregate',
+                'used_pct': used_pct,
+                'used_bytes': int(used_kb) * 1024,
+                'total_bytes': int(total_kb) * 1024,
+                'allocation_units': 1024,
+            })
+
+    items.sort(key=lambda f: f.get('used_pct') or 0, reverse=True)
+    return {'filesystems': items}
+
+
+def _get_device_disks(device, es_connection):
+    """Fetch per-physical-disk inventory from ``component.disk`` events.
+
+    Each event represents one disk slot.  The NetApp 7-Mode disk profile
+    (``netapp_7mode_disks``) populates description (slot address such as
+    ``data disk 0b.20.13``), translated state string, KB used/total, and a
+    derived ``used.pct`` ratio.
+
+    Args:
+        device: Device row.
+        es_connection: Elasticsearch client.
+
+    Returns:
+        Dict with ``disks`` list.  Each entry has ``index``, ``description``,
+        ``state``, ``used_kb``, ``total_kb``, and ``used_pct`` (0-1).
+
+    Examples:
+        >>> data = _get_device_disks(device, es)
+        >>> data['disks'][0]['description']
+        'data disk 0b.20.13'
+    """
+    results = es_connection.search(
+        size=0,
+        index="metrics-snmp*",
+        query={
+            "bool": {
+                "filter": [
+                    {"range": {"@timestamp": {"gte": "now-6h"}}},
+                    _device_host_filter(device),
+                    {"term": {"event.category": "component.disk"}},
+                ]
+            }
+        },
+        aggregations={
+            "disks": {
+                "terms": {"field": "component.disk.index", "size": 500},
+                "aggregations": {
+                    "latest": {
+                        "top_hits": {
+                            "size": 1,
+                            "sort": [{"@timestamp": {"order": "desc"}}],
+                            "_source": [
+                                "component.disk.index",
+                                "component.disk.description",
+                                "component.disk.state",
+                                "component.disk.used.kb",
+                                "component.disk.total.kb",
+                                "component.disk.used.pct",
+                            ]
+                        }
+                    }
+                }
+            }
+        }
+    )
+
+    disks = []
+    for bucket in results['aggregations']['disks']['buckets']:
+        for doc in bucket['latest']['hits']['hits']:
+            d = doc['_source'].get('component', {}).get('disk', {})
+            disks.append({
+                'index': d.get('index', bucket['key']),
+                'description': d.get('description') or f'Disk {bucket["key"]}',
+                'state': d.get('state', ''),
+                'used_kb': d.get('used', {}).get('kb') or 0,
+                'total_kb': d.get('total', {}).get('kb') or 0,
+                'used_pct': d.get('used', {}).get('pct') or 0,
+            })
+
+    disks.sort(key=lambda d: str(d.get('description', '')))
+    return {'disks': disks}
+
+
+def _get_device_raid_volumes(device, es_connection):
+    """Fetch RAID volume and RAID-group layout from ``storage.raid_volume`` events.
+
+    The NetApp 7-Mode ``raidvTable`` emits one row per RAID-group entry under
+    a volume.  A single volume may appear in multiple rows when it spans more
+    than one RAID group.
+
+    Args:
+        device: Device row.
+        es_connection: Elasticsearch client.
+
+    Returns:
+        Dict with ``raid_volumes`` list.  Each entry has ``name``,
+        ``plex_num``, and ``rg_index``.
+
+    Examples:
+        >>> data = _get_device_raid_volumes(device, es)
+        >>> data['raid_volumes'][0]['name']
+        'vol0'
+    """
+    results = es_connection.search(
+        size=0,
+        index="metrics-snmp*",
+        query={
+            "bool": {
+                "filter": [
+                    {"range": {"@timestamp": {"gte": "now-6h"}}},
+                    _device_host_filter(device),
+                    {"term": {"event.category": "storage.raid_volume"}},
+                ]
+            }
+        },
+        aggregations={
+            "volumes": {
+                "terms": {"field": "storage.raid_volume.index", "size": 200},
+                "aggregations": {
+                    "latest": {
+                        "top_hits": {
+                            "size": 1,
+                            "sort": [{"@timestamp": {"order": "desc"}}],
+                            "_source": [
+                                "storage.raid_volume.name",
+                                "storage.raid_volume.plex_num",
+                                "storage.raid_volume.rg_index",
+                                "storage.raid_volume.disk_name",
+                            ]
+                        }
+                    }
+                }
+            }
+        }
+    )
+
+    volumes = []
+    for bucket in results['aggregations']['volumes']['buckets']:
+        for doc in bucket['latest']['hits']['hits']:
+            rv = doc['_source'].get('storage', {}).get('raid_volume', {})
+            volumes.append({
+                'name': rv.get('name') or f'Volume {bucket["key"]}',
+                'plex_num': rv.get('plex_num'),
+                'rg_index': rv.get('rg_index'),
+            })
+
+    volumes.sort(key=lambda v: (str(v.get('name', '')), v.get('rg_index') or 0))
+    return {'raid_volumes': volumes}
+
+
 def generate_visualizations(visualizations, device, es_connection):
     """Fetch visualization datasets listed in `visualizations` from Elasticsearch.
 
@@ -4555,10 +5298,19 @@ def generate_visualizations(visualizations, device, es_connection):
     visualization_data = {}
     if "metrics" in visualizations:
         visualization_data['metrics'] = _get_device_metrics(device, es_connection)
+        template_type = device.device_template.type if device.device_template else None
+        if template_type == 'UPS':
+            visualization_data['ups'] = _get_device_ups_metrics(device, es_connection)
     if "component.sensor" in visualizations:
         visualization_data['sensors'] = _get_device_sensors(device, es_connection)
     if "component.fan" in visualizations:
         visualization_data['fans'] = _get_device_fans(device, es_connection)
+    elif "metrics" in visualizations:
+        # Some devices (e.g. NetApp) store fan health as scalars in the metrics
+        # event rather than per-fan table rows.
+        scalar_fans = _get_device_fans_scalar(device, es_connection)
+        if scalar_fans['fans']:
+            visualization_data['fans'] = scalar_fans
     if "interface" in visualizations:
         visualization_data['interfaces'] = _get_device_interfaces(device, es_connection)
     if "component.cpu" in visualizations:
@@ -4567,12 +5319,30 @@ def generate_visualizations(visualizations, device, es_connection):
         visualization_data['neighbors'] = _get_device_neighbors(device, es_connection)
     if "wireless.radio" in visualizations:
         visualization_data['wireless_radios'] = _get_device_wireless_radios(device, es_connection)
+    if "wireless.ap" in visualizations:
+        visualization_data['wireless_aps'] = _get_device_wireless_aps(device, es_connection)
     if "system.filesystem" in visualizations:
         visualization_data['filesystems'] = _get_device_filesystems(device, es_connection)
+    # NetApp vendor-specific capacity events — merge into the same filesystems list
+    if "storage.filesystem" in visualizations or "storage.aggregate" in visualizations:
+        extra = _get_device_storage_capacity(device, es_connection)
+        if extra['filesystems']:
+            existing = visualization_data.get('filesystems', {'filesystems': []})
+            existing['filesystems'] = existing['filesystems'] + extra['filesystems']
+            visualization_data['filesystems'] = existing
     if "printer.supply" in visualizations:
         visualization_data['printer_supplies'] = _get_device_printer_supplies(device, es_connection)
     if "component.power_supply" in visualizations:
         visualization_data['power_supplies'] = _get_device_power_supplies(device, es_connection)
+    elif "metrics" in visualizations:
+        # Some devices (e.g. NetApp) store PSU health as scalars in the metrics event.
+        scalar_psu = _get_device_power_supplies_scalar(device, es_connection)
+        if scalar_psu['power_supplies']:
+            visualization_data['power_supplies'] = scalar_psu
+    if "component.disk" in visualizations:
+        visualization_data['disks'] = _get_device_disks(device, es_connection)
+    if "storage.raid_volume" in visualizations:
+        visualization_data['raid_volumes'] = _get_device_raid_volumes(device, es_connection)
 
     return visualization_data
 

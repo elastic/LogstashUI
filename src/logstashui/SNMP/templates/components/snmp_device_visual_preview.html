@@ -96,6 +96,71 @@
 
       </div>
 
+      <!-- UPS Battery Health Row -->
+      <div class="grid grid-cols-5 gap-4 mt-6 device-ups-section" style="display: none;">
+
+        <!-- Output Source -->
+        <div class="bg-gray-700/50 rounded-lg p-4 flex flex-col items-center justify-center gap-2">
+          <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+          </svg>
+          <h3 class="text-xs font-semibold text-gray-300 uppercase text-center">Output Source</h3>
+          <div class="ups-output-source text-sm font-bold text-center text-white">--</div>
+        </div>
+
+        <!-- Battery Status -->
+        <div class="bg-gray-700/50 rounded-lg p-4 flex flex-col items-center justify-center gap-2">
+          <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8h1a2 2 0 012 2v4a2 2 0 01-2 2h-1M4 8h13v9H4a1 1 0 01-1-1V9a1 1 0 011-1z"/>
+          </svg>
+          <h3 class="text-xs font-semibold text-gray-300 uppercase text-center">Battery Status</h3>
+          <div class="ups-battery-status text-sm font-bold text-center text-white">--</div>
+        </div>
+
+        <!-- Battery Capacity -->
+        <div class="bg-gray-700/50 rounded-lg p-4 flex flex-col justify-center">
+          <h3 class="text-xs font-semibold text-gray-300 uppercase mb-2 text-center">Battery Capacity</h3>
+          <div class="ups-battery-capacity-pct text-3xl font-bold text-white text-center mb-3">--%</div>
+          <div class="w-full h-3 bg-gray-600 rounded-full overflow-hidden">
+            <div class="ups-battery-capacity-bar h-full bg-green-500 rounded-full transition-all duration-500" style="width: 0%"></div>
+          </div>
+        </div>
+
+        <!-- Runtime Remaining -->
+        <div class="bg-gray-700/50 rounded-lg p-4 flex flex-col items-center justify-center gap-2">
+          <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          <h3 class="text-xs font-semibold text-gray-300 uppercase text-center">Runtime Remaining</h3>
+          <div class="ups-runtime text-xl font-bold text-white text-center">--</div>
+        </div>
+
+        <!-- Active Alarms -->
+        <div class="bg-gray-700/50 rounded-lg p-4 flex flex-col items-center justify-center gap-2">
+          <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+          </svg>
+          <h3 class="text-xs font-semibold text-gray-300 uppercase text-center">Active Alarms</h3>
+          <div class="ups-alarms text-3xl font-bold text-white text-center">--</div>
+        </div>
+
+      </div>
+
+      <!-- UPS Capacity Trend Row -->
+      <div class="mt-3 device-ups-trend-section" style="display: none;">
+        <div class="bg-gray-700/50 rounded-lg p-4">
+          <h3 class="text-sm font-semibold text-gray-300 uppercase mb-3 flex items-center">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"/>
+            </svg>
+            Battery Capacity (6h)
+          </h3>
+          <div class="h-40 relative">
+            <div class="ups-capacity-chart"></div>
+          </div>
+        </div>
+      </div>
+
       <!-- Sensors, Fans and Power Supplies Row -->
       <div class="grid grid-cols-3 gap-6 mt-6 device-sensors-section" style="display: none;">
         
@@ -195,8 +260,39 @@
             </svg>
             Filesystems
           </h3>
-          <div class="filesystems-container grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+          <div class="filesystems-container grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 max-h-[32rem] overflow-y-auto pr-1">
             <!-- Filesystem cards will be dynamically inserted here -->
+          </div>
+        </div>
+      </div>
+
+      <!-- RAID Volumes Row (Full Width) -->
+      <div class="mt-6 device-raid-volumes-section" style="display: none;">
+        <div class="bg-gray-700/50 rounded-lg p-4">
+          <h3 class="text-sm font-semibold text-gray-300 uppercase mb-3 flex items-center">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7c0-2-1-3-3-3H7C5 4 4 5 4 7zm4 0h8M8 12h8M8 17h5" />
+            </svg>
+            RAID Volumes
+          </h3>
+          <div class="raid-volumes-container flex flex-wrap gap-2 max-h-64 overflow-y-auto pr-1">
+            <!-- RAID volume cards will be dynamically inserted here -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Disks Row (Full Width) -->
+      <div class="mt-6 device-disks-section" style="display: none;">
+        <div class="bg-gray-700/50 rounded-lg p-4">
+          <h3 class="text-sm font-semibold text-gray-300 uppercase mb-3 flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7h18M3 7a2 2 0 00-2 2v8a2 2 0 002 2h18a2 2 0 002-2V9a2 2 0 00-2-2M3 7V5a2 2 0 012-2h14a2 2 0 012 2v2" />
+            </svg>
+            Disks
+            <span class="device-disks-summary text-xs font-normal text-gray-400 normal-case"></span>
+          </h3>
+          <div class="disks-container grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10 gap-2 max-h-[28rem] overflow-y-auto pr-1">
+            <!-- Disk slot cards will be dynamically inserted here -->
           </div>
         </div>
       </div>
@@ -217,6 +313,21 @@
       </div>
 
       <!-- Neighbors Row (Full Width) -->
+      <div class="mt-6 device-wireless-aps-section" style="display: none;">
+        <div class="bg-gray-700/50 rounded-lg p-4">
+          <h3 class="text-sm font-semibold text-gray-300 uppercase mb-3 flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0" />
+            </svg>
+            Wireless APs
+            <span class="wireless-aps-summary text-xs font-normal text-gray-400 normal-case"></span>
+          </h3>
+          <div class="wireless-aps-container overflow-y-auto max-h-96 grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12 gap-2 pr-1">
+            <!-- AP cards will be dynamically inserted here -->
+          </div>
+        </div>
+      </div>
+
       <div class="mt-6 device-neighbors-section" style="display: none;">
         <div class="bg-gray-700/50 rounded-lg p-4">
           <h3 class="text-sm font-semibold text-gray-300 uppercase mb-3 flex items-center">

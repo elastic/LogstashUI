@@ -1,0 +1,19 @@
+{
+  "official_key": "versa_flexvnf_appliance",
+  "name": "versa_flexvnf_appliance",
+  "type": "Router",
+  "description": "System identity, interfaces, CPU/memory/filesystem metrics, and Versa-specific firmware version and device UUID for Versa FlexVNF SD-WAN appliances.",
+  "vendor": "Versa Networks",
+  "product": "FlexVNF",
+  "model": "Any",
+  "profiles": [
+    "generic_system",
+    "generic_interfaces",
+    "generic_host_system_metrics",
+    "versa_flexvnf"
+  ],
+  "matching_rules": [
+    "Versa Appliance",
+    "versa-flexvnf"
+  ]
+}

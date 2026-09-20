@@ -100,7 +100,8 @@ function renderDevicePreview(deviceId, device, visualizations) {
   if (device.profiles && device.profiles.length > 0) {
     device.profiles.forEach(profile => {
       const profileBadge = document.createElement('div');
-      profileBadge.className = 'bg-blue-600/20 text-blue-300 px-3 py-1 rounded-md text-sm flex items-center gap-2';
+      profileBadge.className = 'bg-blue-600/20 text-blue-300 px-3 py-1 rounded-md text-sm flex items-center gap-2 cursor-pointer hover:bg-blue-600/40 transition-colors';
+      profileBadge.title = 'Click to view profile';
       
       // Check if official profile (ends with .json)
       const isOfficial = profile.name.endsWith('.json');
@@ -136,6 +137,17 @@ function renderDevicePreview(deviceId, device, visualizations) {
           ${metadata}
         </div>
       `;
+
+      // Open the profile modal on click.
+      // Official profiles in the DB carry a ".json" suffix; GetOfficialProfile expects it stripped.
+      // Official profiles open in view-only mode; user profiles open in edit mode.
+      const modalName = isOfficial ? profile.name.replace(/\.json$/, '') : profile.name;
+      profileBadge.addEventListener('click', () => {
+        if (typeof openProfileModal === 'function') {
+          openProfileModal(modalName, isOfficial, /* viewMode= */ isOfficial);
+        }
+      });
+
       profilesList.appendChild(profileBadge);
     });
   } else {
@@ -223,7 +235,7 @@ function renderDevicePreview(deviceId, device, visualizations) {
     const hasPsu     = psuArray.length     > 0;
 
     const noDataMsg = (label) =>
-      `<div class="flex items-center justify-center h-24 text-gray-400 text-sm italic">No ${label} data collected for this device</div>`;
+      `<div class="col-span-full flex items-center justify-center h-24 text-gray-400 text-sm italic">No ${label} data collected for this device</div>`;
 
     if (hasSensors || hasFans || hasPsu) {
       sensorsSection.style.display = 'grid';
@@ -327,6 +339,81 @@ function renderDevicePreview(deviceId, device, visualizations) {
     }
   }
 
+  // Render wireless APs if available
+  if (visualizations && visualizations.wireless_aps) {
+    const apsSection = contentDiv.querySelector('.device-wireless-aps-section');
+    const apsContainer = contentDiv.querySelector('.wireless-aps-container');
+    const apsSummary = contentDiv.querySelector('.wireless-aps-summary');
+    const apsArray = visualizations.wireless_aps.aps || [];
+    const upCount = visualizations.wireless_aps.up_count || 0;
+    const downCount = visualizations.wireless_aps.down_count || 0;
+
+    if (apsArray.length > 0 && apsSection && apsContainer) {
+      apsSection.style.display = 'block';
+      apsContainer.innerHTML = '';
+
+      if (apsSummary) {
+        const parts = [];
+        if (upCount > 0)   parts.push(`<span class="text-emerald-400">${upCount} up</span>`);
+        if (downCount > 0) parts.push(`<span class="text-red-400">${downCount} down</span>`);
+        const clientCount = visualizations.wireless_aps.client_count;
+        if (clientCount != null) parts.push(`${clientCount} clients`);
+        apsSummary.innerHTML = parts.length ? `— ${parts.join(', ')}` : `— ${apsArray.length} total`;
+      }
+
+      apsArray.forEach(ap => {
+        apsContainer.appendChild(createAPCard(ap));
+      });
+    }
+  }
+
+  // Render RAID volumes if available
+  if (visualizations && visualizations.raid_volumes) {
+    const raidSection = contentDiv.querySelector('.device-raid-volumes-section');
+    const raidContainer = contentDiv.querySelector('.raid-volumes-container');
+    const raidArray = visualizations.raid_volumes.raid_volumes || [];
+
+    if (raidArray.length > 0 && raidSection && raidContainer) {
+      raidSection.style.display = 'block';
+      raidContainer.innerHTML = '';
+
+      raidArray.forEach(vol => {
+        raidContainer.appendChild(createRaidVolumeCard(vol));
+      });
+    }
+  }
+
+  // Render disk grid if available
+  if (visualizations && visualizations.disks) {
+    const disksSection = contentDiv.querySelector('.device-disks-section');
+    const disksContainer = contentDiv.querySelector('.disks-container');
+    const disksSummary = contentDiv.querySelector('.device-disks-summary');
+    const disksArray = visualizations.disks.disks || [];
+
+    if (disksArray.length > 0 && disksSection && disksContainer) {
+      disksSection.style.display = 'block';
+      disksContainer.innerHTML = '';
+
+      if (disksSummary) {
+        const stateCount = {};
+        disksArray.forEach(d => {
+          const s = d.state || 'UNKNOWN';
+          stateCount[s] = (stateCount[s] || 0) + 1;
+        });
+        const parts = [];
+        if (stateCount['ACTIVE'])        parts.push(`<span class="text-emerald-400">${stateCount['ACTIVE']} active</span>`);
+        if (stateCount['SPARE'])         parts.push(`<span class="text-blue-400">${stateCount['SPARE']} spare</span>`);
+        if (stateCount['RECONSTRUCTING'])parts.push(`<span class="text-yellow-400">${stateCount['RECONSTRUCTING']} rebuilding</span>`);
+        if (stateCount['FAILED'])        parts.push(`<span class="text-red-400">${stateCount['FAILED']} failed</span>`);
+        disksSummary.innerHTML = parts.length ? `— ${parts.join(', ')}` : `— ${disksArray.length} total`;
+      }
+
+      disksArray.forEach(disk => {
+        disksContainer.appendChild(createDiskCard(disk));
+      });
+    }
+  }
+
   // Render neighbors if available
   if (visualizations && visualizations.neighbors) {
     const neighborsSection = contentDiv.querySelector('.device-neighbors-section');
@@ -358,6 +445,110 @@ function renderDevicePreview(deviceId, device, visualizations) {
         const coreCard = createCpuCoreCard(core, i);
         cpuCoresContainer.appendChild(coreCard);
       });
+    }
+  }
+
+  // Render UPS battery health row if data is present.
+  // Show the section when any meaningful field is available — battery_status or
+  // output_source alone are enough; capacity_pct may be null/unsupported on some
+  // firmware (e.g. Huawei UPS5000 via generic UPS-MIB returns -1, sanitized to
+  // null by the backend) and individual tiles will show "--" in that case.
+  if (visualizations && visualizations.ups) {
+    const ups = visualizations.ups;
+    const hasUpsData = ups.battery_status != null
+                    || ups.output_source != null
+                    || (ups.battery_capacity_pct != null && ups.battery_capacity_pct >= 0);
+
+    if (hasUpsData) {
+      const upsSection = contentDiv.querySelector('.device-ups-section');
+      const upsTrendSection = contentDiv.querySelector('.device-ups-trend-section');
+      if (upsSection) upsSection.style.display = 'grid';
+
+      // --- Output Source ---
+      const sourceEl = contentDiv.querySelector('.ups-output-source');
+      if (sourceEl && ups.output_source != null) {
+        const { label, cls } = upsOutputSourceInfo(ups.output_source);
+        sourceEl.textContent = label;
+        sourceEl.className = `ups-output-source text-sm font-bold text-center ${cls}`;
+      }
+
+      // --- Battery Status ---
+      const statusEl = contentDiv.querySelector('.ups-battery-status');
+      if (statusEl && ups.battery_status != null) {
+        const { label, cls } = upsBatteryStatusInfo(ups.battery_status);
+        statusEl.textContent = label;
+        statusEl.className = `ups-battery-status text-sm font-bold text-center ${cls}`;
+      }
+
+      // --- Battery Capacity gauge ---
+      // null means the device doesn't report it (e.g. UPS-MIB returns -1, sanitized
+      // by the backend); show "--" rather than a misleading "0%".
+      const capacityPct = ups.battery_capacity_pct;  // may be null
+      const capacityEl = contentDiv.querySelector('.ups-battery-capacity-pct');
+      const capacityBar = contentDiv.querySelector('.ups-battery-capacity-bar');
+      if (capacityEl) capacityEl.textContent = capacityPct != null ? `${capacityPct}%` : '--';
+      if (capacityBar) {
+        if (capacityPct != null) {
+          const barColor = capacityPct <= 20 ? 'bg-red-500'
+                         : capacityPct <= 40 ? 'bg-yellow-500'
+                         : 'bg-green-500';
+          capacityBar.className = `ups-battery-capacity-bar h-full ${barColor} rounded-full transition-all duration-500`;
+          capacityBar.style.width = `${capacityPct}%`;
+        } else {
+          capacityBar.className = 'ups-battery-capacity-bar h-full bg-base-300 rounded-full';
+          capacityBar.style.width = '0%';
+        }
+      }
+
+      // --- Runtime Remaining ---
+      // Some UPS firmware (e.g. Eastpower iStars) reports 0 for
+      // upsEstimatedMinutesRemaining when on AC normal power — the runtime
+      // estimate is only computed while actually running on battery.
+      // Show "N/A" in that case rather than a misleading red "0m".
+      const runtimeEl = contentDiv.querySelector('.ups-runtime');
+      if (runtimeEl && ups.battery_time_remaining_minutes != null) {
+        const mins = ups.battery_time_remaining_minutes;
+        if (mins === 0 && ups.output_source === 'normal') {
+          runtimeEl.textContent = 'N/A';
+          runtimeEl.className = 'ups-runtime text-xl font-bold text-center text-base-content/40';
+        } else {
+          const runtimeText = mins >= 60
+            ? `${Math.floor(mins / 60)}h ${mins % 60}m`
+            : `${mins}m`;
+          const runtimeColor = mins < 15 ? 'text-red-400'
+                             : mins < 30 ? 'text-yellow-400'
+                             : 'text-green-400';
+          runtimeEl.textContent = runtimeText;
+          runtimeEl.className = `ups-runtime text-xl font-bold text-center ${runtimeColor}`;
+        }
+      }
+
+      // --- Active Alarms ---
+      const alarmsEl = contentDiv.querySelector('.ups-alarms');
+      if (alarmsEl && ups.alarms_present != null) {
+        const count = ups.alarms_present;
+        alarmsEl.textContent = String(count);
+        const alarmColor = count > 0 ? 'text-red-400' : 'text-green-400';
+        alarmsEl.className = `ups-alarms text-3xl font-bold text-center ${alarmColor}`;
+      }
+
+      // --- Capacity Trend chart ---
+      if (upsTrendSection && ups.CapacityTrend && ups.CapacityTrend.length > 0) {
+        upsTrendSection.style.display = 'block';
+        // renderMetricChart multiplies values by 100 (expects 0-1 fractions)
+        const scaledTrend = ups.CapacityTrend.map(v => v / 100);
+        const chartDiv = contentDiv.querySelector('.ups-capacity-chart');
+        if (chartDiv) {
+          renderMetricChart(
+            chartDiv,
+            ups.CapacityTrendTime,
+            scaledTrend,
+            'Battery Capacity (%)',
+            'rgba(16, 185, 129, 1)',   // emerald
+            'rgba(16, 185, 129, 0.1)'
+          );
+        }
+      }
     }
   }
 }
@@ -976,6 +1167,8 @@ function decodeFilesystemType(typeOid) {
     '1.3.6.1.2.1.25.2.1.8':  'RAM Disk',
     '1.3.6.1.2.1.25.2.1.9':  'Flash Memory',
     '1.3.6.1.2.1.25.2.1.10': 'Network Disk',
+    // Vendor-specific types injected by the backend
+    'aggregate':              'Aggregate',
   };
   return map[typeOid] || typeOid || 'Unknown';
 }
@@ -1007,16 +1200,17 @@ function createFilesystemCard(fs) {
 
   card.className = `bg-gray-800 rounded-lg p-3 border-l-4 ${borderColor}`;
   card.innerHTML = `
-    <div class="flex items-start justify-between gap-2 mb-2">
+    <div class="flex items-start justify-between gap-2 mb-1.5">
       <span class="text-sm font-semibold text-white font-mono truncate" title="${escapeHtml(fs.mount_point || '/')}">${escapeHtml(fs.mount_point || '/')}</span>
       <span class="text-xs px-1.5 py-0.5 rounded bg-gray-700 text-gray-300 whitespace-nowrap flex-shrink-0">${escapeHtml(typeLabel)}</span>
     </div>
 
-    <div class="${textColor} text-2xl font-bold leading-none mb-2">${pctText}%</div>
-
-    <!-- Capacity gauge -->
-    <div class="relative w-full h-2 bg-gray-700 rounded-full overflow-hidden mb-2">
-      <div class="absolute h-full ${barColor} transition-all duration-300 rounded-full" style="width: ${pct}%"></div>
+    <!-- Inline percent + gauge -->
+    <div class="flex items-center gap-2 mb-2">
+      <span class="${textColor} text-sm font-bold w-12 flex-shrink-0">${pctText}%</span>
+      <div class="flex-1 relative h-2 bg-gray-700 rounded-full overflow-hidden">
+        <div class="absolute h-full ${barColor} transition-all duration-300 rounded-full" style="width: ${pct}%"></div>
+      </div>
     </div>
 
     <div class="grid grid-cols-3 gap-1 text-xs">
@@ -1142,6 +1336,85 @@ function decodeCdpCapabilities(capHex) {
 }
 
 // Create a neighbor card showing CDP/LLDP adjacency details
+function createAPCard(ap) {
+  const card = document.createElement('div');
+
+  const status = String(ap.status ?? '').toLowerCase();
+
+  let borderColor, dotColor, statusLabel;
+  if (status === 'up' || status === '1') {
+    borderColor = 'border-emerald-500';
+    dotColor    = 'bg-emerald-400';
+    statusLabel = 'Up';
+  } else if (status === 'down' || status === '2') {
+    borderColor = 'border-red-500';
+    dotColor    = 'bg-red-500';
+    statusLabel = 'Down';
+  } else {
+    borderColor = 'border-gray-600';
+    dotColor    = 'bg-gray-500';
+    statusLabel = 'Unknown';
+  }
+
+  const name   = ap.name   || ap.index || '?';
+  const ip     = ap.ip     || '';
+  const serial = ap.serial || '';
+
+  // Shorten name for the card face — drop common AP prefix patterns
+  const shortName = name.replace(/^(AP[-_]?|access[-_]?point[-_]?)/i, '').trim() || name;
+
+  const tooltipContent = `
+    <div class="font-semibold text-sm mb-2 pb-2 border-b border-gray-700 truncate" title="${escapeHtml(name)}">${escapeHtml(name)}</div>
+    <div class="space-y-1 text-xs">
+      <div class="flex justify-between gap-2">
+        <span class="text-gray-400">Status</span>
+        <span class="${status === 'up' || status === '1' ? 'text-emerald-400' : status === 'down' || status === '2' ? 'text-red-400' : 'text-gray-400'}">${escapeHtml(statusLabel)}</span>
+      </div>
+      ${ip ? `<div class="flex justify-between gap-2"><span class="text-gray-400">IP</span><span class="text-white font-mono">${escapeHtml(ip)}</span></div>` : ''}
+      ${serial ? `<div class="flex justify-between gap-2"><span class="text-gray-400">Serial</span><span class="text-white font-mono">${escapeHtml(serial)}</span></div>` : ''}
+    </div>
+  `;
+
+  card.className = `relative bg-gray-800 rounded-lg p-1.5 border-2 ${borderColor} hover:shadow-lg transition-all cursor-pointer group`;
+  card.innerHTML = `
+    <div class="flex flex-col items-center justify-center h-12">
+      <div class="w-2.5 h-2.5 rounded-full ${dotColor} mb-1 flex-shrink-0"></div>
+      <div class="text-xs font-medium text-white text-center truncate w-full px-0.5" title="${escapeHtml(name)}">${escapeHtml(shortName)}</div>
+      ${ip ? `<div class="text-xs text-gray-400 truncate w-full text-center px-0.5">${escapeHtml(ip)}</div>` : ''}
+    </div>
+
+    <!-- Tooltip -->
+    <div class="interface-tooltip absolute bottom-full left-0 mb-2 hidden group-hover:block z-50 w-64 pointer-events-none">
+      <div class="bg-gray-900 text-white rounded-lg p-3 shadow-2xl border-2 border-gray-600">
+        ${tooltipContent}
+        <div class="tooltip-arrow absolute top-full left-6 -mt-0.5">
+          <div class="border-8 border-transparent border-t-gray-600"></div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Reuse same tooltip repositioning logic as interface cards
+  card.addEventListener('mouseenter', function() {
+    const tooltip = this.querySelector('.interface-tooltip');
+    const arrow   = this.querySelector('.tooltip-arrow');
+    if (tooltip) {
+      setTimeout(() => {
+        const rect = tooltip.getBoundingClientRect();
+        if (rect.right > window.innerWidth) {
+          tooltip.classList.replace('left-0', 'right-0');
+          arrow.classList.replace('left-6', 'right-6');
+        } else {
+          tooltip.classList.replace('right-0', 'left-0');
+          arrow.classList.replace('right-6', 'left-6');
+        }
+      }, 10);
+    }
+  });
+
+  return card;
+}
+
 function createNeighborCard(neighbor) {
   const card = document.createElement('div');
 
@@ -1327,4 +1600,111 @@ function formatUptime(hundredthsOfSeconds) {
   if (minutes > 0) parts.push(`${minutes}m`);
 
   return parts.length > 0 ? parts.join(' ') : '0m';
+}
+
+// Create a compact RAID volume card for the grid
+function createRaidVolumeCard(vol) {
+  const card = document.createElement('div');
+
+  const name = vol.name     || 'Unknown';
+  const plex = vol.plex_num != null ? vol.plex_num : '—';
+  const rg   = vol.rg_index != null ? vol.rg_index : '—';
+
+  const plexTitle = 'A plex is one full copy of the volume\'s data. Plex 0 is the primary copy; Plex 1 exists only on mirrored (SyncMirror) aggregates.';
+  const rgTitle   = 'A RAID group is the set of drives that share parity within this volume. Large volumes span multiple RAID groups.';
+
+  card.className = 'bg-gray-800 rounded-lg p-2.5 border border-gray-600 hover:border-blue-500 transition-colors w-36 flex-shrink-0';
+  card.innerHTML = `
+    <div class="flex items-center gap-1.5 mb-1.5">
+      <svg class="w-3.5 h-3.5 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+          d="M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7c0-2-1-3-3-3H7C5 4 4 5 4 7zm4 0h8M8 12h8M8 17h5" />
+      </svg>
+      <span class="text-xs font-mono font-semibold text-white truncate" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
+    </div>
+    <div class="text-xs text-gray-400" title="${escapeHtml(plexTitle)} ${escapeHtml(rgTitle)}">Plex ${escapeHtml(String(plex))} &middot; RG ${escapeHtml(String(rg))}</div>
+  `;
+
+  return card;
+}
+
+// Create a disk-slot card for the disk grid — no hover, all info visible inline
+function createDiskCard(disk) {
+  const card = document.createElement('div');
+
+  const state   = disk.state || '';
+  const usedPct = typeof disk.used_pct === 'number' ? disk.used_pct : 0;
+  const pct     = Math.min(Math.max(usedPct * 100, 0), 100);
+
+  // Strip "data disk " / "spare disk " prefix — keep just the slot address
+  const rawDesc   = disk.description || `Disk ${disk.index}`;
+  const shortDesc = rawDesc.replace(/^(data disk\s+|spare disk\s+)/i, '').trim() || rawDesc;
+
+  let borderClass, stateColor, stateLabel;
+  switch (state) {
+    case 'ACTIVE':
+      borderClass = 'border-emerald-500'; stateColor = 'text-emerald-400'; stateLabel = 'Active';        break;
+    case 'SPARE':
+      borderClass = 'border-blue-500';    stateColor = 'text-blue-400';    stateLabel = 'Spare';         break;
+    case 'RECONSTRUCTING':
+      borderClass = 'border-yellow-500';  stateColor = 'text-yellow-400';  stateLabel = 'Rebuilding';    break;
+    case 'FAILED':
+      borderClass = 'border-red-500';     stateColor = 'text-red-400';     stateLabel = 'Failed';        break;
+    default:
+      borderClass = 'border-gray-600';    stateColor = 'text-gray-400';    stateLabel = state || 'Unknown';
+  }
+
+  const barColor = state === 'FAILED'         ? 'bg-red-500'
+                 : state === 'RECONSTRUCTING' ? 'bg-yellow-500'
+                 : state === 'SPARE'          ? 'bg-blue-500'
+                 : 'bg-emerald-500';
+
+  const totalKb  = disk.total_kb || 0;
+  const totalStr = totalKb >= 1048576 ? `${(totalKb / 1048576).toFixed(0)} GB`
+                 : totalKb >= 1024    ? `${(totalKb / 1024).toFixed(0)} MB`
+                 : totalKb > 0        ? `${totalKb} KB`
+                 : '—';
+
+  card.className = `bg-gray-800 rounded-lg p-2 border-2 ${borderClass}`;
+  card.innerHTML = `
+    <div class="text-xs font-mono font-semibold text-white truncate mb-1 leading-tight"
+         title="${escapeHtml(rawDesc)}">${escapeHtml(shortDesc)}</div>
+    <div class="flex items-center justify-between mb-1.5 leading-tight">
+      <span class="${stateColor} text-xs font-medium">${escapeHtml(stateLabel)}</span>
+      <span class="text-gray-400 text-xs">${escapeHtml(totalStr)}</span>
+    </div>
+    <div class="flex items-center gap-1">
+      <div class="flex-1 h-1.5 bg-gray-700 rounded-full overflow-hidden">
+        <div class="h-full ${barColor} rounded-full transition-all duration-300" style="width: ${pct}%"></div>
+      </div>
+      <span class="${stateColor} text-xs font-mono flex-shrink-0 w-7 text-right">${pct.toFixed(0)}%</span>
+    </div>
+  `;
+
+  return card;
+}
+
+// Decode ups.output.source string → { label, cls } for display
+function upsOutputSourceInfo(source) {
+  switch (source) {
+    case 'normal':    return { label: 'AC Normal',  cls: 'text-green-400' };
+    case 'battery':   return { label: 'On Battery', cls: 'text-yellow-400' };
+    case 'bypass':    return { label: 'Bypass',     cls: 'text-blue-400' };
+    case 'booster':   return { label: 'Booster',    cls: 'text-yellow-400' };
+    case 'reducer':   return { label: 'Reducer',    cls: 'text-yellow-400' };
+    case 'none':      return { label: 'None',       cls: 'text-gray-400' };
+    default:          return { label: source || 'Unknown', cls: 'text-gray-400' };
+  }
+}
+
+// Decode ups.battery.status string → { label, cls } for display
+function upsBatteryStatusInfo(status) {
+  switch (status) {
+    case 'normal':     return { label: 'Normal',      cls: 'text-green-400' };
+    case 'low_battery':return { label: 'Low Battery', cls: 'text-yellow-400' };
+    case 'depleted':   return { label: 'Depleted',    cls: 'text-red-400' };
+    case 'discharging':return { label: 'Discharging', cls: 'text-yellow-400' };
+    case 'bypass':     return { label: 'Bypass',      cls: 'text-blue-400' };
+    default:           return { label: status || 'Unknown', cls: 'text-gray-400' };
+  }
 }
