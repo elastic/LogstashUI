@@ -1,0 +1,22 @@
+{
+  "official_key": "isilon_onefs",
+  "name": "isilon_onefs",
+  "type": "Storage Array",
+  "description": "Dell EMC Isilon scale-out NAS cluster running OneFS. Covers cluster and per-node health, disk capacity, I/O performance (CPU, disk, cache), network throughput, and protocol statistics (NFS, SMB, HTTP, FTP, NDMP).",
+  "vendor": "Dell EMC",
+  "product": "Isilon OneFS",
+  "model": "Any",
+  "profiles": [
+    "isilon_system",
+    "isilon_performance",
+    "isilon_protocols",
+    "generic_host_system_metrics",
+    "generic_ucd_system_metrics",
+    "generic_interfaces",
+    "generic_system"
+  ],
+  "matching_rules": [
+    "Isilon OneFS",
+    "OneFS"
+  ]
+}

@@ -1,0 +1,66 @@
+{
+  "official_key": "netapp_7mode_protocols",
+  "name": "netapp_7mode_protocols",
+  "description": "Cumulative protocol operation counters (NFS, CIFS, HTTP), per-client NFS statistics table, per-share CIFS statistics table, iSCSI connection table, and FCP throughput for NetApp ONTAP 7-Mode filers. Uses NETAPP-MIB (1.3.6.1.4.1.789).",
+  "vendor": "NetApp",
+  "product": "ONTAP 7-Mode",
+  "model": "Any",
+  "get": {
+    "network.protocol.nfs.ops":        "1.3.6.1.4.1.789.1.2.1.1.0",
+    "network.protocol.cifs.ops":       "1.3.6.1.4.1.789.1.2.1.2.0",
+    "network.protocol.http.ops":       "1.3.6.1.4.1.789.1.2.1.3.0",
+    "network.bytes.received.kb":       "1.3.6.1.4.1.789.1.2.1.4.0",
+    "network.bytes.sent.kb":           "1.3.6.1.4.1.789.1.2.1.5.0",
+    "storage.disk.read.ops":           "1.3.6.1.4.1.789.1.2.1.6.0",
+    "storage.disk.write.ops":          "1.3.6.1.4.1.789.1.2.1.7.0",
+    "network.protocol.nfs.version":    "1.3.6.1.4.1.789.1.24.1.0",
+    "network.protocol.cifs.connections": "1.3.6.1.4.1.789.1.23.1.0"
+  },
+  "walk": {},
+  "table": {
+    "network.protocol.nfs.client": {
+      "columns": {
+        "index":             "1.3.6.1.4.1.789.1.24.2.1.1",
+        "host_addr":         "1.3.6.1.4.1.789.1.24.2.1.2",
+        "nfs_ops":           "1.3.6.1.4.1.789.1.24.2.1.3",
+        "read_ops":          "1.3.6.1.4.1.789.1.24.2.1.4",
+        "write_ops":         "1.3.6.1.4.1.789.1.24.2.1.5",
+        "bytes_read":        "1.3.6.1.4.1.789.1.24.2.1.6",
+        "bytes_written":     "1.3.6.1.4.1.789.1.24.2.1.7"
+      }
+    },
+    "network.protocol.cifs.share": {
+      "columns": {
+        "index":             "1.3.6.1.4.1.789.1.23.2.1.1",
+        "name":              "1.3.6.1.4.1.789.1.23.2.1.2",
+        "type":              "1.3.6.1.4.1.789.1.23.2.1.3",
+        "mounted":           "1.3.6.1.4.1.789.1.23.2.1.4"
+      }
+    },
+    "network.protocol.iscsi.lun": {
+      "columns": {
+        "index":             "1.3.6.1.4.1.789.1.25.4.1.1",
+        "lun_id":            "1.3.6.1.4.1.789.1.25.4.1.2",
+        "filer_name":        "1.3.6.1.4.1.789.1.25.4.1.3",
+        "license_name":      "1.3.6.1.4.1.789.1.25.4.1.4"
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "get",
+        "field": "network.protocol.nfs.version"
+      },
+      "params": {
+        "mapping": {
+          "1": "DISABLED",
+          "2": "NFSv3",
+          "3": "NFSv4",
+          "4": "NFSv3_NFSv4"
+        }
+      }
+    }
+  ]
+}

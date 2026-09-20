@@ -1,0 +1,86 @@
+{
+  "official_key": "isilon_system",
+  "name": "isilon_system",
+  "description": "Cluster identity and health, per-node hardware inventory and health status, disk summary (total/used/available bytes, SSD vs HDD), and licensed feature table for Dell EMC Isilon OneFS clusters. Uses ISILON-MIB (1.3.6.1.4.1.12124).",
+  "vendor": "Dell EMC",
+  "product": "Isilon OneFS",
+  "model": "Any",
+  "get": {
+    "observer.cluster.name":           "1.3.6.1.4.1.12124.1.1.1.0",
+    "observer.cluster.health":         "1.3.6.1.4.1.12124.1.1.2.0",
+    "observer.cluster.guid":           "1.3.6.1.4.1.12124.1.1.3.0",
+    "observer.cluster.node_count":     "1.3.6.1.4.1.12124.1.1.4.0",
+    "observer.cluster.nodes_online":   "1.3.6.1.4.1.12124.1.1.5.0",
+
+    "storage.disk.total.bytes":        "1.3.6.1.4.1.12124.1.3.1.0",
+    "storage.disk.avail.bytes":        "1.3.6.1.4.1.12124.1.3.2.0",
+    "storage.disk.used.bytes":         "1.3.6.1.4.1.12124.1.3.3.0",
+    "storage.disk.hdd.bytes":          "1.3.6.1.4.1.12124.1.3.4.0",
+    "storage.disk.smartfail_count":    "1.3.6.1.4.1.12124.1.3.10.0",
+    "storage.disk.health_check_secs":  "1.3.6.1.4.1.12124.1.3.11.0"
+  },
+  "walk": {},
+  "table": {
+    "component.node": {
+      "columns": {
+        "index":              "1.3.6.1.4.1.12124.2.51.1.1",
+        "part_number":        "1.3.6.1.4.1.12124.2.51.1.2",
+        "serial_number":      "1.3.6.1.4.1.12124.2.51.1.3",
+        "model":              "1.3.6.1.4.1.12124.2.51.1.4",
+        "health":             "1.3.6.1.4.1.12124.2.51.1.5"
+      }
+    },
+    "observer.cluster.feature": {
+      "columns": {
+        "index":              "1.3.6.1.4.1.12124.1.5.1.1.1",
+        "name":               "1.3.6.1.4.1.12124.1.5.1.1.2",
+        "licensed":           "1.3.6.1.4.1.12124.1.5.1.1.3"
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "get",
+        "field": "observer.cluster.health"
+      },
+      "params": {
+        "mapping": {
+          "0": "HEALTHY",
+          "1": "ATTN",
+          "2": "DEGRADED",
+          "3": "CRITICAL"
+        }
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "table",
+        "table": "component.node",
+        "field": "component.node.health"
+      },
+      "params": {
+        "mapping": {
+          "-1": "UNKNOWN",
+          "0":  "HEALTHY",
+          "1":  "ATTN",
+          "2":  "DEGRADED",
+          "3":  "CRITICAL"
+        }
+      }
+    },
+    {
+      "operation": "ratio",
+      "target": {
+        "scope": "get"
+      },
+      "params": {
+        "value1_field": "storage.disk.used.bytes",
+        "value2_field": "storage.disk.total.bytes",
+        "ratio1_output_field": "storage.disk.used.pct"
+      }
+    }
+  ]
+}
