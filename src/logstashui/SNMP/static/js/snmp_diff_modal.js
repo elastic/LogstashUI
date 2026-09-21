@@ -160,11 +160,19 @@ function renderSnmpBlockingBanner(errors) {
 
     let items = '';
     errors.forEach(e => {
-        let link = '';
+        let action = '';
         if (e.policy_id) {
-            link = ` <a href="/ConnectionManager/AgentPolicies/?policy_id=${e.policy_id}" class="underline font-medium text-red-200 hover:text-white">Set a keystore password &rarr;</a>`;
+            // Inline password prompt — keeps the user on this page.
+            // data-policy-id is read by _inlineSetKeystorePassword().
+            action = ` <button
+                type="button"
+                data-policy-id="${escapeHtml(String(e.policy_id))}"
+                onclick="_inlineSetKeystorePassword(this)"
+                class="inline-flex items-center gap-1 ml-1 underline font-medium text-red-200 hover:text-white cursor-pointer bg-transparent border-0 p-0">
+                Set keystore password &rarr;
+            </button>`;
         }
-        items += `<li>${escapeHtml(e.message)}${link}</li>`;
+        items += `<li>${escapeHtml(e.message)}${action}</li>`;
     });
 
     banner.innerHTML = `
@@ -179,6 +187,51 @@ function renderSnmpBlockingBanner(errors) {
         </div>`;
     banner.classList.remove('hidden');
     _updateDeployButtonState();
+}
+
+/**
+ * Inline keystore password prompt triggered from the blocking banner.
+ * Shows the ConfirmationModal password prompt, POSTs to SetKeystorePassword,
+ * then re-runs the deploy diff so the banner clears automatically on success.
+ *
+ * @param {HTMLElement} btn - The button element carrying data-policy-id.
+ */
+async function _inlineSetKeystorePassword(btn) {
+    const policyId = btn?.dataset?.policyId;
+    if (!policyId) return;
+
+    const password = await ConfirmationModal.prompt(
+        'Please input a keystore password.',
+        '',
+        'Set Keystore Password',
+        'Enter password...',
+        true   // mask input
+    );
+
+    if (!password) return;
+
+    try {
+        const response = await fetch('/ConnectionManager/SetKeystorePassword/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+            },
+            body: JSON.stringify({ policy_id: policyId, password }),
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            showToast(data.message || 'Keystore password set', 'success');
+            // Re-run the diff so the blocking banner clears if all issues are resolved
+            await prepareSnmpDiffModal();
+        } else {
+            showToast(data.error || 'Failed to set keystore password', 'error');
+        }
+    } catch (err) {
+        showToast(`Failed to set keystore password: ${err.message}`, 'error');
+    }
 }
 
 /**
