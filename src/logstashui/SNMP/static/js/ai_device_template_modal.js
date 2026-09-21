@@ -147,16 +147,10 @@
     if (connectionSelect && connectionSelect.value) {
       updateKibanaUrlVisibility();
       const selected   = connectionSelect.options[connectionSelect.selectedIndex];
-      const hasCloudId = selected && selected.dataset.hasCloudId === 'true';
-      const connId     = parseInt(connectionSelect.value, 10);
+      const connId = parseInt(connectionSelect.value, 10);
 
       fetchAndPopulateModels(connId);
-
-      if (hasCloudId) {
-        checkAgentBuilderResources(connId, null);
-      } else {
-        _prefillAndCheckKibanaUrl(selected, connId);
-      }
+      _prefillAndCheckKibanaUrl(selected, connId);
     }
   }
 
@@ -193,10 +187,9 @@
     const kibanaUrlContainer = document.getElementById('aiTemplateKibanaUrlContainer');
     if (!connectionSelect || !kibanaUrlContainer) return;
 
-    const selected    = connectionSelect.options[connectionSelect.selectedIndex];
-    const hasCloudId  = selected && selected.dataset.hasCloudId === 'true';
+    const selected = connectionSelect.options[connectionSelect.selectedIndex];
 
-    if (selected && selected.value && !hasCloudId) {
+    if (selected && selected.value) {
       kibanaUrlContainer.classList.remove('hidden');
     } else {
       kibanaUrlContainer.classList.add('hidden');
@@ -371,7 +364,7 @@
 
     const needsAction = hasMissing || hasDiffers || hasError;
     setInstallBtnVisible(needsAction, !hasMissing && !hasError && hasDiffers);
-    setGenerateBtnBlocked(hasMissing || hasError);
+    setGenerateBtnBlocked(hasMissing);
   }
 
   // ── Check resources API call ───────────────────────────────────────────────────
@@ -489,18 +482,13 @@
         hideResourceStatus();
         showModelSelector(false);
 
-        const selected   = this.options[this.selectedIndex];
-        const hasCloudId = selected && selected.dataset.hasCloudId === 'true';
+        const selected = this.options[this.selectedIndex];
 
         if (selected && selected.value) {
           fetchAndPopulateModels(parseInt(selected.value, 10));
-          if (hasCloudId) {
-            checkAgentBuilderResources(parseInt(selected.value, 10), null);
-          } else {
-            const kibanaUrlInput = document.getElementById('aiTemplateKibanaUrl');
-            if (kibanaUrlInput) kibanaUrlInput.value = '';
-            _prefillAndCheckKibanaUrl(selected, parseInt(selected.value, 10));
-          }
+          const kibanaUrlInput = document.getElementById('aiTemplateKibanaUrl');
+          if (kibanaUrlInput) kibanaUrlInput.value = '';
+          _prefillAndCheckKibanaUrl(selected, parseInt(selected.value, 10));
         }
       });
     }

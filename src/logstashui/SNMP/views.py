@@ -10,9 +10,13 @@ from django.http import JsonResponse, StreamingHttpResponse
 
 from .models import Credential, Network, Device, Profile, DeviceTemplate
 from PipelineManager.forms import ConnectionForm
+from PipelineManager.models import Connection
 from .overview import get_discovered_devices_count, get_template_data_categories, get_high_resource_usage
 from Common.decorators import require_admin_role
 from Common.formatters import format_display_name
+from Common.elastic_utils import normalize_kibana_url, get_kibana_url
+
+
 
 import os
 import json
@@ -24,20 +28,23 @@ def _ai_template_connections():
     Each row includes `suggested_kibana_url`: the Elasticsearch host rewritten to a
     Kibana origin so URL connections can prefill Kibana instead of the ES endpoint.
     """
-    from PipelineManager.models import Connection
-    from Common.elastic_utils import normalize_kibana_url
-
     rows = list(Connection.objects.filter(
         connection_type=Connection.ConnectionType.CENTRALIZED
     ).values('id', 'name', 'cloud_id', 'host', 'port'))
     for row in rows:
-        raw = row.get('host') or ''
-        port = row.get('port')
-        if raw and port:
-            host_part = raw.split('://', 1)[-1]
-            if ':' not in host_part:
-                raw = f"{raw}:{port}"
-        row['suggested_kibana_url'] = normalize_kibana_url(raw) if raw else ''
+        if row.get('cloud_id'):
+            try:
+                row['suggested_kibana_url'] = get_kibana_url(row['id'])
+            except Exception:
+                row['suggested_kibana_url'] = ''
+        else:
+            raw = row.get('host') or ''
+            port = row.get('port')
+            if raw and port:
+                host_part = raw.split('://', 1)[-1]
+                if ':' not in host_part:
+                    raw = f"{raw}:{port}"
+            row['suggested_kibana_url'] = normalize_kibana_url(raw) if raw else ''
     return rows
 
 

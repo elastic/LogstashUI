@@ -6,7 +6,6 @@
   "name": "SNMP Profile Author",
   "description": "Authors LogstashUI-format SNMP profile JSON (OID -> ECS field maps) for the Logstash snmp input path, grounded in the SNMP Catalog skill and the inline MIB-grounded walk.",
   "configuration": {
-    "tools": [],
     "skill_ids": [
       "snmp-catalog"
     ],
