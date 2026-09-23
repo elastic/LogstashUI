@@ -60,8 +60,8 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 SECRET_KEY = get_django_secret_key()
 
 # SECURITY WARNING: don't run with debug turned on in production!
-# Set DEBUG=False in production via environment variable
-DEBUG = os.environ.get("DEBUG", "True").lower() in ("true", "1", "yes")
+# DEBUG is disabled by default; set DEBUG=true (or 1/yes) to enable it.
+DEBUG = os.environ.get("DEBUG", "False").lower() in ("true", "1", "yes")
 
 # SECURITY WARNING: Set ALLOWED_HOSTS to your domain(s) in production
 # Example: ALLOWED_HOSTS=yourdomain.com,www.yourdomain.com

@@ -29,7 +29,7 @@ Relative values resolve from the process working directory.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `DEBUG` | `true` (native) / `false` (Docker) | Django debug |
+| `DEBUG` | `false` (native) / `false` (Docker) | Django debug; `true`/`1`/`yes` opts in |
 | `LOGSTASHUI_LOG_LEVEL` | `DEBUG` if `DEBUG` else `INFO` | App / root / file / console Python logs |
 | `LOGSTASHUI_DJANGO_LOG_LEVEL` | django=`INFO`, `django.request`=`ERROR` | Django framework loggers. Alias: `DJANGO_LOG_LEVEL` |
 | `LOGSTASHUI_BIND` | `0.0.0.0:8443` | gunicorn bind |
