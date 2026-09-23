@@ -202,7 +202,8 @@ class TestDeleteConnection:
         response = authenticated_client.post(f'/ConnectionManager/DeleteConnection/{connection_id}/')
 
         assert response.status_code == 200
-        assert b'Connection deleted successfully!' in response.content
+        # acceptance A10: view returns JsonResponse({'success': True}) (connections_crud.py:350)
+        assert response.json() == {'success': True}
 
         # Verify connection was deleted
         assert not Connection.objects.filter(id=connection_id).exists()
