@@ -25,19 +25,8 @@
   </div>
 </div>
 
-<!-- Empty State -->
-<div id="discoveredDevicesEmpty" class="hidden text-center py-8">
-  <div class="inline-flex items-center justify-center w-16 h-16 bg-gray-700/50 rounded-full mb-4">
-    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-    </svg>
-  </div>
-  <h3 class="text-lg font-semibold text-white mb-2">No Devices Discovered</h3>
-  <p class="text-gray-400">No devices have been discovered in the last 15 minutes. Make sure your discovery pipelines are running.</p>
-</div>
-
-<!-- Devices Table -->
-<div id="discoveredDevicesTable" class="hidden">
+<!-- Controls (toggle + banner) — always visible once loading completes -->
+<div id="discoveredDevicesControls" class="hidden">
   <!-- Notification Banner -->
   <div class="bg-blue-900/30 border border-blue-700 rounded-lg p-3 mb-4">
     <div class="flex items-start">
@@ -52,7 +41,8 @@
     </div>
   </div>
 
-  <!-- DNS-only toggle -->
+  <!-- Show-all toggle — always rendered so users can enable it even when 0
+       SNMP devices responded -->
   <div class="flex items-center gap-2 mb-3 text-sm text-gray-400">
     <label class="flex items-center gap-2 cursor-pointer select-none">
       <input type="checkbox" id="showNonSnmpToggle" onchange="toggleNonSnmpDevices()"
@@ -60,7 +50,21 @@
       <span>Show devices found via DNS only (no SNMP response)</span>
     </label>
   </div>
+</div>
 
+<!-- Empty State -->
+<div id="discoveredDevicesEmpty" class="hidden text-center py-8">
+  <div class="inline-flex items-center justify-center w-16 h-16 bg-gray-700/50 rounded-full mb-4">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+    </svg>
+  </div>
+  <h3 class="text-lg font-semibold text-white mb-2">No Devices Discovered</h3>
+  <p class="text-gray-400">No devices have been discovered in the last 15 minutes. Make sure your discovery pipelines are running.</p>
+</div>
+
+<!-- Devices Table -->
+<div id="discoveredDevicesTable" class="hidden">
   <div class="bg-gray-900/50 rounded-lg overflow-x-auto border border-gray-700">
     <table class="table w-full min-w-max">
       <thead>
