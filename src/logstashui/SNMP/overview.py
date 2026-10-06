@@ -60,7 +60,10 @@ def get_discovered_devices_count():
             try:
                 es = get_elastic_connection(connection.id)
 
-                # Build Elasticsearch query to count unique hosts
+                # Build Elasticsearch query to count unique hosts.
+                # Exclude _snmpfailure docs so the badge reflects only devices
+                # that actually responded via SNMP (mirrors the default view of
+                # GetDiscoveredDevices).
                 query = {
                     "size": 0,
                     "query": {
@@ -74,6 +77,9 @@ def get_discovered_devices_count():
                                         }
                                     }
                                 }
+                            ],
+                            "must_not": [
+                                {"term": {"tags": "_snmpfailure"}}
                             ]
                         }
                     },

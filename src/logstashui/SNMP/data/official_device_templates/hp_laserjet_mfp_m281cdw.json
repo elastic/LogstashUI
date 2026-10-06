@@ -8,6 +8,7 @@
   "model": "Any",
   "profiles": [
     "generic_system",
+    "generic_interfaces",
     "generic_printer_mib"
   ],
   "matching_rules": [

@@ -270,6 +270,38 @@ class TestConvertAdjacencyToGraph:
         assert edge['platform'] == 'Cisco 3750'
         assert edge['capabilities'] == 'Switch Router'
 
+    def test_host_name_fallback_resolves_device_id(self, test_device, db):
+        """Node whose sysname has no DB match gets device_id via sysname_to_host_name."""
+        adjacency = {
+            'NM Test Network (10.0.0.0/24)': {
+                # sysname is a vendor label that doesn't match any DB field
+                'VENDOR-INTERNAL-42': {}
+            }
+        }
+        # host.name is the inventory name that does match the DB device
+        sysname_map = {'VENDOR-INTERNAL-42': 'switch-a'}
+        result = convert_adjacency_to_graph(adjacency, sysname_to_host_name=sysname_map)
+        node = next(n for n in result['nodes'] if n['id'] == 'VENDOR-INTERNAL-42')
+        assert node.get('device_id') == test_device.id
+
+    def test_host_name_fallback_absent_no_regression(self, test_device, db):
+        """Omitting sysname_to_host_name does not break existing exact-name matching."""
+        adjacency = {
+            'NM Test Network (10.0.0.0/24)': {
+                'switch-a': {}
+            }
+        }
+        result = convert_adjacency_to_graph(adjacency)
+        node = next(n for n in result['nodes'] if n['id'] == 'switch-a')
+        assert node.get('device_id') == test_device.id
+
+    def test_host_name_fallback_empty_map_no_error(self, db):
+        """Passing an empty sysname_to_host_name is safe."""
+        adjacency = {'Production': {'switch-x': {}}}
+        result = convert_adjacency_to_graph(adjacency, sysname_to_host_name={})
+        assert len(result['nodes']) == 1
+        assert 'device_id' not in result['nodes'][0]
+
 
 # ===========================================================================
 # get_networks_list
@@ -410,7 +442,7 @@ class TestGetCdpAdjacencies:
         return {'aggregations': {'cdp_adjacencies': {'buckets': []}}}
 
     def _cdp_response(self, host_sysname, table_index, neighbor_device_id, neighbor_port,
-                      polled_address='10.0.0.1', network_name=''):
+                      polled_address='10.0.0.1', network_name='', host_name=''):
         """Minimal ES response with one CDP bucket."""
         return {
             'aggregations': {
@@ -427,6 +459,7 @@ class TestGetCdpAdjacencies:
                                                     'sysname': host_sysname,
                                                     'polled_address': polled_address,
                                                     'hostname': '',
+                                                    'name': host_name,
                                                 },
                                                 'network': {
                                                     'name': network_name,
@@ -525,6 +558,48 @@ class TestGetCdpAdjacencies:
             result = get_cdp_adjacencies()
         assert result['success'] is False
         assert 'error' in result
+
+    @patch('SNMP.network_map.get_elastic_connection')
+    def test_host_name_captured_in_sysname_map(self, mock_get_es, test_network):
+        """host.name from ES docs is returned in sysname_to_host_name."""
+        mock_es = MagicMock()
+        mock_es.search.side_effect = [
+            self._cdp_response(
+                host_sysname='VENDOR-42',
+                table_index='1.1',
+                neighbor_device_id='switch-b',
+                neighbor_port='Gi0/2',
+                network_name='NM Test Network (10.0.0.0/24)',
+                host_name='switch-a',
+            ),
+            {'hits': {'hits': []}},  # interface name lookup
+        ]
+        mock_get_es.return_value = mock_es
+
+        result = get_cdp_adjacencies()
+        assert result['success'] is True
+        assert result['sysname_to_host_name'].get('VENDOR-42') == 'switch-a'
+
+    @patch('SNMP.network_map.get_elastic_connection')
+    def test_missing_host_name_not_in_sysname_map(self, mock_get_es, test_network):
+        """Docs without host.name do not add an entry to sysname_to_host_name."""
+        mock_es = MagicMock()
+        mock_es.search.side_effect = [
+            self._cdp_response(
+                host_sysname='switch-a',
+                table_index='1.1',
+                neighbor_device_id='switch-b',
+                neighbor_port='Gi0/2',
+                network_name='NM Test Network (10.0.0.0/24)',
+                host_name='',   # no host.name field
+            ),
+            {'hits': {'hits': []}},
+        ]
+        mock_get_es.return_value = mock_es
+
+        result = get_cdp_adjacencies()
+        assert result['success'] is True
+        assert 'switch-a' not in result['sysname_to_host_name']
 
 
 # ===========================================================================

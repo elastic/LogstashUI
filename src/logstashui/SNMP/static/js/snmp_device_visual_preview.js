@@ -17,50 +17,47 @@ function toggleDevicePreview(deviceId) {
     previewRow.classList.remove('hidden');
     chevron.classList.add('rotate-180');
 
-    // Check if content is already loaded
-    if (contentDiv.innerHTML === '') {
-      // Show loading indicator
-      const indicator = previewRow.querySelector('.htmx-indicator');
-      indicator.classList.remove('hidden');
+    // Always fetch fresh data from Elasticsearch on every expand
+    const indicator = previewRow.querySelector('.htmx-indicator');
+    indicator.classList.remove('hidden');
+    contentDiv.innerHTML = '';
 
-      // Fetch device visualization data
-      fetch(`/SNMP/GetDeviceVisualization/${deviceId}/`)
-        .then(response => response.json())
-        .then(data => {
-          indicator.classList.add('hidden');
+    fetch(`/SNMP/GetDeviceVisualization/${deviceId}/`)
+      .then(response => response.json())
+      .then(data => {
+        indicator.classList.add('hidden');
 
-          if (data.success && !data.no_data) {
-            renderDevicePreview(deviceId, data.device, data.visualizations);
-          } else if (data.no_data) {
-            contentDiv.innerHTML = `
-              <div class="flex flex-col items-center text-center py-8 px-6 gap-3">
-                <div class="inline-flex items-center justify-center w-12 h-12 bg-blue-600/20 rounded-full">
-                  <svg class="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-                <p class="text-white font-medium">We aren&apos;t seeing any results in Elasticsearch yet.</p>
-                <p class="text-sm text-gray-400">If you have already deployed this configuration and still see no results, check your Logstash logs.</p>
-              </div>
-            `;
-          } else {
-            contentDiv.innerHTML = `
-              <div class="text-center text-red-400 py-4">
-                <p>Error loading device data: ${data.error}</p>
-              </div>
-            `;
-          }
-        })
-        .catch(error => {
-          indicator.classList.add('hidden');
+        if (data.success && !data.no_data) {
+          renderDevicePreview(deviceId, data.device, data.visualizations);
+        } else if (data.no_data) {
           contentDiv.innerHTML = `
-            <div class="text-center text-red-400 py-4">
-              <p>Error loading device data: ${error.message}</p>
+            <div class="flex flex-col items-center text-center py-8 px-6 gap-3">
+              <div class="inline-flex items-center justify-center w-12 h-12 bg-blue-600/20 rounded-full">
+                <svg class="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <p class="text-white font-medium">We aren&apos;t seeing any results in Elasticsearch yet.</p>
+              <p class="text-sm text-gray-400">If you have already deployed this configuration and still see no results, check your Logstash logs.</p>
             </div>
           `;
-        });
-    }
+        } else {
+          contentDiv.innerHTML = `
+            <div class="text-center text-red-400 py-4">
+              <p>Error loading device data: ${data.error}</p>
+            </div>
+          `;
+        }
+      })
+      .catch(error => {
+        indicator.classList.add('hidden');
+        contentDiv.innerHTML = `
+          <div class="text-center text-red-400 py-4">
+            <p>Error loading device data: ${error.message}</p>
+          </div>
+        `;
+      });
   } else {
     // Collapse the row
     previewRow.classList.add('hidden');
@@ -100,7 +97,8 @@ function renderDevicePreview(deviceId, device, visualizations) {
   if (device.profiles && device.profiles.length > 0) {
     device.profiles.forEach(profile => {
       const profileBadge = document.createElement('div');
-      profileBadge.className = 'bg-blue-600/20 text-blue-300 px-3 py-1 rounded-md text-sm flex items-center gap-2';
+      profileBadge.className = 'bg-blue-600/20 text-blue-300 px-3 py-1 rounded-md text-sm flex items-center gap-2 cursor-pointer hover:bg-blue-600/40 transition-colors';
+      profileBadge.title = 'Click to view profile';
       
       // Check if official profile (ends with .json)
       const isOfficial = profile.name.endsWith('.json');
@@ -136,6 +134,17 @@ function renderDevicePreview(deviceId, device, visualizations) {
           ${metadata}
         </div>
       `;
+
+      // Open the profile modal on click.
+      // Official profiles in the DB carry a ".json" suffix; GetOfficialProfile expects it stripped.
+      // Official profiles open in view-only mode; user profiles open in edit mode.
+      const modalName = isOfficial ? profile.name.replace(/\.json$/, '') : profile.name;
+      profileBadge.addEventListener('click', () => {
+        if (typeof openProfileModal === 'function') {
+          openProfileModal(modalName, isOfficial, /* viewMode= */ isOfficial);
+        }
+      });
+
       profilesList.appendChild(profileBadge);
     });
   } else {
@@ -206,41 +215,48 @@ function renderDevicePreview(deviceId, device, visualizations) {
     }
   }
 
-  // Render sensors if available
-  if (visualizations && visualizations.sensors) {
+  // Render sensors / fans / power supplies — always show the row if any one of the
+  // three has data; show a "not detecting" placeholder for the others.
+  {
     const sensorsSection = contentDiv.querySelector('.device-sensors-section');
     const sensorsContainer = contentDiv.querySelector('.sensors-container');
-    // The sensors data is nested in visualizations.sensors.sensors
-    const sensorsArray = visualizations.sensors.sensors || [];
-
-    if (sensorsArray.length > 0 && sensorsSection && sensorsContainer) {
-      sensorsSection.style.display = 'grid';
-      sensorsContainer.innerHTML = '';
-
-      sensorsArray.forEach(sensor => {
-        const sensorCard = createSensorCard(sensor);
-        sensorsContainer.appendChild(sensorCard);
-      });
-    } else {
-      console.error('Not rendering sensors. Array length:', sensorsArray.length, 'Section:', !!sensorsSection, 'Container:', !!sensorsContainer);
-    }
-  }
-
-  // Render fans if available
-  if (visualizations && visualizations.fans) {
-    const sensorsSection = contentDiv.querySelector('.device-sensors-section');
     const fansContainer = contentDiv.querySelector('.fans-container');
+    const psuContainer = contentDiv.querySelector('.power-supplies-container');
 
-    const fansArray = visualizations.fans.fans || [];
+    const sensorsArray = (visualizations && visualizations.sensors && visualizations.sensors.sensors) || [];
+    const fansArray    = (visualizations && visualizations.fans    && visualizations.fans.fans)       || [];
+    const psuArray     = (visualizations && visualizations.power_supplies && visualizations.power_supplies.power_supplies) || [];
 
-    if (fansArray.length > 0 && sensorsSection && fansContainer) {
+    const hasSensors = sensorsArray.length > 0;
+    const hasFans    = fansArray.length    > 0;
+    const hasPsu     = psuArray.length     > 0;
+
+    const noDataMsg = (label) =>
+      `<div class="col-span-full flex items-center justify-center h-24 text-gray-400 text-sm italic">No ${label} data collected for this device</div>`;
+
+    if (hasSensors || hasFans || hasPsu) {
       sensorsSection.style.display = 'grid';
-      fansContainer.innerHTML = '';
 
-      fansArray.forEach(fan => {
-        const fanCard = createFanCard(fan);
-        fansContainer.appendChild(fanCard);
-      });
+      if (hasSensors) {
+        sensorsContainer.innerHTML = '';
+        sensorsArray.forEach(sensor => sensorsContainer.appendChild(createSensorCard(sensor)));
+      } else {
+        sensorsContainer.innerHTML = noDataMsg('temperature sensor');
+      }
+
+      if (hasFans) {
+        fansContainer.innerHTML = '';
+        fansArray.forEach(fan => fansContainer.appendChild(createFanCard(fan)));
+      } else {
+        fansContainer.innerHTML = noDataMsg('fan');
+      }
+
+      if (hasPsu) {
+        psuContainer.innerHTML = '';
+        psuArray.forEach(psu => psuContainer.appendChild(createPowerSupplyCard(psu)));
+      } else {
+        psuContainer.innerHTML = noDataMsg('power supply');
+      }
     }
   }
 
@@ -320,6 +336,81 @@ function renderDevicePreview(deviceId, device, visualizations) {
     }
   }
 
+  // Render wireless APs if available
+  if (visualizations && visualizations.wireless_aps) {
+    const apsSection = contentDiv.querySelector('.device-wireless-aps-section');
+    const apsContainer = contentDiv.querySelector('.wireless-aps-container');
+    const apsSummary = contentDiv.querySelector('.wireless-aps-summary');
+    const apsArray = visualizations.wireless_aps.aps || [];
+    const upCount = visualizations.wireless_aps.up_count || 0;
+    const downCount = visualizations.wireless_aps.down_count || 0;
+
+    if (apsArray.length > 0 && apsSection && apsContainer) {
+      apsSection.style.display = 'block';
+      apsContainer.innerHTML = '';
+
+      if (apsSummary) {
+        const parts = [];
+        if (upCount > 0)   parts.push(`<span class="text-emerald-400">${upCount} up</span>`);
+        if (downCount > 0) parts.push(`<span class="text-red-400">${downCount} down</span>`);
+        const clientCount = visualizations.wireless_aps.client_count;
+        if (clientCount != null) parts.push(`${clientCount} clients`);
+        apsSummary.innerHTML = parts.length ? `— ${parts.join(', ')}` : `— ${apsArray.length} total`;
+      }
+
+      apsArray.forEach(ap => {
+        apsContainer.appendChild(createAPCard(ap));
+      });
+    }
+  }
+
+  // Render RAID volumes if available
+  if (visualizations && visualizations.raid_volumes) {
+    const raidSection = contentDiv.querySelector('.device-raid-volumes-section');
+    const raidContainer = contentDiv.querySelector('.raid-volumes-container');
+    const raidArray = visualizations.raid_volumes.raid_volumes || [];
+
+    if (raidArray.length > 0 && raidSection && raidContainer) {
+      raidSection.style.display = 'block';
+      raidContainer.innerHTML = '';
+
+      raidArray.forEach(vol => {
+        raidContainer.appendChild(createRaidVolumeCard(vol));
+      });
+    }
+  }
+
+  // Render disk grid if available
+  if (visualizations && visualizations.disks) {
+    const disksSection = contentDiv.querySelector('.device-disks-section');
+    const disksContainer = contentDiv.querySelector('.disks-container');
+    const disksSummary = contentDiv.querySelector('.device-disks-summary');
+    const disksArray = visualizations.disks.disks || [];
+
+    if (disksArray.length > 0 && disksSection && disksContainer) {
+      disksSection.style.display = 'block';
+      disksContainer.innerHTML = '';
+
+      if (disksSummary) {
+        const stateCount = {};
+        disksArray.forEach(d => {
+          const s = d.state || 'UNKNOWN';
+          stateCount[s] = (stateCount[s] || 0) + 1;
+        });
+        const parts = [];
+        if (stateCount['ACTIVE'])        parts.push(`<span class="text-emerald-400">${stateCount['ACTIVE']} active</span>`);
+        if (stateCount['SPARE'])         parts.push(`<span class="text-blue-400">${stateCount['SPARE']} spare</span>`);
+        if (stateCount['RECONSTRUCTING'])parts.push(`<span class="text-yellow-400">${stateCount['RECONSTRUCTING']} rebuilding</span>`);
+        if (stateCount['FAILED'])        parts.push(`<span class="text-red-400">${stateCount['FAILED']} failed</span>`);
+        disksSummary.innerHTML = parts.length ? `— ${parts.join(', ')}` : `— ${disksArray.length} total`;
+      }
+
+      disksArray.forEach(disk => {
+        disksContainer.appendChild(createDiskCard(disk));
+      });
+    }
+  }
+
   // Render neighbors if available
   if (visualizations && visualizations.neighbors) {
     const neighborsSection = contentDiv.querySelector('.device-neighbors-section');
@@ -351,6 +442,110 @@ function renderDevicePreview(deviceId, device, visualizations) {
         const coreCard = createCpuCoreCard(core, i);
         cpuCoresContainer.appendChild(coreCard);
       });
+    }
+  }
+
+  // Render UPS battery health row if data is present.
+  // Show the section when any meaningful field is available — battery_status or
+  // output_source alone are enough; capacity_pct may be null/unsupported on some
+  // firmware (e.g. Huawei UPS5000 via generic UPS-MIB returns -1, sanitized to
+  // null by the backend) and individual tiles will show "--" in that case.
+  if (visualizations && visualizations.ups) {
+    const ups = visualizations.ups;
+    const hasUpsData = ups.battery_status != null
+                    || ups.output_source != null
+                    || (ups.battery_capacity_pct != null && ups.battery_capacity_pct >= 0);
+
+    if (hasUpsData) {
+      const upsSection = contentDiv.querySelector('.device-ups-section');
+      const upsTrendSection = contentDiv.querySelector('.device-ups-trend-section');
+      if (upsSection) upsSection.style.display = 'grid';
+
+      // --- Output Source ---
+      const sourceEl = contentDiv.querySelector('.ups-output-source');
+      if (sourceEl && ups.output_source != null) {
+        const { label, cls } = upsOutputSourceInfo(ups.output_source);
+        sourceEl.textContent = label;
+        sourceEl.className = `ups-output-source text-sm font-bold text-center ${cls}`;
+      }
+
+      // --- Battery Status ---
+      const statusEl = contentDiv.querySelector('.ups-battery-status');
+      if (statusEl && ups.battery_status != null) {
+        const { label, cls } = upsBatteryStatusInfo(ups.battery_status);
+        statusEl.textContent = label;
+        statusEl.className = `ups-battery-status text-sm font-bold text-center ${cls}`;
+      }
+
+      // --- Battery Capacity gauge ---
+      // null means the device doesn't report it (e.g. UPS-MIB returns -1, sanitized
+      // by the backend); show "--" rather than a misleading "0%".
+      const capacityPct = ups.battery_capacity_pct;  // may be null
+      const capacityEl = contentDiv.querySelector('.ups-battery-capacity-pct');
+      const capacityBar = contentDiv.querySelector('.ups-battery-capacity-bar');
+      if (capacityEl) capacityEl.textContent = capacityPct != null ? `${capacityPct}%` : '--';
+      if (capacityBar) {
+        if (capacityPct != null) {
+          const barColor = capacityPct <= 20 ? 'bg-red-500'
+                         : capacityPct <= 40 ? 'bg-yellow-500'
+                         : 'bg-green-500';
+          capacityBar.className = `ups-battery-capacity-bar h-full ${barColor} rounded-full transition-all duration-500`;
+          capacityBar.style.width = `${capacityPct}%`;
+        } else {
+          capacityBar.className = 'ups-battery-capacity-bar h-full bg-base-300 rounded-full';
+          capacityBar.style.width = '0%';
+        }
+      }
+
+      // --- Runtime Remaining ---
+      // Some UPS firmware (e.g. Eastpower iStars) reports 0 for
+      // upsEstimatedMinutesRemaining when on AC normal power — the runtime
+      // estimate is only computed while actually running on battery.
+      // Show "N/A" in that case rather than a misleading red "0m".
+      const runtimeEl = contentDiv.querySelector('.ups-runtime');
+      if (runtimeEl && ups.battery_time_remaining_minutes != null) {
+        const mins = ups.battery_time_remaining_minutes;
+        if (mins === 0 && ups.output_source === 'normal') {
+          runtimeEl.textContent = 'N/A';
+          runtimeEl.className = 'ups-runtime text-xl font-bold text-center text-base-content/40';
+        } else {
+          const runtimeText = mins >= 60
+            ? `${Math.floor(mins / 60)}h ${mins % 60}m`
+            : `${mins}m`;
+          const runtimeColor = mins < 15 ? 'text-red-400'
+                             : mins < 30 ? 'text-yellow-400'
+                             : 'text-green-400';
+          runtimeEl.textContent = runtimeText;
+          runtimeEl.className = `ups-runtime text-xl font-bold text-center ${runtimeColor}`;
+        }
+      }
+
+      // --- Active Alarms ---
+      const alarmsEl = contentDiv.querySelector('.ups-alarms');
+      if (alarmsEl && ups.alarms_present != null) {
+        const count = ups.alarms_present;
+        alarmsEl.textContent = String(count);
+        const alarmColor = count > 0 ? 'text-red-400' : 'text-green-400';
+        alarmsEl.className = `ups-alarms text-3xl font-bold text-center ${alarmColor}`;
+      }
+
+      // --- Capacity Trend chart ---
+      if (upsTrendSection && ups.CapacityTrend && ups.CapacityTrend.length > 0) {
+        upsTrendSection.style.display = 'block';
+        // renderMetricChart multiplies values by 100 (expects 0-1 fractions)
+        const scaledTrend = ups.CapacityTrend.map(v => v / 100);
+        const chartDiv = contentDiv.querySelector('.ups-capacity-chart');
+        if (chartDiv) {
+          renderMetricChart(
+            chartDiv,
+            ups.CapacityTrendTime,
+            scaledTrend,
+            'Battery Capacity (%)',
+            'rgba(16, 185, 129, 1)',   // emerald
+            'rgba(16, 185, 129, 0.1)'
+          );
+        }
+      }
     }
   }
 }
@@ -725,41 +920,45 @@ function createSensorCard(sensor) {
 
   const tempF = hasTemp ? (tempC * 9 / 5) + 32 : null;
   const thresholdF = hasThreshold ? (threshold * 9 / 5) + 32 : null;
-  const stateInfo = getSensorStateInfo(sensor.state);
+  // When state is absent (e.g. lm-sensors has no status field) but we have a
+  // reading, show a neutral blue "Reading" style instead of gray "Unknown".
+  const stateInfo = (sensor.state == null || sensor.state === '') && hasTemp
+    ? { label: 'Reading', borderClass: 'border-blue-500', badgeClass: 'bg-blue-900/40 text-blue-300', textClass: 'text-blue-400', gaugeClass: 'bg-blue-500' }
+    : getSensorStateInfo(sensor.state);
   const gaugeMax = hasThreshold ? threshold : 100;
   const percentage = hasTemp ? Math.min((tempC / gaugeMax) * 100, 100) : 0;
   const tempDisplay = hasTemp ? `${tempF.toFixed(1)}°F` : '—';
   const tempCDisplay = hasTemp ? `${tempC}°C` : '—';
-  const thresholdTop = hasThreshold
-    ? `<div class="text-xs text-gray-400">Threshold: ${thresholdF.toFixed(1)}°F</div>`
-    : `<div class="text-xs text-gray-400"></div>`;
-  const thresholdBottom = hasThreshold
-    ? `<div class="text-xs text-gray-400">Threshold: ${threshold}°C</div>`
-    : `<div class="text-xs text-gray-400"></div>`;
+  // Compact inline threshold string (e.g. "/ 85°F")
+  const thresholdInline = hasThreshold
+    ? `<span class="text-xs text-gray-500 ml-1">/ ${thresholdF.toFixed(0)}°F</span>`
+    : '';
+  const thresholdCInline = hasThreshold
+    ? `<span class="text-xs text-gray-500 ml-1">/ ${threshold}°C</span>`
+    : '';
 
-  card.className = 'bg-gray-800 rounded-lg p-3 border-l-4 ' + stateInfo.borderClass;
+  card.className = 'bg-gray-800 rounded-lg p-2 border-l-4 ' + stateInfo.borderClass;
   card.innerHTML = `
-    <div class="flex items-center justify-between mb-2">
-      <h4 class="text-sm font-medium text-white truncate">${escapeHtml(sensor.description)}</h4>
-      <span class="text-xs px-2 py-1 rounded ${stateInfo.badgeClass}">${stateInfo.label}</span>
+    <!-- Header row: label + badge -->
+    <div class="flex items-center justify-between gap-2 mb-1.5">
+      <h4 class="text-xs font-medium text-white truncate" title="${escapeHtml(sensor.description)}">${escapeHtml(sensor.description)}</h4>
+      <span class="text-xs px-1.5 py-0.5 rounded flex-shrink-0 ${stateInfo.badgeClass}">${stateInfo.label}</span>
     </div>
-    
-    <!-- Temperature values above gauge -->
-    <div class="flex items-center justify-between mb-1">
-      <div class="text-2xl font-bold ${stateInfo.textClass}">${tempDisplay}</div>
-      ${thresholdTop}
-    </div>
-    
-    <!-- Temperature Gauge -->
-    <div class="relative w-full h-2 bg-gray-700 rounded-full overflow-hidden mb-1">
-      <div class="absolute h-full ${stateInfo.gaugeClass} transition-all duration-300" 
-           style="width: ${percentage}%"></div>
-    </div>
-    
-    <!-- Temperature values below gauge -->
-    <div class="flex items-center justify-between">
-      <div class="text-sm text-gray-400">${tempCDisplay}</div>
-      ${thresholdBottom}
+
+    <!-- Temp value + gauge on one compact block -->
+    <div class="flex items-center gap-3">
+      <!-- Primary temp -->
+      <div class="flex-shrink-0">
+        <span class="text-lg font-bold leading-none ${stateInfo.textClass}">${tempDisplay}</span>${thresholdInline}
+        <div class="text-xs text-gray-400 mt-0.5">${tempCDisplay}${thresholdCInline}</div>
+      </div>
+      <!-- Gauge fills remaining width -->
+      <div class="flex-1">
+        <div class="relative w-full h-1.5 bg-gray-700 rounded-full overflow-hidden">
+          <div class="absolute h-full ${stateInfo.gaugeClass} transition-all duration-300"
+               style="width: ${percentage}%"></div>
+        </div>
+      </div>
     </div>
   `;
 
@@ -770,30 +969,41 @@ function createSensorCard(sensor) {
 function createFanCard(fan) {
   const card = document.createElement('div');
 
-  // Determine state color and label
-  const stateInfo = getSensorStateInfo(fan.state);
-
-  // Determine if fan should be spinning (normal or warning states)
-  const isOperational = parseInt(fan.state) === 1 || parseInt(fan.state) === 2;
+  // Determine state color and label, with RPM-based inference when state is absent
+  const hasState = fan.state != null && fan.state !== '' && !Number.isNaN(parseInt(fan.state));
   const hasRpm = fan.rpm != null && fan.rpm !== '';
+  const rpm = hasRpm ? Number(fan.rpm) : null;
 
-  card.className = 'bg-gray-800 rounded-lg p-3 border-l-4 min-h-[160px] flex flex-col ' + stateInfo.borderClass;
+  let stateInfo;
+  if (hasState) {
+    stateInfo = getSensorStateInfo(fan.state);
+  } else if (hasRpm) {
+    // lm-sensors: infer from RPM
+    stateInfo = rpm > 0
+      ? { label: 'Spinning',  borderClass: 'border-green-500', badgeClass: 'bg-green-900/40 text-green-300', textClass: 'text-green-400' }
+      : { label: 'Idle',      borderClass: 'border-gray-500',  badgeClass: 'bg-gray-700 text-gray-400',      textClass: 'text-gray-400' };
+  } else {
+    stateInfo = getSensorStateInfo(null);
+  }
+
+  // Sub-label line under the RPM — only shown when we have an explicit state
+  const isOperational = hasState && (parseInt(fan.state) === 1 || parseInt(fan.state) === 2);
+  const showSubLabel = hasState;
+  const subLabel = showSubLabel ? (isOperational ? 'Operational' : 'Not Running') : '';
+
+  card.className = 'bg-gray-800 rounded-lg p-2 border-l-4 flex flex-col items-center justify-center gap-1 ' + stateInfo.borderClass;
   card.innerHTML = `
-    <div class="flex items-center justify-between mb-3">
-      <h4 class="text-sm font-medium text-white truncate">${escapeHtml(fan.description)}</h4>
-      <span class="text-xs px-2 py-1 rounded ${stateInfo.badgeClass}">${stateInfo.label}</span>
-    </div>
-    
-    <!-- Fan Icon -->
-    <div class="flex flex-col items-center justify-center flex-1">
-      <svg class="w-12 h-12 ${stateInfo.textClass}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-      </svg>
-      ${hasRpm ? `<div class="text-lg font-bold ${stateInfo.textClass} mt-2">${escapeHtml(String(fan.rpm))} RPM</div>` : ''}
-      <div class="text-xs text-gray-400 mt-2 text-center">
-        ${isOperational ? 'Operational' : 'Not Running'}
-      </div>
-    </div>
+    <!-- Fan icon -->
+    <svg class="w-8 h-8 ${stateInfo.textClass}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+    </svg>
+
+    <!-- RPM -->
+    ${hasRpm ? `<div class="text-sm font-semibold ${stateInfo.textClass} leading-none">${escapeHtml(String(fan.rpm))} RPM</div>` : ''}
+    ${showSubLabel ? `<div class="text-xs text-gray-400 text-center leading-none">${subLabel}</div>` : ''}
+
+    <!-- Description -->
+    <h4 class="text-xs text-gray-400 text-center truncate w-full px-1 mt-0.5" title="${escapeHtml(fan.description)}">${escapeHtml(fan.description)}</h4>
   `;
 
   return card;
@@ -826,6 +1036,51 @@ function inferSupplyColor(description) {
   if (d.includes('fuser'))   return { swatch: 'bg-purple-500', label: 'Fuser',  bar: 'bg-purple-500', text: 'text-purple-400', border: 'border-purple-500' };
   if (d.includes('drum'))    return { swatch: 'bg-indigo-500', label: 'Drum',   bar: 'bg-indigo-500', text: 'text-indigo-400', border: 'border-indigo-500' };
   return null;
+}
+
+// Decode component power-supply state integer → display metadata
+function getPsuStateInfo(state) {
+  const s = parseInt(state);
+  if (isNaN(s)) {
+    // Inventory-only record (ENTITY-MIB has no state sensor)
+    return { label: 'Unknown', borderClass: 'border-gray-500', badgeClass: 'bg-gray-700 text-gray-300', textClass: 'text-gray-400' };
+  }
+  const map = {
+    1: { label: 'Present',   borderClass: 'border-green-500', badgeClass: 'bg-green-900/50 text-green-300', textClass: 'text-green-400' },
+    2: { label: 'Not Present', borderClass: 'border-gray-500', badgeClass: 'bg-gray-700 text-gray-400',   textClass: 'text-gray-500' },
+    3: { label: 'Present',   borderClass: 'border-green-500', badgeClass: 'bg-green-900/50 text-green-300', textClass: 'text-green-400' },
+    4: { label: 'Powered Off', borderClass: 'border-yellow-500', badgeClass: 'bg-yellow-900/50 text-yellow-300', textClass: 'text-yellow-400' },
+    5: { label: 'Warning',   borderClass: 'border-yellow-500', badgeClass: 'bg-yellow-900/50 text-yellow-300', textClass: 'text-yellow-400' },
+    6: { label: 'Critical',  borderClass: 'border-orange-500', badgeClass: 'bg-orange-900/50 text-orange-300', textClass: 'text-orange-400' },
+    7: { label: 'Failed',    borderClass: 'border-red-500',    badgeClass: 'bg-red-900/50 text-red-300',    textClass: 'text-red-400' },
+  };
+  return map[s] || { label: `State ${s}`, borderClass: 'border-gray-500', badgeClass: 'bg-gray-700 text-gray-300', textClass: 'text-gray-400' };
+}
+
+// Create a power supply card (inventory or state-bearing)
+function createPowerSupplyCard(psu) {
+  const card = document.createElement('div');
+
+  const stateInfo = getPsuStateInfo(psu.state);
+  const location    = psu.location    ? escapeHtml(String(psu.location))    : '—';
+  const description = psu.description ? escapeHtml(String(psu.description)) : null;
+  const serialNo    = psu.serial_no   ? escapeHtml(String(psu.serial_no))   : null;
+
+  card.className = 'bg-gray-800 rounded-lg p-2 border-l-4 flex flex-col items-center justify-center gap-1 ' + stateInfo.borderClass;
+  card.innerHTML = `
+    <!-- PSU icon -->
+    <svg class="w-7 h-7 ${stateInfo.textClass}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+        d="M3 7h18M3 7a2 2 0 00-2 2v8a2 2 0 002 2h18a2 2 0 002-2V9a2 2 0 00-2-2M3 7V5a2 2 0 012-2h14a2 2 0 012 2v2" />
+    </svg>
+
+    <!-- Label (description if set, otherwise location) -->
+    <h4 class="text-xs font-medium text-white text-center truncate w-full px-1 leading-none mt-0.5"
+        title="${description || location}">${description || location}</h4>
+    ${serialNo ? `<div class="text-xs text-gray-500 text-center truncate w-full px-1 leading-none" title="S/N: ${serialNo}">S/N: ${serialNo}</div>` : ''}
+  `;
+
+  return card;
 }
 
 // Create a printer supply card with a level gauge and toner-color awareness
@@ -909,6 +1164,8 @@ function decodeFilesystemType(typeOid) {
     '1.3.6.1.2.1.25.2.1.8':  'RAM Disk',
     '1.3.6.1.2.1.25.2.1.9':  'Flash Memory',
     '1.3.6.1.2.1.25.2.1.10': 'Network Disk',
+    // Vendor-specific types injected by the backend
+    'aggregate':              'Aggregate',
   };
   return map[typeOid] || typeOid || 'Unknown';
 }
@@ -940,16 +1197,17 @@ function createFilesystemCard(fs) {
 
   card.className = `bg-gray-800 rounded-lg p-3 border-l-4 ${borderColor}`;
   card.innerHTML = `
-    <div class="flex items-start justify-between gap-2 mb-2">
+    <div class="flex items-start justify-between gap-2 mb-1.5">
       <span class="text-sm font-semibold text-white font-mono truncate" title="${escapeHtml(fs.mount_point || '/')}">${escapeHtml(fs.mount_point || '/')}</span>
       <span class="text-xs px-1.5 py-0.5 rounded bg-gray-700 text-gray-300 whitespace-nowrap flex-shrink-0">${escapeHtml(typeLabel)}</span>
     </div>
 
-    <div class="${textColor} text-2xl font-bold leading-none mb-2">${pctText}%</div>
-
-    <!-- Capacity gauge -->
-    <div class="relative w-full h-2 bg-gray-700 rounded-full overflow-hidden mb-2">
-      <div class="absolute h-full ${barColor} transition-all duration-300 rounded-full" style="width: ${pct}%"></div>
+    <!-- Inline percent + gauge -->
+    <div class="flex items-center gap-2 mb-2">
+      <span class="${textColor} text-sm font-bold w-12 flex-shrink-0">${pctText}%</span>
+      <div class="flex-1 relative h-2 bg-gray-700 rounded-full overflow-hidden">
+        <div class="absolute h-full ${barColor} transition-all duration-300 rounded-full" style="width: ${pct}%"></div>
+      </div>
     </div>
 
     <div class="grid grid-cols-3 gap-1 text-xs">
@@ -1075,6 +1333,85 @@ function decodeCdpCapabilities(capHex) {
 }
 
 // Create a neighbor card showing CDP/LLDP adjacency details
+function createAPCard(ap) {
+  const card = document.createElement('div');
+
+  const status = String(ap.status ?? '').toLowerCase();
+
+  let borderColor, dotColor, statusLabel;
+  if (status === 'up' || status === '1') {
+    borderColor = 'border-emerald-500';
+    dotColor    = 'bg-emerald-400';
+    statusLabel = 'Up';
+  } else if (status === 'down' || status === '2') {
+    borderColor = 'border-red-500';
+    dotColor    = 'bg-red-500';
+    statusLabel = 'Down';
+  } else {
+    borderColor = 'border-gray-600';
+    dotColor    = 'bg-gray-500';
+    statusLabel = 'Unknown';
+  }
+
+  const name   = ap.name   || ap.index || '?';
+  const ip     = ap.ip     || '';
+  const serial = ap.serial || '';
+
+  // Shorten name for the card face — drop common AP prefix patterns
+  const shortName = name.replace(/^(AP[-_]?|access[-_]?point[-_]?)/i, '').trim() || name;
+
+  const tooltipContent = `
+    <div class="font-semibold text-sm mb-2 pb-2 border-b border-gray-700 truncate" title="${escapeHtml(name)}">${escapeHtml(name)}</div>
+    <div class="space-y-1 text-xs">
+      <div class="flex justify-between gap-2">
+        <span class="text-gray-400">Status</span>
+        <span class="${status === 'up' || status === '1' ? 'text-emerald-400' : status === 'down' || status === '2' ? 'text-red-400' : 'text-gray-400'}">${escapeHtml(statusLabel)}</span>
+      </div>
+      ${ip ? `<div class="flex justify-between gap-2"><span class="text-gray-400">IP</span><span class="text-white font-mono">${escapeHtml(ip)}</span></div>` : ''}
+      ${serial ? `<div class="flex justify-between gap-2"><span class="text-gray-400">Serial</span><span class="text-white font-mono">${escapeHtml(serial)}</span></div>` : ''}
+    </div>
+  `;
+
+  card.className = `relative bg-gray-800 rounded-lg p-1.5 border-2 ${borderColor} hover:shadow-lg transition-all cursor-pointer group`;
+  card.innerHTML = `
+    <div class="flex flex-col items-center justify-center h-12">
+      <div class="w-2.5 h-2.5 rounded-full ${dotColor} mb-1 flex-shrink-0"></div>
+      <div class="text-xs font-medium text-white text-center truncate w-full px-0.5" title="${escapeHtml(name)}">${escapeHtml(shortName)}</div>
+      ${ip ? `<div class="text-xs text-gray-400 truncate w-full text-center px-0.5">${escapeHtml(ip)}</div>` : ''}
+    </div>
+
+    <!-- Tooltip -->
+    <div class="interface-tooltip absolute bottom-full left-0 mb-2 hidden group-hover:block z-50 w-64 pointer-events-none">
+      <div class="bg-gray-900 text-white rounded-lg p-3 shadow-2xl border-2 border-gray-600">
+        ${tooltipContent}
+        <div class="tooltip-arrow absolute top-full left-6 -mt-0.5">
+          <div class="border-8 border-transparent border-t-gray-600"></div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Reuse same tooltip repositioning logic as interface cards
+  card.addEventListener('mouseenter', function() {
+    const tooltip = this.querySelector('.interface-tooltip');
+    const arrow   = this.querySelector('.tooltip-arrow');
+    if (tooltip) {
+      setTimeout(() => {
+        const rect = tooltip.getBoundingClientRect();
+        if (rect.right > window.innerWidth) {
+          tooltip.classList.replace('left-0', 'right-0');
+          arrow.classList.replace('left-6', 'right-6');
+        } else {
+          tooltip.classList.replace('right-0', 'left-0');
+          arrow.classList.replace('right-6', 'left-6');
+        }
+      }, 10);
+    }
+  });
+
+  return card;
+}
+
 function createNeighborCard(neighbor) {
   const card = document.createElement('div');
 
@@ -1102,26 +1439,26 @@ function createNeighborCard(neighbor) {
         <svg class="w-4 h-4 text-indigo-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" />
         </svg>
-        <span class="text-sm font-semibold text-white truncate">${escapeHtml(neighbor.device_id || 'Unknown')}</span>
+        <span class="text-sm font-semibold text-white truncate" title="${escapeHtml(neighbor.device_id || 'Unknown')}">${escapeHtml(neighbor.device_id || 'Unknown')}</span>
       </div>
-      ${neighbor.address ? `<span class="text-xs text-gray-400 font-mono flex-shrink-0">${escapeHtml(neighbor.address)}</span>` : ''}
+      ${neighbor.address ? `<span class="text-xs text-gray-400 font-mono flex-shrink-0" title="${escapeHtml(neighbor.address)}">${escapeHtml(neighbor.address)}</span>` : ''}
     </div>
 
     <div class="space-y-1 text-xs mb-2">
       ${neighbor.port ? `
       <div class="flex items-center gap-1.5">
         <span class="text-gray-500 w-16 flex-shrink-0">Remote Port</span>
-        <span class="text-gray-200 font-mono truncate">${escapeHtml(neighbor.port)}</span>
+        <span class="text-gray-200 font-mono truncate" title="${escapeHtml(neighbor.port)}">${escapeHtml(neighbor.port)}</span>
       </div>` : ''}
       ${platform ? `
       <div class="flex items-center gap-1.5">
         <span class="text-gray-500 w-16 flex-shrink-0">Platform</span>
-        <span class="text-gray-200 truncate">${escapeHtml(platform)}</span>
+        <span class="text-gray-200 truncate" title="${escapeHtml(platform)}">${escapeHtml(platform)}</span>
       </div>` : ''}
       ${versionShort ? `
       <div class="flex items-center gap-1.5">
         <span class="text-gray-500 w-16 flex-shrink-0">Version</span>
-        <span class="text-gray-400 truncate italic">${escapeHtml(versionShort)}</span>
+        <span class="text-gray-400 truncate italic" title="${escapeHtml(versionShort)}">${escapeHtml(versionShort)}</span>
       </div>` : ''}
     </div>
 
@@ -1260,4 +1597,111 @@ function formatUptime(hundredthsOfSeconds) {
   if (minutes > 0) parts.push(`${minutes}m`);
 
   return parts.length > 0 ? parts.join(' ') : '0m';
+}
+
+// Create a compact RAID volume card for the grid
+function createRaidVolumeCard(vol) {
+  const card = document.createElement('div');
+
+  const name = vol.name     || 'Unknown';
+  const plex = vol.plex_num != null ? vol.plex_num : '—';
+  const rg   = vol.rg_index != null ? vol.rg_index : '—';
+
+  const plexTitle = 'A plex is one full copy of the volume\'s data. Plex 0 is the primary copy; Plex 1 exists only on mirrored (SyncMirror) aggregates.';
+  const rgTitle   = 'A RAID group is the set of drives that share parity within this volume. Large volumes span multiple RAID groups.';
+
+  card.className = 'bg-gray-800 rounded-lg p-2.5 border border-gray-600 hover:border-blue-500 transition-colors w-36 flex-shrink-0';
+  card.innerHTML = `
+    <div class="flex items-center gap-1.5 mb-1.5">
+      <svg class="w-3.5 h-3.5 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+          d="M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7c0-2-1-3-3-3H7C5 4 4 5 4 7zm4 0h8M8 12h8M8 17h5" />
+      </svg>
+      <span class="text-xs font-mono font-semibold text-white truncate" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
+    </div>
+    <div class="text-xs text-gray-400" title="${escapeHtml(plexTitle)} ${escapeHtml(rgTitle)}">Plex ${escapeHtml(String(plex))} &middot; RG ${escapeHtml(String(rg))}</div>
+  `;
+
+  return card;
+}
+
+// Create a disk-slot card for the disk grid — no hover, all info visible inline
+function createDiskCard(disk) {
+  const card = document.createElement('div');
+
+  const state   = disk.state || '';
+  const usedPct = typeof disk.used_pct === 'number' ? disk.used_pct : 0;
+  const pct     = Math.min(Math.max(usedPct * 100, 0), 100);
+
+  // Strip "data disk " / "spare disk " prefix — keep just the slot address
+  const rawDesc   = disk.description || `Disk ${disk.index}`;
+  const shortDesc = rawDesc.replace(/^(data disk\s+|spare disk\s+)/i, '').trim() || rawDesc;
+
+  let borderClass, stateColor, stateLabel;
+  switch (state) {
+    case 'ACTIVE':
+      borderClass = 'border-emerald-500'; stateColor = 'text-emerald-400'; stateLabel = 'Active';        break;
+    case 'SPARE':
+      borderClass = 'border-blue-500';    stateColor = 'text-blue-400';    stateLabel = 'Spare';         break;
+    case 'RECONSTRUCTING':
+      borderClass = 'border-yellow-500';  stateColor = 'text-yellow-400';  stateLabel = 'Rebuilding';    break;
+    case 'FAILED':
+      borderClass = 'border-red-500';     stateColor = 'text-red-400';     stateLabel = 'Failed';        break;
+    default:
+      borderClass = 'border-gray-600';    stateColor = 'text-gray-400';    stateLabel = state || 'Unknown';
+  }
+
+  const barColor = state === 'FAILED'         ? 'bg-red-500'
+                 : state === 'RECONSTRUCTING' ? 'bg-yellow-500'
+                 : state === 'SPARE'          ? 'bg-blue-500'
+                 : 'bg-emerald-500';
+
+  const totalKb  = disk.total_kb || 0;
+  const totalStr = totalKb >= 1048576 ? `${(totalKb / 1048576).toFixed(0)} GB`
+                 : totalKb >= 1024    ? `${(totalKb / 1024).toFixed(0)} MB`
+                 : totalKb > 0        ? `${totalKb} KB`
+                 : '—';
+
+  card.className = `bg-gray-800 rounded-lg p-2 border-2 ${borderClass}`;
+  card.innerHTML = `
+    <div class="text-xs font-mono font-semibold text-white truncate mb-1 leading-tight"
+         title="${escapeHtml(rawDesc)}">${escapeHtml(shortDesc)}</div>
+    <div class="flex items-center justify-between mb-1.5 leading-tight">
+      <span class="${stateColor} text-xs font-medium">${escapeHtml(stateLabel)}</span>
+      <span class="text-gray-400 text-xs">${escapeHtml(totalStr)}</span>
+    </div>
+    <div class="flex items-center gap-1">
+      <div class="flex-1 h-1.5 bg-gray-700 rounded-full overflow-hidden">
+        <div class="h-full ${barColor} rounded-full transition-all duration-300" style="width: ${pct}%"></div>
+      </div>
+      <span class="${stateColor} text-xs font-mono flex-shrink-0 w-7 text-right">${pct.toFixed(0)}%</span>
+    </div>
+  `;
+
+  return card;
+}
+
+// Decode ups.output.source string → { label, cls } for display
+function upsOutputSourceInfo(source) {
+  switch (source) {
+    case 'normal':    return { label: 'AC Normal',  cls: 'text-green-400' };
+    case 'battery':   return { label: 'On Battery', cls: 'text-yellow-400' };
+    case 'bypass':    return { label: 'Bypass',     cls: 'text-blue-400' };
+    case 'booster':   return { label: 'Booster',    cls: 'text-yellow-400' };
+    case 'reducer':   return { label: 'Reducer',    cls: 'text-yellow-400' };
+    case 'none':      return { label: 'None',       cls: 'text-gray-400' };
+    default:          return { label: source || 'Unknown', cls: 'text-gray-400' };
+  }
+}
+
+// Decode ups.battery.status string → { label, cls } for display
+function upsBatteryStatusInfo(status) {
+  switch (status) {
+    case 'normal':     return { label: 'Normal',      cls: 'text-green-400' };
+    case 'low_battery':return { label: 'Low Battery', cls: 'text-yellow-400' };
+    case 'depleted':   return { label: 'Depleted',    cls: 'text-red-400' };
+    case 'discharging':return { label: 'Discharging', cls: 'text-yellow-400' };
+    case 'bypass':     return { label: 'Bypass',      cls: 'text-blue-400' };
+    default:           return { label: status || 'Unknown', cls: 'text-gray-400' };
+  }
 }

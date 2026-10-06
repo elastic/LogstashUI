@@ -42,6 +42,24 @@
       }
     }
   },
+  "sum": {
+    "label": "Sum fields",
+    "description": "Sums multiple numeric GET fields into a single output field. Useful for combining per-state values before further normalisation (e.g. user + system CPU before scaling to 0.0–1.0).",
+    "applies_to": ["get"],
+    "has_target_field": false,
+    "inputs": {
+      "input_fields": {
+        "type": "field_list",
+        "required": true,
+        "description": "Fields to add together (e.g. system.cpu.pct.user, system.cpu.pct.system)."
+      },
+      "output_field": {
+        "type": "string",
+        "required": true,
+        "description": "Field to write the result to (e.g. system.cpu.active.pct)."
+      }
+    }
+  },
   "ratio": {
     "label": "Calculate ratio",
     "description": "Derives ratios from two input fields. Any two of {used, free, total} are sufficient to compute all percentages.",

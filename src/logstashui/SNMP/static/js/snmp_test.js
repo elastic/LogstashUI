@@ -497,11 +497,24 @@ document.addEventListener('DOMContentLoaded', function() {
         walkCopyBtn.addEventListener('click', function() {
             if (!walkAllResults.length) return;
             const text = walkAllResults.map(r => `${r.oid}\t${r.value}`).join('\n');
-            navigator.clipboard.writeText(text).then(() => {
+            const flash = () => {
                 const orig = walkCopyBtn.innerHTML;
                 walkCopyBtn.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg> Copied!`;
                 setTimeout(() => { walkCopyBtn.innerHTML = orig; }, 2000);
-            });
+            };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(flash);
+            } else {
+                // Fallback for non-HTTPS contexts
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                ta.style.cssText = 'position:fixed;opacity:0';
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+                flash();
+            }
         });
     }
 

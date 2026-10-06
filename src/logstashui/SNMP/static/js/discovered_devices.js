@@ -6,6 +6,10 @@
 
 // Discovered Devices Modal Functions
 
+// Whether to include DNS-resolved devices that did not respond via SNMP.
+// Toggled by the checkbox in discovered_devices_content.html.
+let _showNonSnmpDevices = false;
+
 function openDiscoveredDevicesModal() {
     const modal = document.getElementById('discoveredDevicesModal');
     if (!modal) return;
@@ -23,15 +27,24 @@ function closeDiscoveredDevicesModal() {
     document.body.style.overflow = 'auto';
 }
 
+/** Toggle DNS-only device visibility and reload the table. */
+function toggleNonSnmpDevices() {
+    const checkbox = document.getElementById('showNonSnmpToggle');
+    _showNonSnmpDevices = checkbox ? checkbox.checked : !_showNonSnmpDevices;
+    loadDiscoveredDevices();
+}
+
 function loadDiscoveredDevices() {
     // Show loading state
     document.getElementById('discoveredDevicesLoading').classList.remove('hidden');
     document.getElementById('discoveredDevicesError').classList.add('hidden');
     document.getElementById('discoveredDevicesEmpty').classList.add('hidden');
     document.getElementById('discoveredDevicesTable').classList.add('hidden');
+    document.getElementById('discoveredDevicesControls').classList.add('hidden');
     
     // Fetch discovered devices from API
-    fetch('/SNMP/DiscoveredDevices/', {
+    const url = `/SNMP/DiscoveredDevices/?show_non_snmp=${_showNonSnmpDevices}`;
+    fetch(url, {
         method: 'GET',
         headers: {
             'Content-Type': 'application/json',
@@ -43,14 +56,28 @@ function loadDiscoveredDevices() {
         document.getElementById('discoveredDevicesLoading').classList.add('hidden');
         
         if (data.success) {
-            const hasDiscovered = data.devices && data.devices.length > 0;
+            // Controls (toggle + banner) are always shown once we have a response
+            // so the user can enable the DNS toggle even when 0 SNMP devices responded.
+            document.getElementById('discoveredDevicesControls').classList.remove('hidden');
+
+            // When the DNS toggle is on, filter locally: only keep rows where
+            // host_hostname resolved to a real name (not a bare IP address).
+            // The backend still returns everything; we just don't render noise.
+            let devicesToShow = data.devices || [];
+            if (_showNonSnmpDevices) {
+                devicesToShow = devicesToShow.filter(
+                    d => d.host_hostname && !_isIpAddress(d.host_hostname)
+                );
+            }
+
+            const hasDiscovered = devicesToShow.length > 0;
             if (hasDiscovered) {
                 // Show table and populate it
                 document.getElementById('discoveredDevicesTable').classList.remove('hidden');
-                populateDiscoveredDevicesTable(data.devices);
-                document.getElementById('discoveredDevicesCount').textContent = data.total;
+                populateDiscoveredDevicesTable(devicesToShow);
+                document.getElementById('discoveredDevicesCount').textContent = devicesToShow.length;
             } else {
-                // Show empty state
+                // Show empty state (controls are still visible above it)
                 document.getElementById('discoveredDevicesEmpty').classList.remove('hidden');
                 document.getElementById('discoveredDevicesCount').textContent = '0';
             }
@@ -140,7 +167,19 @@ function populateDiscoveredDevicesTable(devices) {
         // Prepare OS description for tooltip (sysDescr from SNMP)
         const sysDescr = device.sys_descr || 'No description available';
         const hostName = device.host_name || 'N/A';
-        
+
+        // Non-SNMP devices: SNMP timed out. Dim the row slightly.
+        const isNonSnmp = device.snmp_responded === false;
+        if (isNonSnmp) {
+            row.className = 'hover:bg-gray-700/50 opacity-60';
+        }
+
+        // Show the "DNS only" pill next to the hostname, but only when DNS
+        // actually resolved a real name (resolvedHostname is non-null).
+        const dnsOnlyBadge = (isNonSnmp && resolvedHostname)
+            ? `<span class="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-500/20 text-amber-300 border border-amber-500/40" title="Hostname resolved via DNS; device did not respond to SNMP">DNS only</span>`
+            : '';
+
         row.innerHTML = `
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                 <span class="device-name-tooltip cursor-help border-b border-dotted border-gray-500 hover:border-blue-400 hover:text-blue-300 transition-colors" data-tooltip="${escapeHtml(sysDescr)}">
@@ -148,7 +187,7 @@ function populateDiscoveredDevicesTable(devices) {
                 </span>
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                ${hostnameCell}
+                ${hostnameCell}${dnsOnlyBadge}
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                 ${ipCell}

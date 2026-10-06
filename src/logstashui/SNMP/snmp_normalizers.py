@@ -79,6 +79,14 @@ def _apply_normalizers(normalizers, id_counter=None):
                             filters.extend(filter_components)
                         else:
                             filters.append(filter_components)
+            elif operation == 'sum':
+                if scope in ('get', 'table'):
+                    filter_components = _generate_sum_get_filter(normalizer_list, scope, id_counter)
+                    if filter_components:
+                        if isinstance(filter_components, list):
+                            filters.extend(filter_components)
+                        else:
+                            filters.append(filter_components)
             elif operation == 'translate':
                 if scope in ('get', 'table'):
                     filter_components = _generate_translate_filter(normalizer_list, id_counter)
@@ -120,12 +128,20 @@ def _generate_multiply_get_filter(normalizers, scope='get', id_counter=None):
         # e.g., "system.cpu.total.norm.pct" -> "[system][cpu][total][norm][pct]"
         field_parts = field.split('.')
         field_path = ''.join(f'[{part}]' for part in field_parts)
-        
+
+        # Use output_field if specified, otherwise overwrite the source field in-place
+        output_field = normalizer.get('params', {}).get('output_field', '').strip()
+        if output_field:
+            output_parts = output_field.split('.')
+            output_path = ''.join(f'[{part}]' for part in output_parts)
+        else:
+            output_path = field_path
+
         # Generate Ruby code for this field
         ruby_lines.append(
             f'v = event.get("{field_path}")\n'
             f'if v\n'
-            f'  event.set("{field_path}", v.to_f * {multiply_value})\n'
+            f'  event.set("{output_path}", v.to_f * {multiply_value})\n'
             f'end'
         )
     
@@ -140,7 +156,9 @@ def _generate_multiply_get_filter(normalizers, scope='get', id_counter=None):
         field = normalizer.get('target', {}).get('field')
         multiply_value = normalizer.get('params', {}).get('multiply_value')
         if field and multiply_value is not None:
-            field_list.append(f"  - {field} × {multiply_value}")
+            output_field = normalizer.get('params', {}).get('output_field', '').strip()
+            dest = f" → {output_field}" if output_field and output_field != field else ""
+            field_list.append(f"  - {field} × {multiply_value}{dest}")
     
     comment_text = "Normalizer: Multiply\n"
     comment_text += "Multiplies field values by configured factors:\n"
@@ -297,6 +315,98 @@ def _generate_ratio_get_filter(normalizers, scope='get', id_counter=None):
                 "code": ruby_code
             }
         }
+    ]
+
+
+def _generate_sum_get_filter(normalizers, scope='get', id_counter=None):
+    """Emit one Ruby filter that sums lists of fields for a get or table scope.
+
+    Each normalizer entry must supply ``input_fields`` (a list of field names to
+    add together) and ``output_field`` (the field to write the result to).  All
+    input fields must be non-nil for the sum to be written; missing fields are
+    silently skipped so partially-populated events do not produce misleading
+    zeros.
+
+    Args:
+        normalizers: Sum normalizers for ``scope``.
+        scope: ``get`` or ``table``; included in plugin IDs so scopes cannot
+            collide with other sum filters in the same pipeline.
+        id_counter: Shared mutable ID map.
+
+    Returns:
+        List of Logstash filter component dicts, or ``None`` when there is
+        nothing to emit.
+
+    Examples:
+        >>> n = [{
+        ...     'operation': 'sum',
+        ...     'target': {'scope': 'get'},
+        ...     'params': {
+        ...         'input_fields': ['system.cpu.pct.user', 'system.cpu.pct.system'],
+        ...         'output_field': 'system.cpu.active.pct',
+        ...     },
+        ... }]
+        >>> result = _generate_sum_get_filter(n)
+        >>> result[1]['plugin']
+        'ruby'
+    """
+    if id_counter is None:
+        id_counter = {}
+    if not normalizers:
+        return None
+
+    ruby_lines = []
+    desc_lines = []
+
+    for normalizer in normalizers:
+        params = normalizer.get('params', {})
+        input_fields = params.get('input_fields', [])
+        output_field = params.get('output_field', '').strip()
+
+        if not input_fields or not output_field:
+            continue
+
+        output_path = ''.join(f'[{part}]' for part in output_field.split('.'))
+        input_paths = [
+            ''.join(f'[{part}]' for part in f.split('.'))
+            for f in input_fields
+        ]
+
+        # Guard: only write when every input field is present.
+        nil_checks = ' && '.join(f'event.get("{p}")' for p in input_paths)
+        sum_expr = ' + '.join(f'event.get("{p}").to_f' for p in input_paths)
+
+        ruby_lines.append(
+            f'if {nil_checks}\n'
+            f'  event.set("{output_path}", {sum_expr})\n'
+            f'end'
+        )
+        fields_list = ' + '.join(input_fields)
+        desc_lines.append(f'  - {fields_list} → {output_field}')
+
+    if not ruby_lines:
+        return None
+
+    ruby_code = '\n'.join(ruby_lines)
+
+    comment_text = 'Normalizer: Sum\n'
+    comment_text += 'Sums input fields into a single output field:\n'
+    comment_text += '\n'.join(desc_lines)
+
+    base = f'normalizer_sum_{scope}'
+    return [
+        {
+            'id': _next_id(f'{base}_comment', id_counter),
+            'type': 'filter',
+            'plugin': 'comment',
+            'config': {'text': comment_text},
+        },
+        {
+            'id': _next_id(base, id_counter),
+            'type': 'filter',
+            'plugin': 'ruby',
+            'config': {'code': ruby_code},
+        },
     ]
 
 

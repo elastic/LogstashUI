@@ -1,0 +1,14 @@
+{
+  "official_key": "versa_flexvnf",
+  "name": "versa_flexvnf",
+  "description": "Versa FlexVNF/SD-WAN appliance: software version and device UUID from the Versa enterprise MIB (OID 1.3.6.1.4.1.42359). Complements generic_system, generic_interfaces, and generic_host_system_metrics.",
+  "vendor": "Versa Networks",
+  "product": "FlexVNF",
+  "model": "Any",
+  "get": {
+    "observer.firmware_version": "1.3.6.1.4.1.42359.2.2.1.1.6.6.0",
+    "observer.serial_number": "1.3.6.1.4.1.42359.2.2.1.1.7.3.0"
+  },
+  "walk": {},
+  "table": {}
+}

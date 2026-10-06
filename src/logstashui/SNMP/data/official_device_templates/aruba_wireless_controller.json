@@ -1,0 +1,23 @@
+{
+  "official_key": "aruba_wireless_controller",
+  "name": "aruba_wireless_controller",
+  "type": "Wireless Controller",
+  "description": "System health, CPU, memory, filesystem, total AP and client counts, per-AP status, and per-radio band/channel for Aruba 7000/7200-series wireless LAN controllers.",
+  "vendor": "Aruba",
+  "product": "7000/7200 Series",
+  "model": "Any",
+  "profiles": [
+    "generic_system",
+    "generic_interfaces",
+    "aruba_wireless_controller"
+  ],
+  "matching_rules": [
+    "ArubaOS",
+    "Aruba7010",
+    "Aruba7020",
+    "Aruba7205",
+    "Aruba7210",
+    "Aruba7220",
+    "Aruba7240"
+  ]
+}

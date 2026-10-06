@@ -338,21 +338,59 @@ class AgentBuilder:
 
     # ── Private: comparison ────────────────────────────────────────────────────
 
+    # Keys that the Kibana Agent Builder API accepts on write but strips from
+    # the `configuration` object when returning the resource on read.  Excluding
+    # them before comparison prevents permanent false "needs update" results.
+    _AGENT_CONFIG_WRITE_ONLY_KEYS = frozenset({'skill_ids', 'tools'})
+
+    @staticmethod
+    def _normalize(resource_dict, resource_type):
+        """Return a copy with write-only configuration keys removed for stable comparison.
+
+        Kibana accepts certain keys (e.g. ``skill_ids``, ``tools``) inside the
+        agent ``configuration`` object on write but does not include them in the
+        GET response.  Stripping them from both sides before comparison prevents
+        permanent false "needs update" results.
+        """
+        if resource_type != RESOURCE_AGENT:
+            return resource_dict
+        result = dict(resource_dict)
+        config = dict(result.get('configuration') or {})
+        for k in AgentBuilder._AGENT_CONFIG_WRITE_ONLY_KEYS:
+            config.pop(k, None)
+        result['configuration'] = config
+        return result
+
     @staticmethod
     def _differs(desired, current, resource_type):
         """Return True if any comparable field differs between desired and current."""
+        d = AgentBuilder._normalize(desired, resource_type)
+        c = AgentBuilder._normalize(current, resource_type)
         for key in _COMPARE_KEYS.get(resource_type, []):
-            if desired.get(key) != current.get(key):
+            if d.get(key) != c.get(key):
                 return True
         return False
 
     @staticmethod
     def _diff_fields(desired, current, resource_type):
         """Return the list of field names that differ between desired and current."""
-        return [
+        d = AgentBuilder._normalize(desired, resource_type)
+        c = AgentBuilder._normalize(current, resource_type)
+        diffs = [
             k for k in _COMPARE_KEYS.get(resource_type, [])
-            if desired.get(k) != current.get(k)
+            if d.get(k) != c.get(k)
         ]
+        if diffs:
+            for k in diffs:
+                logger.debug(
+                    "agent_builder diff [%s/%s] field=%r  desired=%s  current=%s",
+                    resource_type,
+                    desired.get('id', '?'),
+                    k,
+                    json.dumps(d.get(k), ensure_ascii=False)[:2000],
+                    json.dumps(c.get(k), ensure_ascii=False)[:2000],
+                )
+        return diffs
 
     # ── Public: check ──────────────────────────────────────────────────────────
 

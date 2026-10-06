@@ -526,6 +526,17 @@ class TestRubyRowRenameStatements:
         assert 'row["a"] = row.delete("1")' in result
         assert 'row["b"] = row.delete("2")' in result
 
+    def test_leaf_siblings_under_shared_nested_parent(self):
+        result = _ruby_row_rename_statements({
+            'inodes.used.count': 'oid7',
+            'inodes.used.pct': 'oid9',
+        })
+        assert result.count('row["inodes"] ||= {}') == 1
+        assert result.count('row["inodes"]["used"] ||= {}') == 1
+        assert 'row["inodes"]["used"]["count"] = row.delete("oid7")' in result
+        assert 'row["inodes"]["used"]["pct"] = row.delete("oid9")' in result
+        assert 'row["inodes"]["used"] = row.delete' not in result
+
 
 # ===========================================================================
 # _avg_var_name
@@ -763,6 +774,124 @@ class TestPaloaltoComponentsProfile:
         template = json.loads(path.read_text(encoding='utf-8'))
         assert 'paloalto_components' in template['profiles']
         assert 'generic_entity_sensor' not in template['profiles']
+
+
+def _prefix_colliding_paths(names):
+    """Return (prefix, child) pairs where prefix is a dotted parent of child.
+
+    Args:
+        names: Iterable of dotted field or column names.
+
+    Returns:
+        List of colliding pairs. Sibling leaves such as ``used.kb`` and
+        ``used.pct`` are not collisions.
+
+    Examples:
+        >>> _prefix_colliding_paths(['inodes.used', 'inodes.used.pct'])
+        [('inodes.used', 'inodes.used.pct')]
+        >>> _prefix_colliding_paths(['used.kb', 'used.pct'])
+        []
+    """
+    names = [n for n in names if isinstance(n, str) and n]
+    return [
+        (a, b)
+        for a in names
+        for b in names
+        if a != b and b.startswith(a + '.')
+    ]
+
+
+class TestNetapp7modeVolumesProfile:
+
+    def _profile(self):
+        import json
+        path = (
+            Path(settings.BASE_DIR)
+            / 'SNMP' / 'data' / 'official_profiles' / 'netapp_7mode_volumes.json'
+        )
+        return json.loads(path.read_text(encoding='utf-8'))
+
+    def _table_code(self, table_name):
+        profile = self._profile()
+        filters = _generate_table_split_filters({'table': profile['table']})
+        for filt in filters:
+            code = filt['config']['code']
+            if f'event.get("[{table_name}]")' in code:
+                return code
+        raise AssertionError(f'no table-split filter for {table_name}')
+
+    def test_filesystem_uses_64bit_kb_oids_and_inode_count(self):
+        cols = self._profile()['table']['storage.filesystem']['columns']
+        assert cols['total.kb'] == '1.3.6.1.4.1.789.1.5.4.1.29'
+        assert cols['used.kb'] == '1.3.6.1.4.1.789.1.5.4.1.30'
+        assert cols['avail.kb'] == '1.3.6.1.4.1.789.1.5.4.1.31'
+        assert cols['inodes.used.count'] == '1.3.6.1.4.1.789.1.5.4.1.7'
+        assert 'inodes.used' not in cols
+        assert 'total.kb.64' not in cols
+        assert 'used.kb.64' not in cols
+        assert 'avail.kb.64' not in cols
+        dropped = {
+            '1.3.6.1.4.1.789.1.5.4.1.3',
+            '1.3.6.1.4.1.789.1.5.4.1.4',
+            '1.3.6.1.4.1.789.1.5.4.1.5',
+        }
+        assert dropped.isdisjoint(cols.values())
+
+    def test_aggregate_uses_64bit_kb_oids(self):
+        cols = self._profile()['table']['storage.aggregate']['columns']
+        assert cols['total.kb'] == '1.3.6.1.4.1.789.1.17.15.2.1.14'
+        assert cols['used.kb'] == '1.3.6.1.4.1.789.1.17.15.2.1.15'
+        assert cols['avail.kb'] == '1.3.6.1.4.1.789.1.17.15.2.1.16'
+        assert 'total.kb.64' not in cols
+        dropped = {
+            '1.3.6.1.4.1.789.1.17.15.2.1.5',
+            '1.3.6.1.4.1.789.1.17.15.2.1.6',
+            '1.3.6.1.4.1.789.1.17.15.2.1.7',
+        }
+        assert dropped.isdisjoint(cols.values())
+
+    def test_inode_percent_normalizer_path_unchanged(self):
+        inode_pct = next(
+            n for n in self._profile()['normalizers']
+            if n.get('target', {}).get('field') == 'storage.filesystem.inodes.used.pct'
+        )
+        assert inode_pct['operation'] == 'multiply'
+        assert inode_pct['params']['multiply_value'] == 0.01
+
+    def test_filesystem_ruby_does_not_index_into_scalars(self):
+        code = self._table_code('storage.filesystem')
+        assert 'row["inodes"]["used"]["count"]' in code
+        assert 'row["inodes"]["used"]["pct"]' in code
+        assert 'row["inodes"]["used"] = row.delete' not in code
+        assert '["kb"]["64"]' not in code
+        assert 'row.delete("1.3.6.1.4.1.789.1.5.4.1.29")' in code
+        assert 'row.delete("1.3.6.1.4.1.789.1.5.4.1.3")' not in code
+
+    def test_aggregate_ruby_does_not_nest_kb_width(self):
+        code = self._table_code('storage.aggregate')
+        assert '["kb"]["64"]' not in code
+        assert 'row.delete("1.3.6.1.4.1.789.1.17.15.2.1.14")' in code
+        assert 'row.delete("1.3.6.1.4.1.789.1.17.15.2.1.5")' not in code
+
+
+class TestOfficialProfileFieldPaths:
+
+    def test_no_prefix_colliding_dotted_paths(self):
+        import json
+        profile_dir = Path(settings.BASE_DIR) / 'SNMP' / 'data' / 'official_profiles'
+        collisions = []
+        for path in sorted(profile_dir.glob('*.json')):
+            data = json.loads(path.read_text(encoding='utf-8'))
+            for section in ('get', 'walk'):
+                hits = _prefix_colliding_paths((data.get(section) or {}).keys())
+                collisions.extend((path.name, section, a, b) for a, b in hits)
+            for table_name, table_data in (data.get('table') or {}).items():
+                cols = (table_data or {}).get('columns') or {}
+                hits = _prefix_colliding_paths(cols.keys())
+                collisions.extend(
+                    (path.name, f'table:{table_name}', a, b) for a, b in hits
+                )
+        assert collisions == []
 
 
 # ===========================================================================

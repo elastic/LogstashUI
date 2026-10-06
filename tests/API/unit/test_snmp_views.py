@@ -592,6 +592,10 @@ class TestDeviceListAllSortFields:
         'ip_address', '-ip_address',
         'hostname', '-hostname',
         'created_at', '-created_at',
+        'credential__name', '-credential__name',
+        'network__name', '-network__name',
+        'device_template__name', '-device_template__name',
+        'location', '-location',
     ]
 
     @pytest.mark.parametrize('sort_by', SORT_FIELDS)

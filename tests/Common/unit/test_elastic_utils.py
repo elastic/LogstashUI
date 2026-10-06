@@ -648,6 +648,27 @@ class TestNormalizeKibanaUrl:
         url = 'https://abc123.us-east-1.aws.found.io'
         assert normalize_kibana_url(url) == url
 
+    # Legacy *.cloud.es.io format -------------------------------------------------
+
+    def test_rewrites_esio_service_label_to_kb(self):
+        """Explicit .es. service label in es.io URL → .kb., TLD stays .es.io."""
+        assert normalize_kibana_url(
+            'https://abc.es.eu-central-1.aws.cloud.es.io:9243'
+        ) == 'https://abc.kb.eu-central-1.aws.cloud.es.io'
+
+    def test_leaves_esio_kibana_host_unchanged(self):
+        """Already-Kibana es.io URLs must not be modified."""
+        url = 'https://abc.kb.eu-central-1.aws.cloud.es.io'
+        assert normalize_kibana_url(url) == url
+
+    def test_does_not_clobber_esio_tld_when_no_service_label(self):
+        """Bare es.io host without a service label must pass through unchanged.
+
+        A naïve find('.es.') would corrupt the TLD into '.kb.io'.
+        """
+        url = 'https://c0843c30628e461c9ff41134a6f57cec.eu-central-1.aws.cloud.es.io'
+        assert normalize_kibana_url(url) == url
+
     def test_empty_and_none(self):
         assert normalize_kibana_url('') == ''
         assert normalize_kibana_url(None) is None

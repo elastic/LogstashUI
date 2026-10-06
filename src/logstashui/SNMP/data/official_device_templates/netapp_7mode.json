@@ -1,0 +1,22 @@
+{
+  "official_key": "netapp_7mode",
+  "name": "netapp_7mode",
+  "type": "Storage Array",
+  "description": "NetApp FAS / ONTAP filers running Data ONTAP 7-Mode. Covers system health, disk inventory, filesystem/aggregate capacity, protocol throughput (NFS, CIFS, iSCSI, FCP), and data-protection status (SnapMirror, SnapVault, SIS).",
+  "vendor": "NetApp",
+  "product": "ONTAP 7-Mode",
+  "model": "Any",
+  "profiles": [
+    "netapp_7mode_system",
+    "netapp_7mode_volumes",
+    "netapp_7mode_disks",
+    "netapp_7mode_protocols",
+    "netapp_7mode_data_protection",
+    "generic_interfaces",
+    "generic_system"
+  ],
+  "matching_rules": [
+    "NetApp Release",
+    "7-Mode"
+  ]
+}

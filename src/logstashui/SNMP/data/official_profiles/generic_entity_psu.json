@@ -1,0 +1,26 @@
+{
+  "official_key": "generic_entity_psu",
+  "name": "generic_entity_psu",
+  "description": "Power supply inventory from ENTITY-MIB for any device that exposes entPhysicalClass=6 (powerSupply) entries. Yields PSU name, description, and serial number. Operational status (health/state) is NOT available from this profile; it requires CISCO-ENVMON-MIB or CISCO-ENTITY-FRU-CONTROL-MIB which must be added separately when present.",
+  "vendor": "Any",
+  "product": "Any",
+  "model": "Any",
+  "get": {},
+  "walk": {},
+  "table": {
+    "component.power_supply": {
+      "columns": {
+        "type": "1.3.6.1.2.1.47.1.1.1.1.5",
+        "location": "1.3.6.1.2.1.47.1.1.1.1.7",
+        "description": "1.3.6.1.2.1.47.1.1.1.1.2",
+        "serial_no": "1.3.6.1.2.1.47.1.1.1.1.11"
+      },
+      "keep_when": {
+        "column": "type",
+        "equals": [
+          "6"
+        ]
+      }
+    }
+  }
+}
