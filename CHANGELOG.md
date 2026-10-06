@@ -2,6 +2,7 @@
 
 ### Changes
 
+- Django `DEBUG` now defaults to **false** natively; `DEBUG=true|1|yes` (case-insensitive) opts back in. Native `logstashui serve` gains the containerized posture: security headers enforced (HTTP→HTTPS redirect via auto-generated TLS unless `LOGSTASHUI_TLS=false` or `LOGSTASHUI_INSECURE_HTTP`), friendly error pages instead of tracebacks, and `LOGSTASHUI_LOG_LEVEL` defaulting to `INFO`. `django_browser_reload` and `/__reload__/` are present only with `DEBUG=true`, and the embedded agent URL default on native becomes `https://logstashagent:9500` (was `http://127.0.0.1:9500`). Docker/Kubernetes deployments are unaffected — they already set `DEBUG=false`.
 - Fix database CI test script. (#203)
 - Remove experimental `standalone` from `freeze_logstgashui.sh` and associated templates. (#201)
 - Remove native Python support for Windows. The only accepted path to run on Windows will be via Docker.

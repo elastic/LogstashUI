@@ -8,6 +8,16 @@ from PipelineManager.models import Connection
 
 import pytest
 
+# A6 neutralization (spec logstashui-django-debug-default-false r2): with the
+# DEBUG default now false, import-time SECURE_SSL_REDIRECT follows TLS_ENABLED
+# (true by default), which 301-redirects plain-HTTP test clients. Django is
+# configured by pytest-django before conftest imports, so this runtime override
+# neutralizes the redirect for the suite. DEBUG stays unset throughout — this
+# is neutralization of the redirect, not masking of the flip.
+from django.conf import settings as _dj_settings
+
+_dj_settings.SECURE_SSL_REDIRECT = False
+
 
 @pytest.fixture
 def request_factory():
