@@ -90,6 +90,8 @@ def build_databases(data_dir: Path) -> dict:
     SQLite (default) stores ``db.sqlite3`` under ``data_dir`` unless
     ``LOGSTASHUI_DB_NAME`` is set, and enables WAL plus ``busy_timeout=20000``.
     PostgreSQL requires host and user; ``sslmode`` defaults to ``prefer``.
+    Its per-process pool defaults to ten connections and disables Django
+    persistent connections so each request returns its connection to the pool.
     MySQL/MariaDB uses the PyMySQL shim (version spoofed for Django 6) with
     utf8mb4. ``CONN_MAX_AGE`` defaults to 60; health checks default on.
 
@@ -134,6 +136,15 @@ def build_databases(data_dir: Path) -> dict:
         _require(["LOGSTASHUI_DB_HOST", "LOGSTASHUI_DB_USER"])
         sslmode = _env("LOGSTASHUI_DB_SSLMODE", "prefer") or "prefer"
         options: dict = {"sslmode": sslmode}
+        pool_size = _env_int("LOGSTASHUI_DB_POOL_MAX_SIZE", 10)
+        if pool_size < 0:
+            raise RuntimeError("LOGSTASHUI_DB_POOL_MAX_SIZE must be >= 0 (0 disables pooling).")
+        if pool_size:
+            _import_or_raise("psycopg_pool", "postgres")
+            options["pool"] = {"min_size": 0, "max_size": pool_size, "timeout": 10}
+            # Django returns each request's connection to the worker's pool.
+            # Persistent connections would keep those slots checked out.
+            conn_max_age = 0
         ca = _env("LOGSTASHUI_DB_SSL_CA")
         if ca:
             options["sslrootcert"] = ca

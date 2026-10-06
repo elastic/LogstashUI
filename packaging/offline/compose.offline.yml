@@ -19,6 +19,7 @@ services:
       DEBUG: "False"
       LOGSTASHUI_DATA_DIR: /var/lib/logstashui
       LOGSTASHUI_TLS: "true"
+      LOGSTASHUI_NO_AUTH: ${LOGSTASHUI_NO_AUTH:-false}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:-*}
       CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-https://localhost:8443,https://127.0.0.1:8443}
       LOGSTASHUI_HOST_HOSTNAME: ${LOGSTASHUI_HOST_HOSTNAME:-}

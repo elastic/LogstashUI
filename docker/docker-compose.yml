@@ -25,10 +25,12 @@ services:
       - DEBUG=False
       - LOGSTASHUI_DATA_DIR=/var/lib/logstashui
       - LOGSTASHUI_DOCS_DIR=/app/docs
+      # Sandbox only. Host export: LOGSTASHUI_NO_AUTH=true
+      - LOGSTASHUI_NO_AUTH=${LOGSTASHUI_NO_AUTH:-false}
       # Linux bind-mount: start_logstashui.sh sets these to the host uid/gid so
       # ./logstashui_data stays owned by the operator. Empty → image appuser (10001).
-      - PUID=${PUID:-}
-      - PGID=${PGID:-}
+      - PUID=10001
+      - PGID=10001
       # SECRET_KEY: Optional - will auto-generate and persist in DATA_DIR/.django_secret_key if not set
       # - SECRET_KEY=${SECRET_KEY}
       # ALLOWED_HOSTS: Set to your domain(s) in production (comma-separated)

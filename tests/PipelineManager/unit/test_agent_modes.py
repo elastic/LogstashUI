@@ -31,6 +31,30 @@ from PipelineManager.agent_modes import (
 from PipelineManager.models import Connection, EnrollmentToken, Policy
 
 
+@pytest.mark.parametrize('fails', [False, True])
+def test_background_probe_returns_connections(fails):
+    """Return pooled connections even when the background probe fails."""
+    from unittest.mock import patch
+    from PipelineManager.agent_modes import refresh_embedded_connection_async
+
+    with (
+        patch('threading.Thread') as thread,
+        patch('PipelineManager.agent_modes.ensure_embedded_connection') as probe,
+        patch('django.db.connections.close_all') as close,
+    ):
+        refresh_embedded_connection_async()
+        thread.return_value.start.assert_called_once()
+        target = thread.call_args.kwargs['target']
+        if fails:
+            probe.side_effect = RuntimeError('probe failed')
+            with pytest.raises(RuntimeError, match='probe failed'):
+                target()
+        else:
+            target()
+        probe.assert_called_once()
+        close.assert_called_once()
+
+
 @pytest.fixture
 def admin_client(db):
     User = get_user_model()
@@ -720,10 +744,15 @@ def test_pipeline_manager_hides_embedded_agent(admin_client, system_policies, mo
     ensure_embedded_connection()
     resp = admin_client.get('/ConnectionManager/')
     assert resp.status_code == 200
-    names = [c['name'] for c in resp.context['connections']]
+    # The page shell no longer contains a `connections` context var — the table
+    # is loaded asynchronously via GetConnectionsTable.  Verify the API hides
+    # the embedded connection instead.
+    api_resp = admin_client.get('/ConnectionManager/GetConnectionsTable/')
+    assert api_resp.status_code == 200
+    names = [c['name'] for c in api_resp.json()['connections']]
     assert 'embedded' not in names
+    # The static HTML shell must never contain the pseudo-agent name either
     html = resp.content.decode()
-    # Table must not render the docker pseudo-agent; sim picker is a different page
     assert 'embedded-local' not in html
 
 

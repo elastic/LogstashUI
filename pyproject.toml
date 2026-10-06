@@ -37,13 +37,13 @@ Homepage = "https://github.com/elastic/LogstashUI"
 
 [project.optional-dependencies]
 postgres = [
-    "psycopg[binary]>=3.2.0",
+    "psycopg[binary,pool]>=3.2.0",
 ]
 mysql = [
     "PyMySQL>=1.1.1",
 ]
 databases = [
-    "psycopg[binary]>=3.2.0",
+    "psycopg[binary,pool]>=3.2.0",
     "PyMySQL>=1.1.1",
 ]
 # Deliberately HTTP/protobuf, never gRPC: grpcio's native C-core threads cannot
@@ -98,6 +98,7 @@ exclude = [
 "src/logstashui/Site" = "Site"
 "src/logstashui/Documentation" = "Documentation"
 "src/logstashui/AI" = "AI"
+"src/logstashui/API" = "API"
 "src/logstashui/theme" = "theme"
 "src/logstashui/Common" = "Common"
 "docs/docs" = "Documentation/content/docs"

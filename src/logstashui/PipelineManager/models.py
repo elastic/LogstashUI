@@ -853,24 +853,53 @@ class ApiKey(models.Model):
         guarded by ``_is_hashed``.
         """
         if self.api_key and not self._is_hashed(self.api_key):
-            self.api_key = make_password(self.api_key)
+            self.api_key = (
+                self._key_digest(self.api_key)
+                if bool(self.connection_id) != bool(self.user_id)
+                else make_password(self.api_key)
+            )
         super().save(*args, **kwargs)
 
     @staticmethod
     def _is_hashed(value):
+        if re.fullmatch(r'(agent|api)_sha256\$[0-9a-f]{64}', value):
+            return True
         try:
             identify_hasher(value)
         except ValueError:
             return False
         return True
 
+    def _key_digest(self, raw_api_key):
+        """Hash a generated secret using its owner-specific storage prefix."""
+        # Agent enrollment and API token issuance generate 256-bit secrets.
+        # A fast digest avoids blocking gevent on PBKDF2 for every request.
+        prefix = 'agent_sha256$' if self.connection_id else 'api_sha256$'
+        return prefix + hashlib.sha256(raw_api_key.encode('utf-8')).hexdigest()
+
     def verify_api_key(self, raw_api_key):
-        """Return True if ``raw_api_key`` matches the stored PBKDF2 hash.
+        """Verify a generated key, upgrading legacy hashes after successful auth.
 
         Args:
             raw_api_key: Plaintext secret from the ``Authorization`` header.
         """
-        return check_password(raw_api_key, self.api_key)
+        if not isinstance(raw_api_key, str) or not raw_api_key:
+            return False
+        has_owner = bool(self.connection_id) != bool(self.user_id)
+        if self.api_key.startswith(('agent_sha256$', 'api_sha256$')):
+            return has_owner and secrets.compare_digest(
+                self._key_digest(raw_api_key), self.api_key
+            )
+        valid = check_password(raw_api_key, self.api_key)
+        if valid and has_owner and self.pk:
+            digest = self._key_digest(raw_api_key)
+            # Do not overwrite a key rotated while verification was in flight.
+            updated = type(self).objects.filter(pk=self.pk, api_key=self.api_key).update(
+                api_key=digest
+            )
+            if updated:
+                self.api_key = digest
+        return valid
 
     # -- admin API tokens ---------------------------------------------------
 

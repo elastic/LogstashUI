@@ -32,6 +32,7 @@ TITLE_OVERRIDES = {
     'data_overview': 'Data Overview',
     'pipeline_generation': 'Pipeline Generation',
     'schema': 'Field Reference',
+    'deployment-recs': 'Deployment Recommendations',
 }
 
 def get_display_title(filename):

@@ -5,6 +5,7 @@
 """Agent-facing JSON API: enroll, check-in, cert issue, and config changes."""
 
 from django.http import JsonResponse
+from django.core.exceptions import ValidationError
 from django.views.decorators.csrf import csrf_exempt
 
 from datetime import datetime, timezone
@@ -31,7 +32,7 @@ from .agent_modes import (
     simulate_ports,
 )
 
-from SNMP.snmp_crud import agent_snmp_pipeline_names, agent_snmp_keystore_keys
+from SNMP.snmp_crud import agent_snmp_names
 
 
 logger = logging.getLogger(__name__)
@@ -211,8 +212,7 @@ def _build_snmp_changes(connection, policy, raw_api_key, agent_snmp_pipelines, a
     agent_snmp_pipelines = agent_snmp_pipelines or {}
     agent_snmp_keystore = agent_snmp_keystore or {}
 
-    own_pipeline_names = agent_snmp_pipeline_names(connection)
-    own_key_names = agent_snmp_keystore_keys(connection)
+    own_pipeline_names, own_key_names = agent_snmp_names(connection)
 
     snmp_pipelines = policy.pipelines.filter(
         managed_by="snmp", name__in=own_pipeline_names
@@ -326,8 +326,7 @@ def _snmp_desired_hashes(connection, policy):
     Returns:
         ``(pipelines_map, keystore_map)``.
     """
-    own_pipeline_names = agent_snmp_pipeline_names(connection)
-    own_key_names = agent_snmp_keystore_keys(connection)
+    own_pipeline_names, own_key_names = agent_snmp_names(connection)
     pipelines = {
         p.name: p.pipeline_hash
         for p in policy.pipelines.filter(managed_by="snmp", name__in=own_pipeline_names)
@@ -665,12 +664,14 @@ def check_in(request):
             return JsonResponse({"success": False, "error": "API key is empty"}, status=401)
 
         data = json.loads(request.body)
+        if not isinstance(data, dict):
+            return JsonResponse({"success": False, "error": "Expected a JSON object"}, status=400)
         connection_id = data.get("connection_id")
         if not connection_id:
             return JsonResponse({"success": False, "error": "Missing connection_id"}, status=400)
 
         try:
-            connection = ConnectionTable.objects.get(id=connection_id)
+            connection = ConnectionTable.objects.select_related("policy").get(id=connection_id)
         except ConnectionTable.DoesNotExist:
             return JsonResponse({"success": False, "error": "Invalid connection_id"}, status=401)
 
@@ -679,6 +680,7 @@ def check_in(request):
             return JsonResponse({"success": False, "error": "Invalid API key"}, status=401)
 
         connection.last_check_in = datetime.now(timezone.utc)
+        updates = {"last_check_in": connection.last_check_in, "updated_at": connection.last_check_in}
 
         # Connection.host must be reachable from this UI process. In containers
         # prefer the agent callback IP (DNS is unpredictable); otherwise accept host.
@@ -686,6 +688,7 @@ def check_in(request):
         if new_host and new_host != connection.host:
             old_host = connection.host or ""
             connection.host = new_host
+            updates["host"] = new_host
             logger.info(
                 "Updated connection %s host %r → %r (callback reachability%s)",
                 connection_id,
@@ -695,9 +698,11 @@ def check_in(request):
             )
 
         status_blob = data.get("status_blob")
+        if status_blob is not None and not isinstance(status_blob, dict):
+            return JsonResponse({"success": False, "error": "status_blob must be an object"}, status=400)
         if status_blob:
             connection.status_blob = status_blob
-            logger.debug(f"Updated status_blob: {status_blob}")
+            updates["status_blob"] = status_blob
             # Surface resolved Logstash version for the LS pill and the sim
             # target dropdown. logstash_api.version comes from the running
             # instance's own API and is the only key that tracks a version
@@ -716,25 +721,35 @@ def check_in(request):
             # last known version out of the UI.
             if resolved:
                 connection.logstash_version_resolved = str(resolved)[:64]
+                updates["logstash_version_resolved"] = connection.logstash_version_resolved
             if status_blob.get("agent_api_port") is not None:
                 try:
                     connection.agent_api_port = int(status_blob["agent_api_port"])
+                    updates["agent_api_port"] = connection.agent_api_port
                 except (TypeError, ValueError):
                     pass
             if status_blob.get("logstash_api_port") is not None:
                 try:
                     connection.logstash_api_port = int(status_blob["logstash_api_port"])
+                    updates["logstash_api_port"] = connection.logstash_api_port
                 except (TypeError, ValueError):
                     pass
 
-        should_restart = connection.restart_on_next_checkin
-        if should_restart:
-            connection.restart_on_next_checkin = False
+        # Validate only heartbeat fields; full_clean also validates unrelated
+        # administrative settings and performs extra database lookups.
+        for name, value in updates.items():
+            ConnectionTable._meta.get_field(name).clean(value, connection)
+        ConnectionTable.objects.filter(pk=connection.pk).update(**updates)
 
-        connection.save()
+        # Consume an observed restart flag atomically. A normal heartbeat must
+        # not overwrite a restart requested after we loaded the connection.
+        should_restart = False
+        if connection.restart_on_next_checkin:
+            should_restart = bool(ConnectionTable.objects.filter(
+                pk=connection.pk, restart_on_next_checkin=True
+            ).update(restart_on_next_checkin=False))
 
-        logger.info(f"Agent check-in: connection_id={connection_id}, agent_id={connection.agent_id}")
-        logger.debug(f"Check-in data: {data}")
+        logger.debug("Agent check-in: connection_id=%s, agent_id=%s", connection_id, connection.agent_id)
 
         policy = connection.policy
         if not policy:
@@ -791,6 +806,8 @@ def check_in(request):
 
         return JsonResponse(response_payload)
 
+    except ValidationError as exc:
+        return JsonResponse({"success": False, "error": "; ".join(exc.messages)}, status=400)
     except json.JSONDecodeError:
         return JsonResponse({"success": False, "error": "Invalid JSON data"}, status=400)
     except Exception as exc:

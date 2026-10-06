@@ -17,12 +17,241 @@ from Common.decorators import require_admin_role
 from Common.elastic_utils import get_elastic_connection
 
 from . import manager_views
+from .manager_views import _logstash_yml_cpm_enabled, _normalize_status_blob_api_status
 
-from datetime import datetime
+from datetime import datetime, timezone
+
+from PipelineManager.agent_modes import is_embedded_connection
+from PipelineManager.agent_versions import (
+    agent_version_relation as compute_version_relation,
+    resolve_running_logstash_version,
+)
+from SNMP.models import Network
 
 import logging
 
 logger = logging.getLogger(__name__)
+
+@require_admin_role
+def GetConnectionsTable(request):
+    """Return a paginated, filtered connections list for the main table.
+
+    Query params:
+        page: 1-based page number (default 1).
+        page_size: 50 / 100 / 200 (default 50, max 200).
+        search: Case-insensitive name match.
+        policy: Policy id (int), or the string ``CENTRALIZED`` to show only
+            Elasticsearch connections.
+        state: ``online`` | ``offline`` | ``healthy`` | ``unhealthy`` |
+            ``restarting``.
+
+    Returns:
+        JSON ``{connections, total, page, page_size, total_pages,
+        has_next, has_previous, policies}``.  ``policies`` is a list of
+        ``{id, name}`` dicts (used to populate the filter dropdown).
+
+    Example:
+        >>> # GET /ConnectionManager/GetConnectionsTable/?page=1&page_size=50
+        >>> response.json()['total']
+        142
+    """
+    try:
+        page = max(1, int(request.GET.get('page', 1)))
+    except (TypeError, ValueError):
+        page = 1
+    try:
+        page_size = min(max(1, int(request.GET.get('page_size', 50))), 200)
+    except (TypeError, ValueError):
+        page_size = 50
+
+    search = request.GET.get('search', '').strip()
+    policy_filter = request.GET.get('policy', '').strip()
+    state_filter = request.GET.get('state', '').strip()
+
+    # ── DB query ───────────────────────────────────────────────────────────────
+    qs = ConnectionTable.objects.values(
+        'connection_type', 'name', 'host', 'cloud_id', 'cloud_url', 'pk',
+        'policy__name', 'policy_id', 'policy__policy_type', 'agent_id',
+        'last_check_in', 'status_blob', 'desired_agent_version',
+        'logstash_version_resolved',
+    )
+    if search:
+        qs = qs.filter(name__icontains=search)
+    if policy_filter == 'CENTRALIZED':
+        qs = qs.filter(connection_type='CENTRALIZED')
+    elif policy_filter:
+        try:
+            qs = qs.filter(policy_id=int(policy_filter))
+        except (ValueError, TypeError):
+            pass
+
+    # Remove embedded connections (docker/auto) in Python
+    all_conns = [c for c in qs if not is_embedded_connection(c)]
+
+    # ── Sort: CENTRALIZED first, then by policy name, then by name ─────────────
+    def _sort_key(conn):
+        if conn['connection_type'] == 'CENTRALIZED':
+            return (0, '', conn['name'] or '')
+        return (1, conn['policy__name'] or '\xff', conn['name'] or '')
+
+    all_conns.sort(key=_sort_key)
+
+    # ── Enrich ─────────────────────────────────────────────────────────────────
+    now = datetime.now(timezone.utc)
+    for conn in all_conns:
+        if conn['last_check_in']:
+            conn['is_online'] = (now - conn['last_check_in']).total_seconds() < 600
+        else:
+            conn['is_online'] = False
+
+        blob = conn.get('status_blob') if isinstance(conn.get('status_blob'), dict) else None
+        _normalize_status_blob_api_status(blob)
+        agent_ver = blob.get('agent_version') if blob else None
+        conn['logstash_version'] = resolve_running_logstash_version(
+            logstash_version_resolved=conn.get('logstash_version_resolved'),
+            status_blob=blob,
+        )
+        conn['_agent_version_relation'] = compute_version_relation(
+            agent_ver, settings.__PREFERRED_LS_AGENT_VERSION__
+        )
+        conn['_status'] = _compute_connection_status(conn)
+        conn['_agent_version'] = agent_ver or ''
+
+    # ── State filter (Python-level, status is computed) ────────────────────────
+    if state_filter:
+        if state_filter == 'online':
+            all_conns = [c for c in all_conns if c['is_online']]
+        elif state_filter == 'offline':
+            all_conns = [c for c in all_conns if not c['is_online']]
+        elif state_filter in ('healthy', 'unhealthy', 'restarting'):
+            all_conns = [c for c in all_conns if c['_status'] == state_filter]
+
+    # ── Feature badges ─────────────────────────────────────────────────────────
+    policy_ids = {c['policy_id'] for c in all_conns if c.get('policy_id')}
+    policy_cpm_map: dict = {}
+    if policy_ids:
+        for pid, yml in Policy.objects.filter(id__in=policy_ids).values_list('id', 'logstash_yml'):
+            policy_cpm_map[pid] = _logstash_yml_cpm_enabled(yml)
+
+    snmp_ids = set(Network.objects.values_list('connection_id', flat=True))
+    snmp_ids.update(
+        Network.objects.exclude(agent_connection_id__isnull=True)
+        .values_list('agent_connection_id', flat=True)
+    )
+    snmp_ids.discard(None)
+
+    for conn in all_conns:
+        if conn['connection_type'] == 'CENTRALIZED':
+            conn['_feature_cpm'] = True
+            conn['_feature_agent'] = False
+        else:
+            conn['_feature_agent'] = True
+            conn['_feature_cpm'] = policy_cpm_map.get(conn.get('policy_id'), False)
+        conn['_feature_snmp'] = conn['pk'] in snmp_ids
+
+    # ── Group colours ──────────────────────────────────────────────────────────
+    _colors = ['blue', 'green', 'purple', 'pink', 'yellow', 'cyan']
+    prev_group = None
+    color_index = 0
+    for i, conn in enumerate(all_conns):
+        group = (
+            f"CENTRALIZED_{conn['pk']}"
+            if conn['connection_type'] == 'CENTRALIZED'
+            else (conn['policy__name'] or 'no_policy')
+        )
+        if group != prev_group:
+            conn['_group_color'] = _colors[color_index % len(_colors)]
+            color_index += 1
+        else:
+            conn['_group_color'] = all_conns[i - 1]['_group_color']
+        prev_group = group
+
+    # ── Pagination ─────────────────────────────────────────────────────────────
+    total = len(all_conns)
+    total_pages = max(1, (total + page_size - 1) // page_size)
+    page = min(page, total_pages)
+    offset = (page - 1) * page_size
+    page_conns = all_conns[offset:offset + page_size]
+
+    # ── Serialise ──────────────────────────────────────────────────────────────
+    connections_out = []
+    for conn in page_conns:
+        connections_out.append({
+            'pk': conn['pk'],
+            'name': conn['name'],
+            'connection_type': conn['connection_type'],
+            'host': conn.get('host') or '',
+            'cloud_id': conn.get('cloud_id') or '',
+            'policy_id': conn.get('policy_id'),
+            'policy_name': conn.get('policy__name') or '',
+            'is_online': conn['is_online'],
+            'status': conn['_status'],
+            'agent_version': conn['_agent_version'],
+            'desired_agent_version': conn.get('desired_agent_version') or '',
+            'agent_version_relation': conn['_agent_version_relation'],
+            'logstash_version': conn.get('logstash_version') or '',
+            'feature_agent': conn['_feature_agent'],
+            'feature_cpm': conn['_feature_cpm'],
+            'feature_snmp': conn['_feature_snmp'],
+            'group_color': conn['_group_color'],
+            'last_check_in': conn['last_check_in'].isoformat() if conn.get('last_check_in') else None,
+        })
+
+    # Policy list for filter dropdown. Only exclude EMBEDDED: those connections
+    # are hidden from the table entirely, so the policy would match nothing.
+    # SIMULATE agents are real visible rows and must remain filterable.
+    policies_out = list(
+        Policy.objects
+        .exclude(policy_type=Policy.PolicyType.EMBEDDED)
+        .order_by('name')
+        .values('id', 'name')
+    )
+
+    return JsonResponse({
+        'connections': connections_out,
+        'total': total,
+        'page': page,
+        'page_size': page_size,
+        'total_pages': total_pages,
+        'has_next': page < total_pages,
+        'has_previous': page > 1,
+        'policies': policies_out,
+    })
+
+
+def _compute_connection_status(conn):
+    """Compute a displayable status string from a connection dict.
+
+    Args:
+        conn: Connection dict with ``is_online`` bool and optional ``status_blob``.
+
+    Returns:
+        One of ``'restarting'``, ``'offline'``, ``'unhealthy'``, ``'healthy'``.
+    """
+    blob = conn.get('status_blob') or {}
+    if not isinstance(blob, dict):
+        blob = {}
+    logwatcher = blob.get('logwatcher') or {}
+    if logwatcher.get('is_restarting'):
+        return 'restarting'
+    if not conn.get('is_online'):
+        return 'offline'
+    if blob:
+        logstash_api = blob.get('logstash_api') or {}
+        health_report = blob.get('health_report') or {}
+        last_policy = blob.get('last_policy_apply') or {}
+        if (
+            blob.get('settings_path_found') is False
+            or blob.get('logs_path_found') is False
+            or blob.get('binary_path_found') is False
+            or logstash_api.get('accessible') is False
+            or logstash_api.get('status') == 'red'
+            or last_policy.get('success') is False
+            or health_report.get('status') in ('yellow', 'red')
+        ):
+            return 'unhealthy'
+    return 'healthy'
+
 
 def GetConnections(request):
     """Return all non-embedded connections for dropdown population.
@@ -118,15 +347,7 @@ def DeleteConnection(request, connection_id=None):
     logger.warning(
         f"User '{request.user.username}' deleted connection '{connection_name}' (ID: {connection_id})")
 
-    return HttpResponse("""
-        <script>
-            showToast('Connection deleted successfully!', 'success');
-            // Reload the page to show the updated connections
-            setTimeout(() => {
-                window.location.reload();
-            }, 500);
-        </script>
-    """)
+    return JsonResponse({'success': True})
 
 
 @require_admin_role

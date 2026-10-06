@@ -654,8 +654,15 @@ def refresh_embedded_connection_async() -> None:
     """Probe the embedded agent and update ``last_check_in`` without blocking the caller."""
     try:
         import threading
+        from django.db import connections
 
-        threading.Thread(target=ensure_embedded_connection, daemon=True).start()
+        def probe():
+            try:
+                ensure_embedded_connection()
+            finally:
+                connections.close_all()
+
+        threading.Thread(target=probe, daemon=True).start()
     except Exception:
         pass
 
