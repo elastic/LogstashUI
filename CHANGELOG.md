@@ -1,18 +1,87 @@
-## [0.5.3] - In Progress as 0.5.3-dev
+## [0.5.3] - REST API, scale and Postgres pooling, SNMP device coverage - 10/06/2026
+
+Package version is **0.5.3**. Preferred LogstashAgent version is **0.5.3** (lockstep).
+
+### REST API (#208)
+
+- New `API` app exposing a JSON REST API under `/api/`, authenticated with the existing admin API tokens (`Authorization: ApiKey lsui_<prefix>_<secret>`, CSRF-exempt). Covers:
+  - **Connections** — list, get, create, update, delete, test.
+  - **Security** — bootstrap, current user, users (addressed by `userId`), and API key create / revoke / delete.
+  - **SNMP** — devices, credentials, networks, profiles, device templates, plus deploy status / diff / apply.
+  - **Policies** — CRUD, deploy, clone, pending-changes diff, enrollment tokens.
+  - **Pipelines** — agent pipelines (stored in LogstashUI, scoped to a policy) and Elasticsearch-stored pipelines, plus simulate.
+- Writes require the **admin** role; reads accept any authenticated user. A token still acts as the user who created it.
+- Saving an agent pipeline marks its policy `has_undeployed_changes`; nothing reaches agents until `POST /api/policies/{id}/deploy/`.
+- Fixed policy revision numbers not incrementing when an agent policy was changed through the API.
+- Full reference in [REST API](docs/docs/logstashui/rest_api.md), which replaces `api_access.md`. `src/logstashui/API/api.http` has ready-to-run requests.
+
+### Scale and database performance (#209)
+
+- **PostgreSQL connection pooling.** Each worker keeps a bounded psycopg pool (`LOGSTASHUI_DB_POOL_MAX_SIZE`, default `10`; `0` disables it). Requests wait up to 10 seconds for a free connection. While pooling is on, `LOGSTASHUI_DB_CONN_MAX_AGE` is forced to `0` so each request hands its connection back. Size the pool as `LOGSTASHUI_WORKERS` × `LOGSTASHUI_DB_POOL_MAX_SIZE` across all UI instances. The `postgres` and `databases` extras now install `psycopg[binary,pool]`.
+- **Faster API key checks.** Agent keys and admin API tokens are now stored as SHA-256 digests and compared in constant time, instead of PBKDF2 hashes that blocked a gevent worker on every request. Existing PBKDF2 hashes are converted the first time each key authenticates successfully; the key value itself does not change. Human login passwords still use Django's password hashing.
+- Agent check-in does less database work: heartbeat fields are written with a single `UPDATE` instead of `.save()`, one redundant query is gone, and SNMP pipeline lookups are merged into one query per agent. Streaming paths were tuned too.
+- The Connections page in Pipeline Manager has search and filters (like the SNMP tables) and is rendered client-side by `connections_table.js`, so it stays usable with thousands of agents.
+- New [Deployment Recommendations](docs/docs/logstashui/general/deployment-recs.md) sizing guide. Recommended starting host is 8 GB RAM / 4 vCPU. On that host LogstashUI sustained about 130 check-ins/s on both SQLite (Docker Compose) and PostgreSQL (systemd). For comparison, 1,500 agents at the default 60-second interval generate about 25 check-ins/s.
+
+### SNMP (#212)
+
+- **New device templates and profiles:** Arista EOS, Aruba wireless controller, D-Link DGS-1210, Geist Watchdog, NetApp 7-Mode, Dell EMC Isilon (OneFS), Versa FlexVNF, and UPS templates for generic UPS-MIB, Eaton, EastPower, Huawei, Ingrasys and Phoenixtec. Added generic `entity_psu`, `lm_sensors` and `ups_mib` profiles.
+- Updated templates: power supplies for Cisco IOS and Palo Alto; interfaces for HP printers; CPU metrics for Mellanox; system metrics for UniFi switches; system metrics and temperature sensors for UDM; and Epson and ONT brought up to the current baseline. `eaton_9px` and `eaton_xups` are replaced by `eaton_ups`.
+- Device visual preview has new power supply, temperature, fan, WLC, storage and UPS cards. Profiles can be viewed and edited from the Devices page.
+- New `sum` normalizer; `generic_ucd_system_metrics` now extracts CPU usage. `entity_sensor` includes the sensor description, and the UPS MIB includes vendor, model and firmware.
+- **Template update can roll over the index.** The index template now includes UPS fields.
+- Discovery shows only devices that answered SNMP. A new toggle shows hosts that were found only by DNS resolution.
+- Expanding a device row now fetches fresh data each time instead of caching it until page reload.
+- Every column in the Devices table and the connections column in the Networks table are sortable.
+- SNMPv1/v2c community fields are displayed like other sensitive fields.
+- Deploying SNMP pipelines to a policy with no keystore now shows the keystore input in place, instead of linking to the policy.
+- Network map uses LLDP more fully. Drill-downs use the LogstashUI device name, while links use the hostname discovered via SNMP.
+- Logs pulled through an agent are grouped by type instead of one long list sorted by log level.
+
+### Pipeline editor (#207)
+
+- Simulation panel, switcher and buttons restyled, and the UI updates live.
+  - Simulate shows a more detailed connection name, and its button uses a play icon instead of a spinner.
+  - Simulation results always end with a final-output row pinned to the bottom of the filter section.
+  - The step debugger's separate log viewer was removed, so there is only one place to see logs.
+- Browser `confirm()`/`alert()` dialogs replaced with the shared `popup.html` component.
+- Input, filter and output sections expand and collapse when you click their headers.
+- Elastic Integration filter plugins stay pinned to the top of the filter section. They can swap positions with each other, but nothing else can be placed above them.
 
 ### Changes
 
-- Django `DEBUG` now defaults to **false** natively; `DEBUG=true|1|yes` (case-insensitive) opts back in. Native `logstashui serve` gains the containerized posture: security headers enforced (HTTP→HTTPS redirect via auto-generated TLS unless `LOGSTASHUI_TLS=false` or `LOGSTASHUI_INSECURE_HTTP`), friendly error pages instead of tracebacks, and `LOGSTASHUI_LOG_LEVEL` defaulting to `INFO`. `django_browser_reload` and `/__reload__/` are present only with `DEBUG=true`, and the embedded agent URL default on native becomes `https://logstashagent:9500` (was `http://127.0.0.1:9500`). Docker/Kubernetes deployments are unaffected — they already set `DEBUG=false`.
-- Fix database CI test script. (#203)
-- Remove experimental `standalone` from `freeze_logstgashui.sh` and associated templates. (#201)
-- Remove native Python support for Windows. The only accepted path to run on Windows will be via Docker.
+- Django `DEBUG` now defaults to **false** natively; `DEBUG=true|1|yes` (case-insensitive) opts back in. Native `logstashui serve` now behaves like the containers: security headers are enforced (HTTP→HTTPS redirect via auto-generated TLS unless `LOGSTASHUI_TLS=false` or `LOGSTASHUI_INSECURE_HTTP`), users see friendly error pages instead of tracebacks, and `LOGSTASHUI_LOG_LEVEL` defaults to `INFO`. `django_browser_reload` and `/__reload__/` are present only with `DEBUG=true`, and the native default for the embedded agent URL becomes `https://logstashagent:9500` (was `http://127.0.0.1:9500`). Docker/Kubernetes deployments are unaffected — they already set `DEBUG=false`. (#211)
+- Remove native Python support for Windows. The only accepted path to run on Windows will be via Docker. (#206)
+- Remove experimental `standalone` from `freeze_logstashui.sh` and associated templates. (#201)
+- Docker Compose pins `PUID`/`PGID` to `10001`. Both the standard and offline compose files pass through `LOGSTASHUI_NO_AUTH` (sandbox only, default `false`). The offline compose file stores data in a host directory (`LOCAL_LOGSTASHUI_DATA_DIR`, default `./logstashui_data`) instead of a named volume.
+- Dependencies: `django>=6.0.8,<6.1`, `sqlparse>=0.6.0` (uv override), `pytest>=9.0.3`.
 - Move `__PREFERRED_LS_AGENT_VERSION__` near the top of `LogstashUI.settings.py`, and remove the single `assert` test for that constant.
+- Stop tracking `scripts/.dependency_tracking.txt`. (#204)
+
+### Fixes
+
+- Kibana URL derivation no longer breaks for Elastic Cloud deployments on `es.io` domains (previously only `elastic-cloud.com` worked). You can now choose a different Kibana URL before the "couldn't connect" warning appears.
+- SNMP walks no longer return a pile of unnecessary null values.
+- SNMP Elasticsearch query no longer errors when the `system.filesystem` namespace does not exist.
+- Network map no longer breaks when the hostname discovered via SNMP differs from the device name in LogstashUI.
+- Non-SNMP discovered devices render correctly when the non-SNMP toggle is on.
+- The API package is included in the built wheel.
+- Fix database CI test script. (#203)
+
+### Upgrade notes
+
+- **Agents do not need to re-enroll.** Existing agent keys and API tokens keep working, and their stored hashes switch to SHA-256 the first time each one authenticates.
+- Avoid running 0.5.2 and 0.5.3 workers side by side. 0.5.2 workers reject keys that a 0.5.3 worker has already converted, so those agents get temporary authentication failures until the old workers are gone.
+- **Rolling back to 0.5.2 is not transparent.** Agents that checked in while 0.5.3 was running must re-enroll, and API tokens used under 0.5.3 must be reissued, unless you restore the database from a backup taken before the upgrade.
+- Run `logstashui manage sync_snmp_official_data --cleanup` to pick up the new and renamed SNMP templates and profiles.
+- PostgreSQL deployments: keep `LOGSTASHUI_WORKERS` × `LOGSTASHUI_DB_POOL_MAX_SIZE` (summed over all UI instances) below the server's `max_connections`.
 
 ### Documentation
 
-- Update docs to reflect future 0.5.3 release.
+- Update docs to reflect the 0.5.3 release.
 - Fix bad examples in k8s documentation & examples. (#202)
-- Update functions to use Google-style Python docstrings (#205)
+- Update functions to use Google-style Python docstrings. (#205)
+- New [REST API](docs/docs/logstashui/rest_api.md) reference and [Deployment Recommendations](docs/docs/logstashui/general/deployment-recs.md) sizing guide.
 
 
 ## [0.5.2] - Multi-database + k8s - 09/06/2026
