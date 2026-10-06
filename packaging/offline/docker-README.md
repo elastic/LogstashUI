@@ -9,7 +9,10 @@ Linux **x86_64** image tarball. No registry. The image already includes `Logstas
 docker compose -f compose.offline.yml up -d
 ```
 
-`load.sh` never pulls. HTTPS UI is **:8443**. Named volume `logstashui_data` is `LOGSTASHUI_DATA_DIR=/var/lib/logstashui`. Keep `LOGSTASHUI_TLS` on.
+`load.sh` never pulls. HTTPS UI is **:8443**. 
+Mapped volume `logstashui_data` is `LOGSTASHUI_DATA_DIR=/var/lib/logstashui` defaults to `$(pwd)/logstashui_data`, but this can be changed by editing `compose.offline.yml` or setting the environment variable `LOCAL_LOGSTASHUI_DATA_DIR`.
+
+Keep `LOGSTASHUI_TLS` on.
 
 Set `ALLOWED_HOSTS`, `LOGSTASHUI_HOST_*`, and `LOGSTASHUI_DB_*` in the environment or a `.env` next to `compose.offline.yml` as needed.
 

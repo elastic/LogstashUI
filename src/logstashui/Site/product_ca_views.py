@@ -16,11 +16,11 @@ logger = logging.getLogger(__name__)
 
 @require_GET
 def product_ca_crt(request):
-    """
-    GET /.well-known/logstashui/ca.crt
+    """Serve the product CA certificate (PEM) for agent pin-and-fetch.
 
-    Returns the product CA certificate (PEM). Public; used by agents that
-    receive a fingerprint in the enrollment token.
+    GET ``/.well-known/logstashui/ca.crt``. Public; agents that received a
+    fingerprint in the enrollment token fetch this. Returns 404 when
+    insecure HTTP is on, 503 if the CA cannot be read.
     """
     from LogstashUI.insecure_http import insecure_http
 

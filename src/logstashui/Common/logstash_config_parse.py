@@ -2,6 +2,8 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
+"""Convert between Logstash pipeline config text and component JSON via Lark."""
+
 from lark import Lark, Transformer, UnexpectedToken, UnexpectedCharacters
 from typing import Dict, List, Any
 import json
@@ -75,6 +77,8 @@ COMMENT: /#[^\n]*/
 
 
 class LogstashTransformer(Transformer):
+    """Lark transformer that turns parse trees into component dicts."""
+
     def _unescape_string(self, s):
         """Unescape special characters in parsed strings."""
         # Process escape sequences in the correct order
@@ -219,7 +223,7 @@ class LogstashTransformer(Transformer):
         return dict(pairs)
 
     def codec_setting(self, items):
-        """Transform codec settings into tuples"""
+        """Transform codec settings into (key, value) tuples."""
         if len(items) >= 2:
             # Handle ESCAPED_STRING tokens for keys - strip quotes
             key = items[0]
@@ -235,11 +239,11 @@ class LogstashTransformer(Transformer):
             return (None, None)
     
     def codec_config(self, items):
-        """Transform codec config into list of tuples"""
+        """Transform a codec config into a list of tuples."""
         return [item for item in items if item is not None]
     
     def codec_pair_with_config(self, items):
-        """Handle codec => name { config } - return as nested dict"""
+        """Handle ``codec => name { config }`` as a nested dict pair."""
         codec_name = str(items[0])
         # items[1] is the codec_config (list of tuples)
         config_list = items[1] if len(items) > 1 and isinstance(items[1], list) else []
@@ -252,12 +256,12 @@ class LogstashTransformer(Transformer):
         # Return as nested dict: {"codec": {"codec_name": {...}}}
         return ("codec", {codec_name: codec_config})
     def codec_pair_simple(self, items):
-        """Handle codec => simple_value - return as nested dict with empty config"""
+        """Handle ``codec => simple_value`` as a nested dict with empty config."""
         codec_name = str(items[0])
         return ("codec", {codec_name: {}})
     
     def regular_pair(self, items):
-        """Handle regular key => value pairs"""
+        """Handle regular ``key => value`` pairs."""
         if len(items) >= 2:
             # Handle ESCAPED_STRING tokens for keys - strip quotes
             key = items[0]
@@ -274,7 +278,7 @@ class LogstashTransformer(Transformer):
             return (None, None)
     
     def pair(self, items):
-        """Fallback for pair - should be handled by codec_pair or regular_pair"""
+        """Fall back for pair; codec_pair or regular_pair should handle this."""
         if len(items) >= 2:
             key = items[0]
             if hasattr(key, 'type') and key.type == 'ESCAPED_STRING':
@@ -289,7 +293,7 @@ class LogstashTransformer(Transformer):
             return (None, None)
 
     def plugin_item(self, items):
-        """Pass through the single child (either a pair tuple or a comment dict)."""
+        """Pass through the single child (a pair tuple or a comment dict)."""
         return items[0] if items else None
 
     def plugin(self, items):
@@ -360,7 +364,16 @@ class LogstashTransformer(Transformer):
         return list(items)
 
     def _format_plugin(self, plugin_data, section_type, component_count):
-        """Format a plugin with proper ID and type."""
+        """Format a plugin with a proper ID and type.
+
+        Args:
+            plugin_data: Parsed plugin dict with a name.
+            section_type: Pipeline section (input, filter, or output).
+            component_count: Running component index.
+
+        Returns:
+            Tuple of (plugin_dict, next_component_count).
+        """
         if not isinstance(plugin_data, dict) or 'name' not in plugin_data:
             return plugin_data, component_count
 
@@ -374,7 +387,17 @@ class LogstashTransformer(Transformer):
         return plugin, component_count + 1
 
     def _process_plugins(self, plugins, section_type, component_count, target_list=None):
-        """Process a list of plugins, adding proper IDs and types."""
+        """Process a list of plugins, adding IDs and types.
+
+        Args:
+            plugins: Plugin, comment, or conditional dicts.
+            section_type: Pipeline section.
+            component_count: Running component index.
+            target_list: Unused; kept for call-site compatibility.
+
+        Returns:
+            Tuple of (formatted_plugins, next_component_count).
+        """
         result = []
         if not plugins:
             return result, component_count
@@ -412,7 +435,17 @@ class LogstashTransformer(Transformer):
         return result, component_count
 
     def _process_conditional(self, cond, section_type, data, component_count):
-        """Process conditional statements and add them to components."""
+        """Process a conditional statement into UI component blocks.
+
+        Args:
+            cond: Parsed conditional dict.
+            section_type: Pipeline section.
+            data: Optional list to append the block to (for nested conditionals).
+            component_count: Running component index.
+
+        Returns:
+            Tuple of ([conditional_block], next_component_count).
+        """
         # Create the conditional block ID first
         conditional_id = component_count
 
@@ -478,13 +511,13 @@ def _extract_error_context(config_text: str, line: int, column: int, context_lin
     """Extract the code context around an error location.
 
     Args:
-        config_text: The full config text
-        line: Line number where error occurred (1-indexed)
-        column: Column number where error occurred (1-indexed)
-        context_lines: Number of lines to show before and after the error
+        config_text: Full config text.
+        line: Line number where the error occurred (1-indexed).
+        column: Column number where the error occurred (1-indexed).
+        context_lines: Number of lines to show before and after the error.
 
     Returns:
-        Formatted string showing the error context with a pointer
+        Formatted string showing the error context with a pointer.
     """
     lines = config_text.split('\n')
 
@@ -517,7 +550,7 @@ def _extract_error_context(config_text: str, line: int, column: int, context_lin
 
 
 def _count_unquoted_braces(line: str):
-    """Count { and } that appear outside quoted strings and escape sequences."""
+    """Count ``{`` and ``}`` that appear outside quoted strings and escape sequences."""
     open_count = 0
     close_count = 0
     in_str = False
@@ -547,10 +580,10 @@ def _count_unquoted_braces(line: str):
 
 
 def _strip_line_comment(line: str):
-    """
-    Strip an inline # comment from a line (ignoring # inside quoted strings).
+    """Strip an inline # comment from a line, ignoring # inside quoted strings.
 
-    Returns (cleaned_line, comment_text_or_None, ends_in_unclosed_single_quote).
+    Returns:
+        Tuple of (cleaned_line, comment_text_or_None, ends_in_unclosed_single_quote).
     """
     cleaned = []
     comment_text = None
@@ -591,20 +624,25 @@ def _strip_line_comment(line: str):
 
 
 def _strip_inline_comments(config_text: str) -> str:
-    """
-    Preprocess Logstash config text before grammar parsing.
+    """Preprocess Logstash config text before grammar parsing.
 
     Behaviour by context:
-    - INSIDE PLUGIN BLOCKS: inline comments (on any line, at any brace depth)
-      are stripped from the line and collected. They are injected as standalone
-      # comment lines immediately before the plugin's closing brace, where the
-      grammar can parse them and attach them to the plugin as plugin.comments[].
-      Standalone # lines inside a plugin block are preserved in place.
-    - OUTSIDE PLUGIN BLOCKS (sections, conditionals): standalone # comment lines
-      are preserved unchanged. Inline comments on non-plugin lines are stripped
-      and discarded (they would break the grammar and carry no useful context).
-    - MULTILINE SINGLE-QUOTED STRINGS: passed through completely unchanged —
-      # characters inside them are not comments.
+        - INSIDE PLUGIN BLOCKS: inline comments (on any line, at any brace depth)
+          are stripped from the line and collected. They are injected as standalone
+          # comment lines immediately before the plugin's closing brace, where the
+          grammar can parse them and attach them to the plugin as plugin.comments[].
+          Standalone # lines inside a plugin block are preserved in place.
+        - OUTSIDE PLUGIN BLOCKS (sections, conditionals): standalone # comment lines
+          are preserved unchanged. Inline comments on non-plugin lines are stripped
+          and discarded (they would break the grammar and carry no useful context).
+        - MULTILINE SINGLE-QUOTED STRINGS: passed through completely unchanged —
+          # characters inside them are not comments.
+
+    Args:
+        config_text: Raw Logstash configuration text.
+
+    Returns:
+        Config text with inline comments relocated or stripped for the grammar.
     """
     lines = config_text.split('\n')
     result_lines = []
@@ -753,7 +791,17 @@ def _strip_inline_comments(config_text: str) -> str:
 
 
 def parse_logstash_config(config_text: str) -> List[Dict[str, Any]]:
-    """Parse Logstash config text into a structured format."""
+    """Parse Logstash config text into a structured format.
+
+    Args:
+        config_text: Raw Logstash configuration text.
+
+    Returns:
+        List of section and comment dicts from the Lark transformer.
+
+    Raises:
+        ValueError: If the config cannot be parsed.
+    """
     # Preprocess to remove inline comments that would break parsing
     config_text = _strip_inline_comments(config_text)
     
@@ -796,14 +844,17 @@ def parse_logstash_config(config_text: str) -> List[Dict[str, Any]]:
 
 
 def logstash_config_to_components(config_text: str) -> List[Dict[str, Any]]:
-    """
-    Convert Logstash configuration text to UI components format.
+    """Convert Logstash configuration text to UI components format.
 
     Args:
-        config_text: Raw Logstash configuration text
+        config_text: Raw Logstash configuration text.
 
     Returns:
-        List of component dictionaries in the UI format
+        JSON string of component dictionaries in the UI format, keyed by
+        input, filter, and output.
+
+    Raises:
+        Exception: If conversion fails; the view surfaces the message to the user.
     """
     try:
         parsed = parse_logstash_config(config_text)
@@ -935,7 +986,17 @@ def logstash_config_to_components(config_text: str) -> List[Dict[str, Any]]:
 ################################ Component JSON to Logstash config ################################
 
 class ComponentToPipeline:
+    """Convert UI component JSON back into Logstash pipeline config text."""
+
     def __init__(self, components, test=False, add_ids=False):
+        """Initialize a converter for a component tree.
+
+        Args:
+            components: Mapping of section name (input/filter/output) to a list
+                of component dicts.
+            test: If True, replace input/output with stdin/stdout for simulation.
+            add_ids: If True, inject generated ``id =>`` settings when missing.
+        """
         self.components = components
         self.plugin_num = 0
         self.test = test
@@ -943,7 +1004,15 @@ class ComponentToPipeline:
         self.plugin_counters = {}  # Track plugin counts for ID generation
 
     def _generate_plugin_id(self, plugin_name, section):
-        """Generate a predictable and reusable ID for a plugin."""
+        """Generate a predictable, reusable ID for a plugin.
+
+        Args:
+            plugin_name: Plugin type name.
+            section: Pipeline section.
+
+        Returns:
+            ID in the form ``section_pluginname_count``.
+        """
         # Create a counter key for this plugin type in this section
         counter_key = f"{section}_{plugin_name}"
         
@@ -963,9 +1032,12 @@ class ComponentToPipeline:
         suitable for inline use after a '=>' on the same line.
 
         Args:
-            d: The dict to format.
-            indent: The tab depth of the *opening brace* line. Inner pairs are
-                    at indent+1, and the closing brace is at indent.
+            d: Dict to format.
+            indent: Tab depth of the opening-brace line. Inner pairs are at
+                indent+1, and the closing brace is at indent.
+
+        Returns:
+            Logstash hash block string.
         """
         tabs = '\t' * indent
         inner_tabs = '\t' * (indent + 1)
@@ -985,9 +1057,9 @@ class ComponentToPipeline:
 
     def _format_string_value(self, value):
         """Format a string value for Logstash config, choosing appropriate quoting.
-        
-        If the string contains double quotes (like JSON or Ruby code), use single quotes.
-        Otherwise, use double quotes and escape as needed.
+
+        If the string contains double quotes (like JSON or Ruby code), use single
+        quotes. Otherwise, use double quotes and escape as needed.
         """
         if not isinstance(value, str):
             return value
@@ -1262,6 +1334,14 @@ class ComponentToPipeline:
 
 
     def components_to_logstash_config(self):
+        """Render the component tree as Logstash pipeline config text.
+
+        When test is True, input and output are replaced with stdin/stdout codecs
+        so a simulation can send events in and read them back.
+
+        Returns:
+            Pipeline config string with input, filter, and output sections.
+        """
         config = ""
         # "test" is used for simulating pipelines so that we can send input via stdin
         # and receive output via stdout
@@ -1308,6 +1388,7 @@ class ComponentToPipeline:
 
 
 def main():
+    """Run a debug parse of a sample pipeline and log the component JSON."""
     condition_output_no_filter = logstash_config_to_components('''input { stdin { } }
 
 filter {

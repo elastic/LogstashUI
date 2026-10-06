@@ -1,0 +1,20 @@
+{
+  "official_key": "geist_watchdog",
+  "name": "geist_watchdog",
+  "type": "Environmental Sensor",
+  "description": "Built-in and external temperature probes, built-in humidity sensor, and device identity for Geist WatchDog environmental monitors (sold under Vertiv).",
+  "vendor": "Vertiv",
+  "product": "WatchDog",
+  "model": "Any",
+  "profiles": [
+    "generic_system",
+    "generic_interfaces",
+    "geist_environment"
+  ],
+  "matching_rules": [
+    "Geist",
+    "WatchDog",
+    "WATCHDOG",
+    "21239"
+  ]
+}

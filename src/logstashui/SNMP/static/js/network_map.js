@@ -1348,16 +1348,18 @@ function _populateNodeCard(card, nodeData) {
                 uptimeEl.textContent = formatUptime(metrics.Uptime);
             }
 
-            // CPU / Memory: arrays of 0-1 fractional values; use the most recent point.
+            // CPU / Memory: arrays of 0-1 fractional values sorted oldest→newest
+            // (same order renderMetricChart uses). Use the last element for the
+            // most recent reading.
             if (metrics.CPU && metrics.CPU.length > 0) {
-                const pct = Math.round(metrics.CPU[0] * 100);
+                const pct = Math.round(metrics.CPU[metrics.CPU.length - 1] * 100);
                 const cls = pct >= 90 ? 'text-red-400' : pct >= 75 ? 'text-orange-400' : 'text-green-400';
                 cpuEl.className = `text-sm font-semibold nc-cpu ${cls}`;
                 cpuEl.textContent = pct + '%';
             }
 
             if (metrics.Memory && metrics.Memory.length > 0) {
-                const pct = Math.round(metrics.Memory[0] * 100);
+                const pct = Math.round(metrics.Memory[metrics.Memory.length - 1] * 100);
                 const cls = pct >= 90 ? 'text-red-400' : pct >= 75 ? 'text-orange-400' : 'text-green-400';
                 memEl.className = `text-sm font-semibold nc-mem ${cls}`;
                 memEl.textContent = pct + '%';

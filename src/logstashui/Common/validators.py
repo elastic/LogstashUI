@@ -2,21 +2,25 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
+"""Elasticsearch pipeline-id and data-stream namespace validators."""
+
 import re
 
 def validate_pipeline_name(pipeline_name):
-    """
-    Validate pipeline name according to Elasticsearch rules.
+    """Check a pipeline id against Elasticsearch naming rules.
 
-    Pipeline ID must:
-    - Begin with a letter or underscore
-    - Contain only letters, underscores, dashes, hyphens, and numbers
+    The id must begin with a letter or underscore and contain only letters,
+    digits, underscores, and hyphens.
 
     Args:
-        pipeline_name (str): The pipeline name to validate
+        pipeline_name: Candidate pipeline id.
 
     Returns:
-        tuple: (is_valid, error_message)
+        ``(True, None)`` if valid, otherwise ``(False, error_message)``.
+
+    Examples:
+        ok, err = validate_pipeline_name("logs-nginx")
+        ok, err = validate_pipeline_name("1bad")  # False
     """
     if not pipeline_name:
         return False, "Pipeline name cannot be empty"
@@ -33,21 +37,16 @@ def validate_pipeline_name(pipeline_name):
 
 
 def validate_namespace(namespace):
-    """
-    Validate a data stream namespace according to Elasticsearch rules.
+    """Check a data-stream namespace against Elasticsearch index rules.
 
-    Namespace must:
-    - Not be empty
-    - Be lowercase only (no uppercase letters)
-    - Contain only lowercase letters, digits, hyphens, and underscores
-    - Not start with a hyphen or underscore
-    - Not exceed 100 bytes
+    Must be non-empty, lowercase, start with a letter or digit, contain only
+    ``[a-z0-9_-]``, and be at most 100 bytes.
 
     Args:
-        namespace (str): The namespace to validate
+        namespace: Candidate namespace.
 
     Returns:
-        tuple: (is_valid, error_message)
+        ``(True, None)`` if valid, otherwise ``(False, error_message)``.
     """
     if not namespace:
         return False, "Namespace cannot be empty"

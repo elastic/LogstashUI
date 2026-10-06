@@ -2,12 +2,11 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
-"""
-Django management command to load test SNMP data
+"""Load synthetic `test_`-prefixed SNMP networks and devices.
 
-Usage:
-    python manage.py load_test_snmp_data [--networks N] [--devices N] [--confirm]
-    
+Requires an Elasticsearch connection named ``Homelab`` and at least one
+credential. Existing `test_` rows are replaced.
+
 Examples:
     python manage.py load_test_snmp_data --networks 10 --devices 100
     python manage.py load_test_snmp_data --networks 500 --devices 20000 --confirm
@@ -21,9 +20,11 @@ from PipelineManager.models import Connection
 
 
 class Command(BaseCommand):
+    """Create bulk test SNMP networks and devices."""
     help = 'Load test data into SNMP database (default: 300 networks, 10,000 devices)'
 
     def add_arguments(self, parser):
+        """Add `--networks`, `--devices`, and `--confirm`."""
         parser.add_argument(
             '--confirm',
             action='store_true',
@@ -43,7 +44,7 @@ class Command(BaseCommand):
         )
 
     def generate_random_network(self):
-        """Generate a random private network in CIDR notation"""
+        """Return a random private IPv4 prefix in CIDR notation."""
         ranges = [
             (10, 0, 0, 0, 8),
             (172, 16, 0, 0, 12),
@@ -69,7 +70,7 @@ class Command(BaseCommand):
             return f"192.168.{third}.0/24"
 
     def generate_random_ip(self, network_cidr):
-        """Generate a random IP address within a network"""
+        """Return a random host address inside `network_cidr`."""
         network = ipaddress.ip_network(network_cidr, strict=False)
         hosts = list(network.hosts())
         if hosts:
@@ -77,6 +78,7 @@ class Command(BaseCommand):
         return str(network.network_address)
 
     def handle(self, *args, **options):
+        """Delete existing `test_` rows (after confirm) and insert new networks and devices."""
         self.stdout.write(self.style.SUCCESS('Starting test data load...'))
         
         # Check existing test data (only delete test_ prefixed items)

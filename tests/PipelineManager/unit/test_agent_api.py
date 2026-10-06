@@ -1198,3 +1198,58 @@ def test_sign_csr_if_present_noop_when_insecure(monkeypatch):
 
     monkeypatch.setenv("LOGSTASHUI_INSECURE_HTTP", "true")
     assert _sign_csr_if_present({"csr_pem": "anything"}) is None
+
+
+def test_checkin_hot_path_queries_and_no_payload_logging(
+    rf, test_agent_connection, test_api_key, django_assert_num_queries, caplog
+):
+    from PipelineManager.agent_api import check_in
+    request = rf.post('/ConnectionManager/CheckIn/', data=json.dumps({
+        'connection_id': test_agent_connection.pk,
+        'status_blob': {'agent_version': 'payload-must-not-be-logged'},
+    }), content_type='application/json', HTTP_AUTHORIZATION=f'ApiKey {test_api_key}')
+    with caplog.at_level('DEBUG', logger='PipelineManager.agent_api'):
+        with django_assert_num_queries(4):
+            response = check_in(request)
+    assert response.status_code == 200
+    assert 'payload-must-not-be-logged' not in caplog.text
+    test_agent_connection.refresh_from_db()
+    assert test_agent_connection.status_blob['agent_version'] == 'payload-must-not-be-logged'
+
+
+def test_checkin_preserves_concurrent_admin_changes(rf, test_agent_connection, test_api_key):
+    from PipelineManager.agent_api import check_in
+    original = ApiKey.verify_api_key
+
+    def verify_with_admin_change(key, raw):
+        Connection.objects.filter(pk=test_agent_connection.pk).update(
+            restart_on_next_checkin=True, desired_agent_version='9.9.9', name='Admin rename'
+        )
+        return original(key, raw)
+
+    request = rf.post('/ConnectionManager/CheckIn/', data=json.dumps({
+        'connection_id': test_agent_connection.pk,
+    }), content_type='application/json', HTTP_AUTHORIZATION=f'ApiKey {test_api_key}')
+    with patch.object(ApiKey, 'verify_api_key', verify_with_admin_change):
+        response = check_in(request)
+    assert response.status_code == 200
+    test_agent_connection.refresh_from_db()
+    assert test_agent_connection.restart_on_next_checkin is True
+    assert test_agent_connection.desired_agent_version == '9.9.9'
+    assert test_agent_connection.name == 'Admin rename'
+    response = check_in(request)
+    assert json.loads(response.content)['restart'] is True
+    response = check_in(request)
+    assert json.loads(response.content)['restart'] is False
+
+
+@pytest.mark.parametrize('status', [['invalid'], {'agent_api_port': -1}])
+def test_checkin_invalid_heartbeat_does_not_write(rf, test_agent_connection, test_api_key, status):
+    from PipelineManager.agent_api import check_in
+    request = rf.post('/ConnectionManager/CheckIn/', data=json.dumps({
+        'connection_id': test_agent_connection.pk, 'status_blob': status,
+    }), content_type='application/json', HTTP_AUTHORIZATION=f'ApiKey {test_api_key}')
+    response = check_in(request)
+    assert response.status_code == 400
+    test_agent_connection.refresh_from_db()
+    assert test_agent_connection.last_check_in is None

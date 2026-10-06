@@ -13,6 +13,8 @@
     "system.load.1": "1.3.6.1.4.1.2021.10.1.3.1",
     "system.load.5": "1.3.6.1.4.1.2021.10.1.3.2",
     "system.load.15": "1.3.6.1.4.1.2021.10.1.3.3",
+    "system.cpu.pct.user": "1.3.6.1.4.1.2021.11.9.0",
+    "system.cpu.pct.system": "1.3.6.1.4.1.2021.11.10.0",
     "system.cpu.raw.user": "1.3.6.1.4.1.2021.11.50.0",
     "system.cpu.raw.nice": "1.3.6.1.4.1.2021.11.51.0",
     "system.cpu.raw.system": "1.3.6.1.4.1.2021.11.52.0",
@@ -34,6 +36,27 @@
         "value1_field": "system.memory.actual.total.kb",
         "value2_field": "system.memory.actual.available.kb",
         "complement_ratio_output_field": "system.memory.actual.used.pct"
+      }
+    },
+    {
+      "operation": "sum",
+      "target": {
+        "scope": "get"
+      },
+      "params": {
+        "input_fields": ["system.cpu.pct.user", "system.cpu.pct.system"],
+        "output_field": "system.cpu.active.pct"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.active.pct"
+      },
+      "params": {
+        "multiply_value": 0.01,
+        "output_field": "system.cpu.total.norm.pct"
       }
     }
   ]

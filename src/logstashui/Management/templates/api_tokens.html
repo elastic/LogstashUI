@@ -132,6 +132,67 @@
     }
   }
 
+  // Lives on the page (not the HTMX fragment) so the Copy button works after
+  // the create response is swapped in. Clipboard API needs a secure context
+  // (HTTPS or localhost); fall back to selecting the visible token.
+  function copyNewToken(btn) {
+    const el = document.getElementById('newTokenValue');
+    const value = (el && el.textContent || '').trim();
+    if (!value) {
+      return;
+    }
+
+    function mark(label) {
+      btn.textContent = label;
+      setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
+    }
+
+    function selectVisible() {
+      const selection = window.getSelection();
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      try {
+        return document.execCommand('copy');
+      } catch (err) {
+        return false;
+      }
+    }
+
+    function textareaCopy() {
+      const textarea = document.createElement('textarea');
+      textarea.value = value;
+      textarea.setAttribute('readonly', '');
+      textarea.style.position = 'fixed';
+      textarea.style.top = '0';
+      textarea.style.left = '0';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      textarea.setSelectionRange(0, value.length);
+      let ok = false;
+      try {
+        ok = document.execCommand('copy');
+      } catch (err) {
+        ok = false;
+      }
+      document.body.removeChild(textarea);
+      return ok;
+    }
+
+    function fallbackCopy() {
+      mark((selectVisible() || textareaCopy()) ? 'Copied!' : 'Failed!');
+    }
+
+    if (window.isSecureContext && navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(value).then(() => mark('Copied!'), fallbackCopy);
+    } else {
+      fallbackCopy();
+    }
+  }
+
   // Row kebab menus: position at the cursor, close on outside click.
   document.addEventListener('click', function (event) {
     const button = event.target.closest('.action-menu-button');

@@ -2,6 +2,8 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
+"""Placeholder models module; in-app docs are files, not Django models."""
+
 from django.db import models
 
 # Create your models here.

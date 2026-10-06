@@ -333,7 +333,7 @@ function filterMetadata(obj) {
 /**
  * Mark executed plugins in the editor with visual indicators
  */
-function markExecutedPlugins(nodes, originalEvent) {
+function markExecutedPlugins(nodes, originalEvent, outputEvent = null) {
     // Hide any visible tooltips BEFORE removing DOM elements to prevent stuck tooltips
     const tooltip = document.getElementById('data-flow-tooltip');
     if (tooltip) {
@@ -580,6 +580,15 @@ function markExecutedPlugins(nodes, originalEvent) {
             }
         }
     });
+
+    // Keep the final post-filter event at a predictable location, regardless of
+    // whether the last executed item was a plugin or a conditional.
+    if (outputEvent) {
+        const filterContainer = document.getElementById('filterComponents');
+        if (filterContainer) {
+            addOutputEventIndicator(filterContainer, outputEvent);
+        }
+    }
 }
 
 /**
@@ -659,7 +668,7 @@ function addOriginalEventIndicator(filterContainer, originalEvent) {
         // Hide hover tooltip (only if not sticky)
         const tooltip = document.getElementById('data-flow-tooltip');
         if (tooltip && tooltip.style.display !== 'none' && !tooltip.querySelector('button[onclick*="hideDataFlowTooltip"]')) {
-            hideDataFlowTooltip();
+            scheduleDataFlowTooltipHide();
         }
     });
 
@@ -759,12 +768,88 @@ function addDataFlowIndicator(componentElement, node) {
         // Hide hover tooltip (only if not sticky)
         const tooltip = document.getElementById('data-flow-tooltip');
         if (tooltip && tooltip.style.display !== 'none' && !tooltip.querySelector('button[onclick*="hideDataFlowTooltip"]')) {
-            hideDataFlowTooltip();
+            scheduleDataFlowTooltipHide();
         }
     });
 
     // Insert after the component element
     componentElement.parentNode.insertBefore(dataFlow, componentElement.nextSibling);
+}
+
+/**
+ * Add the final post-filter event at the bottom of the Filter section.
+ */
+function addOutputEventIndicator(filterContainer, outputEvent) {
+    const dataFlow = document.createElement('div');
+    dataFlow.className = 'simulation-data-flow simulation-output-event';
+    dataFlow.innerHTML = `
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 12h14"/>
+            <path d="m13 6 6 6-6 6"/>
+        </svg>
+        <span>View Output Event</span>
+        <svg class="hover-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-left: auto; opacity: 0.5;">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+            <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+        </svg>
+        <svg class="click-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="opacity: 0.5;">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122"></path>
+        </svg>
+    `;
+
+    dataFlow.style.cssText = `
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 12px;
+        margin: 8px 0;
+        background: linear-gradient(90deg, rgba(16, 185, 129, 0.12), rgba(59, 130, 246, 0.12));
+        border: 1px solid rgba(45, 212, 191, 0.4);
+        border-radius: 6px;
+        color: #5eead4;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    `;
+
+    // The final event contains the internal snapshots map used to build the
+    // debugger. It is transport metadata, not part of the pipeline output.
+    const eventForDisplay = JSON.parse(JSON.stringify(outputEvent));
+    delete eventForDisplay.snapshots;
+    const filtered = filterMetadata(eventForDisplay);
+    dataFlow.dataset.eventJson = JSON.stringify(filtered, null, 2);
+
+    dataFlow.addEventListener('click', function(e) {
+        e.stopPropagation();
+        showDataFlowTooltip(e, this.dataset.eventJson, true, null);
+    });
+
+    dataFlow.addEventListener('mouseenter', function(e) {
+        this.style.background = 'linear-gradient(90deg, rgba(16, 185, 129, 0.22), rgba(59, 130, 246, 0.22))';
+        this.style.borderColor = 'rgba(45, 212, 191, 0.65)';
+        this.style.transform = 'translateX(4px)';
+        this.style.boxShadow = '0 4px 6px rgba(20, 184, 166, 0.2)';
+        this.querySelectorAll('.hover-icon, .click-icon').forEach(icon => icon.style.opacity = '1');
+        showDataFlowTooltip(e, this.dataset.eventJson, false, null);
+    });
+
+    dataFlow.addEventListener('mouseleave', function() {
+        this.style.background = 'linear-gradient(90deg, rgba(16, 185, 129, 0.12), rgba(59, 130, 246, 0.12))';
+        this.style.borderColor = 'rgba(45, 212, 191, 0.4)';
+        this.style.transform = 'translateX(0)';
+        this.style.boxShadow = '0 1px 3px rgba(0, 0, 0, 0.1)';
+        this.querySelectorAll('.hover-icon, .click-icon').forEach(icon => icon.style.opacity = '0.5');
+
+        const tooltip = document.getElementById('data-flow-tooltip');
+        if (tooltip && tooltip.style.display !== 'none' && !tooltip.querySelector('button[onclick*="hideDataFlowTooltip"]')) {
+            scheduleDataFlowTooltipHide();
+        }
+    });
+
+    const finalInsertionPoint = filterContainer.querySelector(':scope > .insertion-point.always-visible');
+    filterContainer.insertBefore(dataFlow, finalInsertionPoint || null);
 }
 
 /**
@@ -775,6 +860,7 @@ function addDataFlowIndicator(componentElement, node) {
  * @param {Object} changes - Optional changes object for context-aware highlighting
  */
 function showDataFlowTooltip(event, eventJson, sticky = false, changes = null) {
+    cancelDataFlowTooltipHide();
     let tooltip = document.getElementById('data-flow-tooltip');
 
     if (!tooltip) {
@@ -800,6 +886,14 @@ function showDataFlowTooltip(event, eventJson, sticky = false, changes = null) {
         document.body.appendChild(tooltip);
     }
 
+    tooltip.dataset.sticky = sticky ? 'true' : 'false';
+    tooltip.onmouseenter = cancelDataFlowTooltipHide;
+    tooltip.onmouseleave = function() {
+        if (this.dataset.sticky !== 'true' && this.dataset.dragging !== 'true') {
+            scheduleDataFlowTooltipHide();
+        }
+    };
+
     if (sticky) {
         // Sticky mode: make interactive and draggable
         tooltip.style.pointerEvents = 'auto';
@@ -813,9 +907,9 @@ function showDataFlowTooltip(event, eventJson, sticky = false, changes = null) {
 
         // Update content with close button and copy button
         tooltip.innerHTML = `
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+            <div class="data-flow-tooltip-header" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; cursor: grab;">
                 <div style="font-weight: 600; color: #60a5fa;">Event State at This Point:</div>
-                <div style="display: flex; gap: 4px;">
+                <div class="data-flow-tooltip-actions" style="display: flex; gap: 4px;">
                     <button onclick="copyTooltipData()" 
                             id="copyTooltipBtn"
                             style="background: #3b82f6; border: none; color: white; cursor: pointer; font-size: 11px; padding: 4px 8px; border-radius: 4px; display: flex; align-items: center; gap: 4px; font-family: system-ui, -apple-system, sans-serif;"
@@ -826,7 +920,7 @@ function showDataFlowTooltip(event, eventJson, sticky = false, changes = null) {
                         </svg>
                         Copy
                     </button>
-                    <button onclick="hideDataFlowTooltip()" 
+                    <button class="data-flow-tooltip-close" onclick="hideDataFlowTooltip()"
                             style="background: transparent; border: none; color: #9ca3af; cursor: pointer; font-size: 16px; padding: 0; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;"
                             onmouseover="this.style.color='#fff'" onmouseout="this.style.color='#9ca3af'"
                             title="Close">✕</button>
@@ -835,12 +929,12 @@ function showDataFlowTooltip(event, eventJson, sticky = false, changes = null) {
             <pre style="margin: 0; white-space: pre-wrap;">${highlightedJSON}</pre>
         `;
 
-        // Make draggable only when sticky
+        // Drag from the tooltip header.
         makeDraggable(tooltip);
     } else {
-        // Hover mode: allow copy button clicks but prevent other interactions
+        // Hover mode remains interactive so users can copy or reposition it.
         tooltip.style.pointerEvents = 'auto';
-        tooltip.style.cursor = 'default';
+        tooltip.style.cursor = 'move';
 
         // Apply syntax highlighting with change context
         const highlightedJSON = highlightJSON(eventJson, changes);
@@ -849,22 +943,32 @@ function showDataFlowTooltip(event, eventJson, sticky = false, changes = null) {
         tooltip.dataset.eventJson = eventJson;
 
         tooltip.innerHTML = `
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+            <div class="data-flow-tooltip-header" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; cursor: grab;">
                 <div style="font-weight: 600; color: #60a5fa;">Event State at This Point:</div>
-                <button onclick="copyTooltipData()" 
-                        id="copyTooltipBtn"
-                        style="background: #3b82f6; border: none; color: white; cursor: pointer; font-size: 11px; padding: 4px 8px; border-radius: 4px; display: flex; align-items: center; gap: 4px; font-family: system-ui, -apple-system, sans-serif; pointer-events: auto;"
-                        onmouseover="this.style.background='#2563eb'" onmouseout="this.style.background='#3b82f6'"
-                        title="Copy JSON to clipboard">
-                    <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
-                    </svg>
-                    Copy
-                </button>
+                <div class="data-flow-tooltip-actions" style="display: flex; gap: 4px;">
+                    <button onclick="copyTooltipData()"
+                            id="copyTooltipBtn"
+                            style="background: #3b82f6; border: none; color: white; cursor: pointer; font-size: 11px; padding: 4px 8px; border-radius: 4px; display: flex; align-items: center; gap: 4px; font-family: system-ui, -apple-system, sans-serif; pointer-events: auto;"
+                            onmouseover="this.style.background='#2563eb'" onmouseout="this.style.background='#3b82f6'"
+                            title="Copy JSON to clipboard">
+                        <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                        </svg>
+                        Copy
+                    </button>
+                </div>
             </div>
             <pre style="margin: 0; white-space: pre-wrap;">${highlightedJSON}</pre>
         `;
+
+        makeDraggable(tooltip);
     }
+
+    tooltip.onclick = function(e) {
+        if (!e.target.closest('button, a, input, textarea, select')) {
+            pinDataFlowTooltip(this);
+        }
+    };
 
     // Position the tooltip near the cursor
     const x = event.clientX + 10;
@@ -879,117 +983,172 @@ function showDataFlowTooltip(event, eventJson, sticky = false, changes = null) {
  * Make an element draggable
  */
 function makeDraggable(element) {
-    let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+    const dragHandle = element.querySelector('.data-flow-tooltip-header') || element;
 
-    // Remove any existing mousedown handler to avoid duplicates
-    element.onmousedown = null;
-
-    element.onmousedown = dragMouseDown;
-
-    function dragMouseDown(e) {
-        // Don't drag if clicking on close button, copy button, or any interactive element
-        if (e.target.tagName === 'BUTTON' ||
-            e.target.closest('button') ||
-            e.target.tagName === 'SVG' ||
-            e.target.closest('svg')) {
+    dragHandle.onpointerdown = function(e) {
+        if (e.button !== 0 || e.target.closest('button, a, input, textarea, select')) {
             return;
         }
 
         e.preventDefault();
         e.stopPropagation();
-        pos3 = e.clientX;
-        pos4 = e.clientY;
-        document.onmouseup = closeDragElement;
-        document.onmousemove = elementDrag;
+        const isDataFlowTooltip = element.id === 'data-flow-tooltip';
+        if (isDataFlowTooltip) {
+            cancelDataFlowTooltipHide();
+            pinDataFlowTooltip(element);
+        }
 
-        // Add visual feedback that dragging is active
+        const startRect = element.getBoundingClientRect();
+        const startX = e.clientX;
+        const startY = e.clientY;
+        const isFixed = window.getComputedStyle(element).position === 'fixed';
+        const pageOffsetX = isFixed ? 0 : window.scrollX;
+        const pageOffsetY = isFixed ? 0 : window.scrollY;
+        element.dataset.dragging = 'true';
         element.style.cursor = 'grabbing';
-    }
+        dragHandle.style.cursor = 'grabbing';
 
-    function elementDrag(e) {
-        e.preventDefault();
-        pos1 = pos3 - e.clientX;
-        pos2 = pos4 - e.clientY;
-        pos3 = e.clientX;
-        pos4 = e.clientY;
-        element.style.top = (element.offsetTop - pos2) + 'px';
-        element.style.left = (element.offsetLeft - pos1) + 'px';
-    }
+        const moveElement = function(moveEvent) {
+            if (element.dataset.dragging !== 'true') return;
+            element.style.left = `${startRect.left + pageOffsetX + moveEvent.clientX - startX}px`;
+            element.style.top = `${startRect.top + pageOffsetY + moveEvent.clientY - startY}px`;
+        };
 
-    function closeDragElement() {
-        document.onmouseup = null;
-        document.onmousemove = null;
-        // Restore cursor
-        element.style.cursor = 'move';
-    }
+        const finishDrag = function() {
+            element.dataset.dragging = 'false';
+            element.style.cursor = 'move';
+            dragHandle.style.cursor = 'grab';
+            window.removeEventListener('pointermove', moveElement);
+            window.removeEventListener('pointerup', finishDrag);
+            window.removeEventListener('pointercancel', finishDrag);
+
+            if (isDataFlowTooltip && element.dataset.sticky !== 'true' && !element.matches(':hover')) {
+                scheduleDataFlowTooltipHide();
+            }
+        };
+
+        window.addEventListener('pointermove', moveElement);
+        window.addEventListener('pointerup', finishDrag);
+        window.addEventListener('pointercancel', finishDrag);
+    };
+}
+
+function pinDataFlowTooltip(tooltip) {
+    tooltip.dataset.sticky = 'true';
+    cancelDataFlowTooltipHide();
+
+    const actions = tooltip.querySelector('.data-flow-tooltip-actions');
+    if (!actions || actions.querySelector('.data-flow-tooltip-close')) return;
+
+    const closeButton = document.createElement('button');
+    closeButton.type = 'button';
+    closeButton.className = 'data-flow-tooltip-close';
+    closeButton.title = 'Close';
+    closeButton.textContent = '✕';
+    closeButton.style.cssText = 'background: transparent; border: none; color: #9ca3af; cursor: pointer; font-size: 16px; padding: 0; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;';
+    closeButton.onmouseenter = function() { this.style.color = '#fff'; };
+    closeButton.onmouseleave = function() { this.style.color = '#9ca3af'; };
+    closeButton.onclick = function(e) {
+        e.stopPropagation();
+        hideDataFlowTooltip();
+    };
+    actions.appendChild(closeButton);
 }
 
 /**
  * Copy tooltip JSON data to clipboard
  */
-function copyTooltipData() {
+async function copyTooltipData() {
     const tooltip = document.getElementById('data-flow-tooltip');
     if (!tooltip || !tooltip.dataset.eventJson) return;
 
     const jsonData = tooltip.dataset.eventJson;
+    let copyData = jsonData;
 
-    // Try to format the JSON nicely
     try {
-        const parsed = JSON.parse(jsonData);
-        const formatted = JSON.stringify(parsed, null, 2);
-
-        // Copy to clipboard
-        navigator.clipboard.writeText(formatted).then(() => {
-            // Visual feedback - change button text and color temporarily
-            const copyBtn = document.getElementById('copyTooltipBtn');
-            if (copyBtn) {
-                const originalHTML = copyBtn.innerHTML;
-                const originalBg = copyBtn.style.background;
-
-                copyBtn.innerHTML = `
-                    <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
-                    </svg>
-                    Copied!
-                `;
-                copyBtn.style.background = '#10b981';
-                copyBtn.onmouseover = null;
-                copyBtn.onmouseout = null;
-
-                // Reset after 2 seconds
-                setTimeout(() => {
-                    copyBtn.innerHTML = originalHTML;
-                    copyBtn.style.background = originalBg;
-                    copyBtn.onmouseover = function() { this.style.background = '#2563eb'; };
-                    copyBtn.onmouseout = function() { this.style.background = '#3b82f6'; };
-                }, 2000);
-            }
-        }).catch(err => {
-            console.error('Failed to copy to clipboard:', err);
-            ConfirmationModal.show('Failed to copy to clipboard. Please try again.', 'Copy Failed', 'OK', null, true);
-        });
-    } catch (e) {
-        // If parsing fails, just copy the raw string
-        navigator.clipboard.writeText(jsonData).then(() => {
-            const copyBtn = document.getElementById('copyTooltipBtn');
-            if (copyBtn) {
-                const originalHTML = copyBtn.innerHTML;
-                copyBtn.innerHTML = 'Copied!';
-                setTimeout(() => {
-                    copyBtn.innerHTML = originalHTML;
-                }, 2000);
-            }
-        }).catch(err => {
-            console.error('Failed to copy to clipboard:', err);
-            ConfirmationModal.show('Failed to copy to clipboard. Please try again.', 'Copy Failed', 'OK', null, true);
-        });
+        copyData = JSON.stringify(JSON.parse(jsonData), null, 2);
+    } catch (_) {
+        // Preserve non-JSON messages exactly as shown.
     }
+
+    try {
+        await writeTextToClipboard(copyData);
+        const copyBtn = document.getElementById('copyTooltipBtn');
+        if (!copyBtn) return;
+
+        const originalHTML = copyBtn.innerHTML;
+        const originalBg = copyBtn.style.background;
+        copyBtn.innerHTML = `
+            <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+            </svg>
+            Copied!
+        `;
+        copyBtn.style.background = '#10b981';
+        setTimeout(() => {
+            copyBtn.innerHTML = originalHTML;
+            copyBtn.style.background = originalBg;
+        }, 2000);
+    } catch (err) {
+        console.error('Failed to copy to clipboard:', err);
+        ConfirmationModal.show('Failed to copy to clipboard. Please try again.', 'Copy Failed', 'OK', null, true);
+    }
+}
+
+function writeTextToClipboard(text) {
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        return navigator.clipboard.writeText(text).catch(() => legacyCopyText(text));
+    }
+
+    return legacyCopyText(text);
+}
+
+function legacyCopyText(text) {
+    return new Promise((resolve, reject) => {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.setAttribute('readonly', '');
+        textarea.style.cssText = 'position: fixed; left: -9999px; top: 0; opacity: 0;';
+        document.body.appendChild(textarea);
+        textarea.select();
+
+        try {
+            if (!document.execCommand('copy')) {
+                throw new Error('Browser copy command was rejected');
+            }
+            resolve();
+        } catch (err) {
+            reject(err);
+        } finally {
+            textarea.remove();
+        }
+    });
+}
+
+let dataFlowTooltipHideTimer = null;
+
+function cancelDataFlowTooltipHide() {
+    if (dataFlowTooltipHideTimer) {
+        clearTimeout(dataFlowTooltipHideTimer);
+        dataFlowTooltipHideTimer = null;
+    }
+}
+
+function scheduleDataFlowTooltipHide() {
+    cancelDataFlowTooltipHide();
+    dataFlowTooltipHideTimer = setTimeout(() => {
+        const tooltip = document.getElementById('data-flow-tooltip');
+        if (tooltip && tooltip.dataset.sticky !== 'true' && tooltip.dataset.dragging !== 'true' && !tooltip.matches(':hover')) {
+            hideDataFlowTooltip();
+        }
+    }, 200);
 }
 
 /**
  * Hide the data flow tooltip
  */
 function hideDataFlowTooltip() {
+    cancelDataFlowTooltipHide();
     const tooltip = document.getElementById('data-flow-tooltip');
     if (tooltip) {
         tooltip.style.display = 'none';
@@ -1327,22 +1486,21 @@ function createForceDirectedGraph(graphData) {
             return;
         }
 
-        // Special handling for "End" node - scroll to last "View Full Event"
+        // Special handling for "End" node - scroll to the pinned output event
         if (d.id === 'end') {
-            const allDataFlows = document.querySelectorAll('.simulation-data-flow');
-            if (allDataFlows.length > 0) {
-                const lastDataFlow = allDataFlows[allDataFlows.length - 1];
-                lastDataFlow.scrollIntoView({
+            const outputEventElement = document.querySelector('.simulation-output-event');
+            if (outputEventElement) {
+                outputEventElement.scrollIntoView({
                     behavior: 'smooth',
                     block: 'center'
                 });
 
                 // Apply the same glowing animation
-                lastDataFlow.classList.add('newly-added');
+                outputEventElement.classList.add('newly-added');
 
                 // Remove the animation class after it completes
                 setTimeout(() => {
-                    lastDataFlow.classList.remove('newly-added');
+                    outputEventElement.classList.remove('newly-added');
                 }, 2000);
             }
             return;
@@ -1829,9 +1987,17 @@ function renderCachedResults(runId, index) {
 
     // Re-render the graph and badges with cached data
     if (cachedData.nodes && cachedData.links) {
+        window.simulationData = {
+            nodes: cachedData.nodes,
+            links: cachedData.links,
+            originalEvent: cachedData.originalEvent,
+            outputEvent: cachedData.outputEvent,
+            totalExecutionTimeMs: cachedData.totalExecutionTimeMs
+        };
+
         // Mark executed plugins
         if (cachedData.originalEvent) {
-            markExecutedPlugins(cachedData.nodes, cachedData.originalEvent);
+            markExecutedPlugins(cachedData.nodes, cachedData.originalEvent, cachedData.outputEvent);
         }
 
         // Create the graph
@@ -2048,7 +2214,7 @@ function initSimulationResults(runId) {
                                 <h3 class="text-base font-semibold text-red-400">Simulation Timeout</h3>
                                 <p class="text-sm text-red-200">
                                     No results received after 60 seconds. The pipeline may have failed or encountered an error.
-                                    Click "View Logs" to check for errors.
+                                    Use "Logs" in the Simulation controls to check for errors.
                                 </p>
                             </div>
                         </div>
@@ -2376,7 +2542,13 @@ function initSimulationResults(runId) {
                                     });
 
                                     // Store simulation data globally for view switching
-                                    window.simulationData = { nodes, links, totalExecutionTimeMs: totalExecutionTimeMs.toFixed(3) };
+                                    window.simulationData = {
+                                        nodes,
+                                        links,
+                                        originalEvent,
+                                        outputEvent: event,
+                                        totalExecutionTimeMs: totalExecutionTimeMs.toFixed(3)
+                                    };
 
                                     // Cache results for this run_id
                                     if (!window.simulationResultsCache) {
@@ -2386,6 +2558,7 @@ function initSimulationResults(runId) {
                                         nodes: nodes,
                                         links: links,
                                         originalEvent: originalEvent,
+                                        outputEvent: event,
                                         totalExecutionTimeMs: totalExecutionTimeMs.toFixed(3)
                                     };
 
@@ -2400,7 +2573,7 @@ function initSimulationResults(runId) {
                                         }));
                                     } else {
                                         // Overlay Mode: Mark plugins and create graph
-                                        markExecutedPlugins(nodes, originalEvent);
+                                        markExecutedPlugins(nodes, originalEvent, event);
                                         
                                         // Use requestAnimationFrame to ensure DOM is fully rendered before creating graph
                                         requestAnimationFrame(() => {
@@ -2539,112 +2712,6 @@ function initSimulationResults(runId) {
 }
 
 /**
- * View Logstash logs for the current simulation
- */
-window.viewSimulationLogs = function() {
-    const overlay = document.getElementById('simulation-overlay');
-    if (!overlay) {
-        console.error('Simulation overlay not found');
-        ConfirmationModal.show('Unable to fetch logs — simulation overlay not found.', 'Error', 'OK', null, true);
-        return;
-    }
-    
-    const slotId = overlay.getAttribute('data-slot-id');
-    if (!slotId) {
-        console.error('Slot ID not found in overlay');
-        ConfirmationModal.show('Unable to fetch logs — slot information not available.', 'Error', 'OK', null, true);
-        return;
-    }
-    
-    // Show loading modal
-    const modal = document.createElement('div');
-    modal.id = 'logs-modal';
-    modal.className = 'fixed inset-0 flex items-center justify-center z-[60] p-4';
-    modal.innerHTML = `
-        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="document.getElementById('logs-modal').remove()"></div>
-        <div class="bg-gray-800 rounded-lg w-full max-w-6xl max-h-[90vh] flex flex-col relative z-10 border border-gray-700">
-            <div class="p-4 border-b border-gray-700 flex justify-between items-center">
-                <h3 class="text-lg font-semibold text-white">Pipeline Logs - slot${slotId}-filter1</h3>
-                <button onclick="document.getElementById('logs-modal').remove()" class="text-gray-400 hover:text-white">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                    </svg>
-                </button>
-            </div>
-            <div class="p-6 overflow-y-auto flex-grow">
-                <div id="logs-content" class="bg-gray-900 rounded-lg p-4 font-mono text-sm text-gray-300">
-                    <div class="flex items-center justify-center py-8">
-                        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-400"></div>
-                        <span class="ml-3">Loading logs...</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
-    
-    document.body.appendChild(modal);
-    
-    // Fetch logs from Django API endpoint (include sim target for multi-agent)
-    let logsUrl = `/ConnectionManager/GetRelatedLogs/?slot_id=${encodeURIComponent(slotId)}&max_entries=100&min_level=INFO`;
-    if (typeof window.getSimConnectionId === 'function' && window.getSimConnectionId()) {
-        logsUrl += `&sim_connection_id=${encodeURIComponent(window.getSimConnectionId())}`;
-    }
-    fetch(logsUrl)
-        .then(response => response.json())
-        .then(data => {
-            const logsContent = document.getElementById('logs-content');
-
-            if (data.error) {
-                logsContent.innerHTML = `<div class="text-red-400">Error fetching logs: ${data.error}</div>`;
-                return;
-            }
-            
-            if (!data.logs || data.logs.length === 0) {
-                logsContent.innerHTML = '<div class="text-yellow-400">No logs found for this pipeline. (Clean runs often produce no INFO-level pipeline logs — try min level DEBUG or re-run after an error.)</div>';
-                return;
-            }
-            
-            let html = `<div class="text-green-400 mb-4">Found ${data.log_count} log entries - Time shown in UTC</div>`;
-            
-            data.logs.forEach((log, idx) => {
-                const level = log.level || 'INFO';
-                const levelColor = {
-                    'ERROR': 'text-red-400',
-                    'WARN': 'text-yellow-400',
-                    'INFO': 'text-blue-400',
-                    'DEBUG': 'text-gray-400'
-                }[level] || 'text-gray-400';
-                
-                const timestamp = log.timeMillis ? new Date(log.timeMillis).toISOString() : 'N/A';
-                const logEvent = log.logEvent || {};
-                const message = logEvent.message || log.message || 'No message';
-                const logger = log.loggerName || 'unknown';
-                
-                html += `
-                    <div class="mb-4 pb-4 border-b border-gray-700">
-                        <div class="flex items-center gap-3 mb-2">
-                            <span class="${levelColor} font-bold">[${level}]</span>
-                            <span class="text-gray-500 text-xs">${timestamp}</span>
-                            <span class="text-gray-400 text-xs">${logger}</span>
-                        </div>
-                        <div class="text-gray-200 mb-2">${escapeHtml(message)}</div>
-                        <details class="text-xs">
-                            <summary class="cursor-pointer text-blue-400 hover:text-blue-300">View full log entry</summary>
-                            <pre class="mt-2 p-2 bg-gray-950 rounded overflow-x-auto">${JSON.stringify(log, null, 2)}</pre>
-                        </details>
-                    </div>
-                `;
-            });
-            
-            logsContent.innerHTML = html;
-        })
-        .catch(error => {
-            const logsContent = document.getElementById('logs-content');
-            logsContent.innerHTML = `<div class="text-red-400">Error fetching logs: ${error.message}</div>`;
-        });
-};
-
-/**
  * Show a loading block overlay over the simulation overlay bar to prevent interaction
  * during multi-simulation updates
  */
@@ -2709,4 +2776,3 @@ document.addEventListener('click', function(e) {
         linkTooltip.remove();
     }
 });
-

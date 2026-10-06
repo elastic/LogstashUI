@@ -8,7 +8,11 @@ Apply **one** tree. All of them keep LogstashUI TLS on (`:8443`) and use Ingress
 | [postgresql/](postgresql/) | External PostgreSQL 14+. Optional [cnpg.yaml](postgresql/cnpg.yaml) if you run CloudNativePG. |
 | [mysql/](mysql/) | MariaDB 10.6+ or MySQL 8.0+. Engine is `mysql`. Create the schema as `utf8mb4` / `utf8mb4_bin`. |
 
-Replace `logstashui.example.com` and `SECRET_KEY` before apply. For Postgres/MySQL, create the empty database first — [SQL examples](/docs/docs/logstashui/database/examples/).
+Replace `SECRET_KEY` before apply.
+
+If using an Ingress, HTTPRoute or similar, set `CSRF_TRUSTED_ORIGINS` and `ALLOWED_HOSTS` to the public hostname (keep `logstashui` in `ALLOWED_HOSTS`). `LOGSTASHUI_TLS_SANS` / `LOGSTASHUI_HOST_HOSTNAME` add that name to the product leaf. `LOGSTASHUI_AGENT_UI_URL` is the URL agents should use.
+
+For Postgres/MySQL, create the empty database first — [SQL examples](/docs/docs/logstashui/database/examples/).
 
 Envoy Gateway instead of Ingress: [envoy-gateway.md](../envoy-gateway.md) (enable the Backend API, then `Backend` + `HTTPRoute`).
 

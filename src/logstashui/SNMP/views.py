@@ -2,47 +2,55 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
+"""Page views and AI-template JSON/SSE endpoints for the SNMP NMS."""
+
 from django.shortcuts import render
 from django.conf import settings
 from django.http import JsonResponse, StreamingHttpResponse
 
 from .models import Credential, Network, Device, Profile, DeviceTemplate
 from PipelineManager.forms import ConnectionForm
+from PipelineManager.models import Connection
 from .overview import get_discovered_devices_count, get_template_data_categories, get_high_resource_usage
 from Common.decorators import require_admin_role
 from Common.formatters import format_display_name
+from Common.elastic_utils import normalize_kibana_url, get_kibana_url
+
+
 
 import os
 import json
 
 
 def _ai_template_connections():
-    """
-    Centralized ES connections for the Generate Template UI.
+    """Return centralized ES connections for the Generate Template UI.
 
-    ``suggested_kibana_url`` is the host rewritten to a Kibana origin so URL
-    connections can prefill the Kibana URL field instead of waiting for the
-    user to paste (often) the Elasticsearch endpoint.
+    Each row includes `suggested_kibana_url`: the Elasticsearch host rewritten to a
+    Kibana origin so URL connections can prefill Kibana instead of the ES endpoint.
     """
-    from PipelineManager.models import Connection
-    from Common.elastic_utils import normalize_kibana_url
-
     rows = list(Connection.objects.filter(
         connection_type=Connection.ConnectionType.CENTRALIZED
     ).values('id', 'name', 'cloud_id', 'host', 'port'))
     for row in rows:
-        raw = row.get('host') or ''
-        port = row.get('port')
-        if raw and port:
-            host_part = raw.split('://', 1)[-1]
-            if ':' not in host_part:
-                raw = f"{raw}:{port}"
-        row['suggested_kibana_url'] = normalize_kibana_url(raw) if raw else ''
+        if row.get('cloud_id'):
+            try:
+                row['suggested_kibana_url'] = get_kibana_url(row['id'])
+            except Exception:
+                row['suggested_kibana_url'] = ''
+        else:
+            raw = row.get('host') or ''
+            port = row.get('port')
+            if raw and port:
+                host_part = raw.split('://', 1)[-1]
+                if ':' not in host_part:
+                    raw = f"{raw}:{port}"
+            row['suggested_kibana_url'] = normalize_kibana_url(raw) if raw else ''
     return rows
 
 
 # Create your views here.
 def Networks(request):
+    """Render the SNMP Networks page."""
     networks = Network.objects.select_related('connection').all()
     form = ConnectionForm()
     devices = Device.objects.all().select_related('credential', 'network', 'device_template')
@@ -59,6 +67,7 @@ def Networks(request):
     })
 
 def Onboarding(request):
+    """Render the SNMP onboarding wizard."""
     connections   = _ai_template_connections()
     credentials   = Credential.objects.all().order_by('name')
     networks      = Network.objects.all().order_by('name')
@@ -79,20 +88,15 @@ def Onboarding(request):
 
 @require_admin_role
 def CheckDeviceType(request):
-    """
-    Lightweight SNMP probe: GET sysDescr (1.3.6.1.2.1.1.1.0) from an arbitrary
-    host using a stored credential, then run suggest_device_template() to find
-    the best matching template.
+    """GET sysDescr from a host and suggest the best matching device template.
 
-    POST body (JSON): { host, port (optional, default 161), credential_id }
+    Args:
+        host: Target hostname or IP.
+        port: SNMP port; defaults to 161.
+        credential_id: Stored credential primary key.
 
     Returns:
-        {
-            success: bool,
-            sys_descr: str,
-            matched_template: {id, name, vendor, description, matching_rules} | null,
-            error: str  (only on failure)
-        }
+        JSON with `success`, `sys_descr`, and `matched_template` (or `error`).
     """
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
@@ -151,10 +155,10 @@ def CheckDeviceType(request):
 
 
 def _snmp_get_sys_descr(host, port, credential):
-    """
-    Do a single SNMP GET for sysDescr.0 and return the string value, or None on failure.
-    Runs in a background thread so the async loop is isolated.
-    Timeout: 8 seconds (generous enough for slow devices, fast enough to feel responsive).
+    """GET sysDescr.0 and return the string, or None on failure.
+
+    Runs the asyncio SNMP GET on a background thread. Join timeout is 10 seconds
+    (5s SNMP timeout plus retries).
     """
     import asyncio
     import threading
@@ -225,6 +229,7 @@ def _snmp_get_sys_descr(host, port, credential):
     return result[0]
 
 def Devices(request):
+    """Render the SNMP Devices page."""
     devices = Device.objects.all().select_related('credential', 'network', 'device_template')
     templates = DeviceTemplate.objects.all().order_by('-official', 'name')
     credentials = Credential.objects.all().order_by('name')
@@ -233,6 +238,7 @@ def Devices(request):
     return render(request, 'Devices.html', {'devices': devices, 'templates': templates, 'credentials': credentials, 'form': form, 'connections': connections})
 
 def DeviceTemplates(request):
+    """Render device templates and the profiles catalog."""
     from django.db.models import Count
     
     # Load all device templates from database (includes synced official templates)
@@ -335,6 +341,7 @@ def DeviceTemplates(request):
     })
 
 def Credentials(request):
+    """Render the SNMP Credentials page."""
     from django.db.models import Count
     credentials = Credential.objects.annotate(device_count=Count('devices')).order_by('name')
     devices = Device.objects.all().select_related('credential', 'network', 'device_template')
@@ -348,11 +355,11 @@ def Credentials(request):
     })
 
 def Overview(request):
-    """SNMP Overview page with metrics and statistics"""
+    """Render the SNMP Overview dashboard."""
     return render(request, 'Overview.html')
 
 def GetOverviewMetrics(request):
-    """API endpoint to get overview metrics"""
+    """Return overview metrics, template coverage, and high-resource devices as JSON."""
     try:
         # Get total devices from database
         total_devices = Device.objects.count()
@@ -400,15 +407,14 @@ def GetOverviewMetrics(request):
 
 @require_admin_role
 def CheckAgentBuilderResources(request):
-    """
-    Check whether the SNMP AI template generation resources (tools, skills, agents)
-    exist in Kibana and whether they match our expected definitions.
+    """Check whether SNMP AI Agent Builder resources exist and match expected definitions.
 
-    POST body (JSON):
-        connection_id  – int, required
-        kibana_url     – str, optional override for URL-based connections
+    Args:
+        connection_id: Elasticsearch/Kibana connection primary key.
+        kibana_url: Optional Kibana origin override for URL-based connections.
 
-    Returns JSON matching the shape from AgentBuilder.check_resources().
+    Returns:
+        JSON in the shape produced by `AgentBuilder.check_resources()`.
     """
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
@@ -447,16 +453,14 @@ def CheckAgentBuilderResources(request):
 
 @require_admin_role
 def InstallAgentBuilderPackage(request):
-    """
-    Create or overwrite ALL Agent Builder resources for SNMP AI template
-    generation in Kibana (tools → skills → agents order).
+    """Create or overwrite SNMP AI Agent Builder tools, skills, and agents in Kibana.
 
-    POST body (JSON):
-        connection_id – int, required
-        kibana_url    – str, optional override for URL-based connections
+    Args:
+        connection_id: Elasticsearch/Kibana connection primary key.
+        kibana_url: Optional Kibana origin override for URL-based connections.
 
     Returns:
-        { success: bool, results: [ { type, id, action, success, error? } ] }
+        JSON `{success, results: [{type, id, action, success, error?}]}`.
     """
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
@@ -495,18 +499,15 @@ def InstallAgentBuilderPackage(request):
 
 @require_admin_role
 def GenerateTemplateAndProfiles(request):
-    """
-    Orchestrate SNMP AI template/profile generation.
+    """Stream AI template/profile generation as SSE.
 
-    Thin view wrapper — all stream logic lives in ``ai_template_generation.py``.
+    Thin wrapper around `ai_template_generation.stream_template_generation`.
 
-    POST body (JSON):
-        connection_id – int, required
-        kibana_url    – str, optional (URL-based connections only)
-        walk_text     – str, required (raw SNMP walk output)
-        inference_id  – str, required
-
-    Response: text/event-stream  (see ``ai_template_generation.stream_template_generation``)
+    Args:
+        connection_id: Elasticsearch/Kibana connection primary key.
+        kibana_url: Optional Kibana origin for URL-based connections.
+        walk_text: Raw SNMP walk output.
+        inference_id: Agent Builder inference model id.
     """
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
@@ -547,25 +548,13 @@ def _load_snmp_template():
 
 @require_admin_role
 def CheckSNMPIndexTemplate(request):
-    """
-    Check whether the SNMP index template is installed and up to date on each
-    of the supplied Elasticsearch connections.
+    """Check whether the SNMP index template is installed and current on each connection.
 
-    POST body (JSON):
-        connection_ids – [int, ...], required
+    Args:
+        connection_ids: List of Elasticsearch connection primary keys.
 
     Returns:
-        {
-            "results": [
-                {
-                    "connection_id": int,
-                    "connection_name": str,
-                    "status": "not_installed" | "installed" | "installed_but_outdated" | "error",
-                    "differences": [str],
-                    "error": str | null
-                }
-            ]
-        }
+        JSON `{results: [{connection_id, connection_name, status, differences, error}]}`.
     """
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
@@ -621,20 +610,13 @@ def CheckSNMPIndexTemplate(request):
 
 @require_admin_role
 def InstallSNMPIndexTemplate(request):
-    """
-    Install or update the SNMP index template on each of the supplied
-    Elasticsearch connections.
+    """Install or update the SNMP index template on each supplied connection.
 
-    POST body (JSON):
-        connection_ids – [int, ...], required
+    Args:
+        connection_ids: List of Elasticsearch connection primary keys.
 
     Returns:
-        {
-            "success": bool,
-            "results": [
-                { "connection_id": int, "connection_name": str, "success": bool, "error": str? }
-            ]
-        }
+        JSON `{success, results: [{connection_id, connection_name, success, error?}]}`.
     """
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
@@ -690,31 +672,89 @@ def InstallSNMPIndexTemplate(request):
 
 
 @require_admin_role
-def ImportAIGeneratedDefinitions(request):
-    """
-    Persist the profiles and device template produced by GenerateTemplateAndProfiles.
+def RolloverSNMPDataStream(request):
+    """Roll over the SNMP metrics data stream on each supplied connection.
 
-    POST body (JSON):
-        profiles        – list of profile dicts (may be empty)
-        device_template – device template dict
+    Should be called *after* a successful ``InstallSNMPIndexTemplate`` so that
+    new backing indices are created with the updated mappings.  Rolling over
+    before the template is installed has no effect on mappings.
 
-    Each item in `profiles` must have at minimum a non-empty `name`.
-    The `device_template` must have `name` and a `profiles` list (all profile
-    names the template should reference, both new and existing catalog ones).
-
-    Per-item actions:
-        created  – new record inserted
-        updated  – existing user-owned record overwritten in place
-        skipped  – record already exists as official (official_key set) and
-                   cannot be overwritten; still linked to the template
+    Args:
+        connection_ids: List of Elasticsearch connection primary keys.
+        data_stream_name (optional): Override the default data stream name
+            ``"metrics-snmp.polling-default"``.
 
     Returns:
-        {
-            "success": bool,
-            "profiles": [{"name", "action", "id", "reason?"}],
-            "template": {"name", "action", "id", "reason?"},
-            "errors": ["..."]
-        }
+        JSON ``{success, results: [{connection_id, connection_name,
+        rolled_over, error?}]}``.
+
+    Examples:
+        POST /SNMP/RolloverSNMPDataStream/
+        {"connection_ids": [1]}
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, Exception):
+        return JsonResponse({'error': 'Invalid JSON body'}, status=400)
+
+    connection_ids = data.get('connection_ids', [])
+    if not connection_ids:
+        return JsonResponse({'error': 'connection_ids is required'}, status=400)
+
+    from Common.elastic_utils import rollover_data_stream
+    from PipelineManager.models import Connection
+
+    # Allow the caller to target a specific data stream; default to the SNMP one.
+    data_stream_name = data.get('data_stream_name', 'metrics-snmp.polling-default')
+
+    overall_success = True
+    results = []
+    for conn_id in connection_ids:
+        try:
+            conn = Connection.objects.get(id=int(conn_id))
+            response = rollover_data_stream(int(conn_id), data_stream_name)
+            results.append({
+                'connection_id': conn_id,
+                'connection_name': conn.name,
+                'rolled_over': response.get('rolled_over', True),
+                'success': True,
+            })
+        except Connection.DoesNotExist:
+            overall_success = False
+            results.append({
+                'connection_id': conn_id,
+                'connection_name': f'Connection {conn_id}',
+                'success': False,
+                'error': f'Connection {conn_id} not found',
+            })
+        except Exception as e:
+            overall_success = False
+            results.append({
+                'connection_id': conn_id,
+                'connection_name': f'Connection {conn_id}',
+                'success': False,
+                'error': str(e),
+            })
+
+    return JsonResponse({'success': overall_success, 'results': results})
+
+
+@require_admin_role
+def ImportAIGeneratedDefinitions(request):
+    """Persist profiles and a device template produced by GenerateTemplateAndProfiles.
+
+    Args:
+        profiles: Profile dicts; each needs a non-empty `name`.
+        device_template: Template dict with `name` and a `profiles` name list.
+
+    Per-item `action` values are `created`, `updated`, or `skipped` (official rows
+    are not overwritten but are still linked).
+
+    Returns:
+        JSON `{success, profiles, template, errors}`.
     """
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)

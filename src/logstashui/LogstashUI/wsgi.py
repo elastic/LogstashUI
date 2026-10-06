@@ -2,13 +2,12 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
-"""
-WSGI config for logstashui project.
+"""WSGI entry for LogstashUI.
 
-It exposes the WSGI callable as a module-level variable named ``application``.
-
-For more information on this file, see
-https://docs.djangoproject.com/en/5.2/howto/deployment/wsgi/
+Exposes ``application``. ``build_application`` initializes OpenTelemetry
+(mutating ``MIDDLEWARE``) before Django's handler snapshots it. Import also
+sweeps leftover artifact ``.part`` files and quiets gevent TLS handshake
+errors from clients that reject the product CA.
 """
 
 import os
@@ -21,9 +20,12 @@ from LogstashUI.database import ensure_psycopg_gevent
 
 
 def build_application():
-    """Init OTEL (mutates MIDDLEWARE) then build the Django WSGI handler.
+    """Initialize OTEL (mutates MIDDLEWARE) then build the Django WSGI handler.
 
-    gunicorn --worker-class gevent monkey-patches before this module loads.
+    gunicorn ``--worker-class gevent`` monkey-patches before this module loads.
+
+    Returns:
+        Django WSGI callable from ``get_wsgi_application``.
     """
     try:
         from LogstashUI.telemetry import init_telemetry

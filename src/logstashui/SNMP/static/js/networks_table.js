@@ -114,11 +114,11 @@ function sortNetworks() {
   filteredNetworks.sort((a, b) => {
     let aVal = a[sortField] || '';
     let bVal = b[sortField] || '';
-    
-    // Handle connection object
-    if (sortField === 'connection') {
-      aVal = a.connection ? a.connection.name : '';
-      bVal = b.connection ? b.connection.name : '';
+
+    // Connection column: use whichever name is set (CPM or Agent mode)
+    if (sortField === 'connection_name') {
+      aVal = a.connection_name || a.agent_connection_name || '';
+      bVal = b.connection_name || b.agent_connection_name || '';
     }
     
     // Handle numeric fields (device_count)

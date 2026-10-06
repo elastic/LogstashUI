@@ -2,6 +2,8 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
+"""HTTP views for the visual/text pipeline editor and ES helpers."""
+
 from django.shortcuts import render
 from django.http import HttpResponse, JsonResponse, HttpResponseBadRequest
 from django.conf import settings
@@ -34,9 +36,13 @@ def _load_plugin_data():
 
 
 def _parse_queue_max_bytes(queue_max_bytes_str):
-    """
-    Parse queue_max_bytes string like '1gb' into value and unit.
-    Returns tuple of (value, unit).
+    """Parse a ``queue_max_bytes`` string like ``1gb`` into ``(value, unit)``.
+
+    Args:
+        queue_max_bytes_str: Size string from pipeline settings.
+
+    Returns:
+        ``(value, unit)``; defaults to ``(1, 'gb')``.
     """
     import re
     if not queue_max_bytes_str:
@@ -54,6 +60,12 @@ def _parse_queue_max_bytes(queue_max_bytes_str):
 
 
 def PipelineEditor(request):
+    """Render the pipeline editor for an agent policy or ES pipeline.
+
+    Args:
+        ls_id or es_id: Policy pk or CENTRALIZED connection pk.
+        pipeline: Pipeline name.
+    """
     from django.conf import settings
     from PipelineManager.agent_modes import (
         list_simulation_targets,
@@ -189,6 +201,12 @@ def PipelineEditor(request):
 
 
 def GetCurrentPipelineCode(request, components={}):
+    """Render generated LSCL as an HTML ``<pre>`` block.
+
+    Args:
+        components: Optional components dict; otherwise read from POST
+            ``components``.
+    """
     if not components:
         data = json.loads(request.POST.get("components"))
     else:
@@ -205,6 +223,13 @@ def GetCurrentPipelineCode(request, components={}):
 
 @require_admin_role
 def SavePipeline(request):
+    """Save LSCL from text mode or generated from visual components.
+
+    Args:
+        pipeline: Pipeline name.
+        ls_id or es_id: Policy pk or CENTRALIZED connection pk.
+        pipeline_config or components: Raw LSCL or components JSON.
+    """
     if "save_pipeline" in request.POST:
         pipeline_name = request.POST.get("pipeline")
 
@@ -291,7 +316,11 @@ def SavePipeline(request):
 
 
 def ComponentsToConfig(request):
-    """Convert components JSON to Logstash configuration text"""
+    """Convert visual-editor components JSON to Logstash configuration text.
+
+    Args:
+        components: Components JSON string.
+    """
     if request.method == "POST":
         try:
             components_json = request.POST.get("components")
@@ -315,7 +344,11 @@ def ComponentsToConfig(request):
 
 
 def ConfigToComponents(request):
-    """Convert Logstash configuration text to components JSON"""
+    """Convert Logstash configuration text to visual-editor components JSON.
+
+    Args:
+        config_text: LSCL string.
+    """
     if request.method == "POST":
         try:
             config_text = request.POST.get("config_text")
@@ -335,7 +368,13 @@ def ConfigToComponents(request):
 
 
 def GetDiff(request):
-    """Generate a unified diff between current and new pipeline configurations"""
+    """Generate a unified diff between saved and in-progress pipeline configs.
+
+    Args:
+        ls_id or es_id: Policy pk or CENTRALIZED connection pk.
+        pipeline: Pipeline name.
+        pipeline_text or components: New config (text or visual).
+    """
     if request.method == "POST":
         ls_id = request.POST.get("ls_id") or None
         if ls_id == "null": ls_id = None
@@ -405,9 +444,7 @@ def GetDiff(request):
 
 
 def GetElasticsearchConnections(request):
-    """
-    Get all Elasticsearch connections for simulation input
-    """
+    """Return CENTRALIZED Elasticsearch connections for simulation input."""
     try:
         # Use existing function that returns connections with ES clients
         connections_list = get_elastic_connections_from_list()
@@ -422,8 +459,11 @@ def GetElasticsearchConnections(request):
 
 
 def GetElasticsearchIndices(request):
-    """
-    Get Elasticsearch indices with typeahead support
+    """Return Elasticsearch index names matching a typeahead pattern.
+
+    Args:
+        connection_id: CENTRALIZED connection pk.
+        pattern: Index pattern (default ``*``).
     """
 
     connection_id = request.GET.get("connection_id")
@@ -441,8 +481,11 @@ def GetElasticsearchIndices(request):
 
 
 def GetElasticsearchFields(request):
-    """
-    Get field mappings from an Elasticsearch index
+    """Return field mappings from an Elasticsearch index.
+
+    Args:
+        connection_id: CENTRALIZED connection pk.
+        index: Index name.
     """
 
     connection_id = request.GET.get("connection_id")
@@ -460,8 +503,13 @@ def GetElasticsearchFields(request):
 
 
 def QueryElasticsearchDocuments(request):
-    """
-    Query Elasticsearch documents for simulation
+    """Query Elasticsearch documents to feed a simulation.
+
+    Args:
+        connection_id: CENTRALIZED connection pk.
+        index: Index name.
+        query_method: ``field``, ``docid``, or ``entire``.
+        field, size, query, doc_ids: Method-specific parameters.
     """
 
     connection_id = request.POST.get("connection_id")
@@ -502,9 +550,11 @@ def QueryElasticsearchDocuments(request):
 
 
 def GetPluginDocumentation(request):
-    """
-    Securely proxy plugin documentation URLs with allowlist validation.
-    Only allows documentation from trusted Elastic/Logstash domains.
+    """Return an allowlisted plugin documentation URL for the editor iframe.
+
+    Args:
+        type: Plugin type (input/filter/output).
+        name: Plugin name.
     """
     plugin_type = request.GET.get("type")
     plugin_name = request.GET.get("name")

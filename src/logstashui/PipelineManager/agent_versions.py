@@ -13,6 +13,15 @@ DEFAULT_DOWNLOAD_DIR = "/opt/logstash-agent/logstash-versions"
 
 
 def derive_version_binary_path(download_dir: str | None, version: str | None) -> str | None:
+    """Build ``<download_dir>/logstash-<version>/bin`` for a pinned version.
+
+    Args:
+        download_dir: Root for auto-downloaded Logstash trees.
+        version: Pinned version string (e.g. ``9.4.3``).
+
+    Returns:
+        The derived binary path, or None when ``version`` is empty.
+    """
     ver = (version or "").strip()
     if not ver:
         return None
@@ -21,6 +30,12 @@ def derive_version_binary_path(download_dir: str | None, version: str | None) ->
 
 
 def is_derived_version_binary_path(path: str | None, download_dir: str | None) -> bool:
+    """True when ``path`` matches ``<download_dir>/logstash-<ver>/bin``.
+
+    Args:
+        path: Candidate binary directory.
+        download_dir: Root used by ``derive_version_binary_path``.
+    """
     p = (path or "").rstrip("/")
     if not p:
         return False
@@ -49,6 +64,13 @@ def resolve_running_logstash_version(
     version on screen while Logstash is stopped or its API is unreachable.
     ``logstash_version`` is last because elsewhere it means the policy-*desired*
     version rather than the running one.
+
+    Args:
+        logstash_version_resolved: Persisted last-known running version.
+        status_blob: Latest agent check-in payload.
+
+    Returns:
+        A version string, or None if nothing has been reported.
     """
     blob = status_blob if isinstance(status_blob, dict) else {}
     api = blob.get("logstash_api")
@@ -69,6 +91,15 @@ def resolve_running_logstash_version(
 
 
 def agent_version_relation(current: str | None, preferred: str | None) -> str:
+    """Compare a running agent version to the preferred LogstashAgent version.
+
+    Args:
+        current: Version reported by the agent.
+        preferred: Preferred version from Django settings.
+
+    Returns:
+        ``older``, ``newer``, ``equal``, or ``unknown`` if either is unparsable.
+    """
     try:
         cur = Version(str(current or "").strip())
         pref = Version(str(preferred or "").strip())
@@ -88,6 +119,22 @@ def resolve_persisted_binary_path(
     download_dir: str | None,
     binary_path: str | None,
 ) -> str:
+    """Pick the binary path to persist for SYSTEM vs VERSION source.
+
+    VERSION with an empty, distro, or already-derived path becomes
+    ``<download_dir>/logstash-<version>/bin``. SYSTEM with a derived path
+    falls back to ``/usr/share/logstash/bin``. An operator-custom path is
+    left alone.
+
+    Args:
+        source: ``SYSTEM`` or ``VERSION``.
+        version: Pinned version when source is VERSION.
+        download_dir: Root for auto-downloaded trees.
+        binary_path: Currently stored binary directory.
+
+    Returns:
+        The path that should be stored on the policy.
+    """
     current = (binary_path or "").strip() or SYSTEM_BINARY_PATH
     src = (source or "SYSTEM").upper()
     derived = derive_version_binary_path(download_dir, version)

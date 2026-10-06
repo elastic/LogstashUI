@@ -2,7 +2,21 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
-"""LogstashUI console script: serve, manage, systemd."""
+"""Console entry point for LogstashUI.
+
+Subcommands:
+
+* ``serve`` — run gunicorn after DB version check, migrate, and TLS ensure
+  (default when no subcommand is given).
+* ``manage`` — Django management-command passthrough.
+* ``systemd`` — generate the unit and ``/etc/default/logstashui``.
+* ``migrate-engine`` — BETA copy of SQLite data to PostgreSQL or MySQL.
+
+Examples:
+    main(["serve", "--bind", "0.0.0.0:8443", "--workers", "2"])
+    main(["manage", "migrate", "--noinput"])
+    main(["systemd", "--print"])
+"""
 
 from __future__ import annotations
 
@@ -18,6 +32,17 @@ logger = logging.getLogger(__name__)
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Build the ``logstashui`` argument parser.
+
+    Default command is ``serve`` so a bare ``logstashui`` still starts gunicorn.
+
+    Returns:
+        Parser with ``serve``, ``manage``, ``migrate-engine``, and ``systemd``.
+
+    Examples:
+        parser = build_parser()
+        args = parser.parse_args(["serve", "--bind", "0.0.0.0:8443"])
+    """
     parser = argparse.ArgumentParser(
         prog="logstashui",
         description="Run LogstashUI, Django management commands, or install systemd units.",
@@ -136,6 +161,17 @@ def _packaging_file(name: str) -> str:
 
 
 def render_unit(*, exec_start: str, user: str, group: str, working_directory: str) -> str:
+    """Render ``logstashui.service`` from the packaged ``.service.in`` template.
+
+    Args:
+        exec_start: ExecStart line, typically ``<path-to-logstashui> serve``.
+        user: systemd ``User=``.
+        group: systemd ``Group=``.
+        working_directory: systemd ``WorkingDirectory=`` (usually DATA_DIR).
+
+    Returns:
+        Unit file text.
+    """
     template = _packaging_file("logstashui.service.in")
     return template.format(
         exec_start=exec_start,
@@ -164,6 +200,15 @@ def render_default_env(
     db_user: str = "",
     db_port: str = "",
 ) -> str:
+    """Render ``/etc/default/logstashui`` from the packaged sample.
+
+    Substitutes known defaults, then appends optional CSRF, host, TLS SAN,
+    agent UI URL, and non-SQLite ``LOGSTASHUI_DB_*`` keys. Never writes
+    ``LOGSTASHUI_DB_PASSWORD``. SQLite is left as the sample default.
+
+    Returns:
+        EnvironmentFile text.
+    """
     sample = _packaging_file("logstashui.default")
     replacements = {
         "LOGSTASHUI_DATA_DIR=/var/lib/logstashui": f"LOGSTASHUI_DATA_DIR={data_dir}",
@@ -240,6 +285,21 @@ def install_systemd(
     print_only: bool = False,
     interactive: bool = False,
 ) -> dict:
+    """Write the systemd unit and EnvironmentFile, or print / dry-run them.
+
+    Interactive prompts run when ``interactive`` is true, ``output_dir`` is
+    unset, and ``dry_run`` is false. ``print_only`` prints to stdout and writes nothing.
+    ``output_dir`` (or ``dry_run``) writes into that directory or cwd.
+    Installing into ``/etc`` requires root, chmod 0640 on the env file, and
+    ``systemctl daemon-reload`` when available. The unit is not enabled.
+
+    Returns:
+        Dict with ``unit`` and ``default`` paths, or ``None`` values when
+        ``print_only``.
+
+    Raises:
+        SystemExit: If installing into ``/etc`` without root.
+    """
     if interactive and not dry_run and output_dir is None:
         from LogstashUI.database import canonical_engine
 
@@ -359,7 +419,11 @@ def _manage(argv: list[str]) -> None:
 
 
 def _best_effort_call(name: str, **kwargs) -> None:
-    """Run a Django command without sys.exit on CommandError (unlike _manage)."""
+    """Run a Django management command, logging failures instead of exiting.
+
+    Unlike ``_manage``, CommandError (and any Exception) is printed to stderr
+    and does not call ``sys.exit``.
+    """
     from django.core.management import call_command
     from django.core.management.base import CommandError
 
@@ -370,7 +434,11 @@ def _best_effort_call(name: str, **kwargs) -> None:
 
 
 def _check_db_floor() -> None:
-    """Connect and enforce engine version floors before migrate or gunicorn bind."""
+    """Connect and enforce engine version floors before migrate or gunicorn bind.
+
+    Calls ``django.setup()``, then ``check_server_version`` on the default
+    connection.
+    """
     _django_setup()
     from django.db import connection
 
@@ -385,6 +453,9 @@ def _exec_gunicorn(gunicorn_cmd: list[str]) -> int:
 
     PyInstaller onedir has no ``gunicorn`` console script on PATH. Calling
     gunicorn's WSGI app in-process keeps ``--worker-class gevent``.
+
+    Returns:
+        gunicorn exit code. After ``os.execvp`` this process is replaced.
     """
     if getattr(sys, "frozen", False):
         from gunicorn.app.wsgiapp import run as gunicorn_run
@@ -397,6 +468,16 @@ def _exec_gunicorn(gunicorn_cmd: list[str]) -> int:
 
 
 def cmd_serve(args: argparse.Namespace) -> int:
+    """Run gunicorn after DB floor check, migrate, and optional TLS ensure.
+
+    ``--no-tls`` and ``LOGSTASHUI_INSECURE_HTTP`` disable certificates.
+    SQLite with ``workers > 1`` logs a warning. Unless ``--skip-migrate``,
+    runs ``migrate``, ``sync_snmp_official_data``, and ``collectstatic``.
+    Replaces this process with gunicorn (in-process when frozen).
+
+    Returns:
+        gunicorn exit code (normally does not return after ``os.execvp``).
+    """
     from LogstashUI.database import canonical_engine
     from LogstashUI.insecure_http import insecure_http, warn_if_enabled
     from LogstashUI.paths import resolve_data_dir
@@ -474,6 +555,14 @@ def cmd_serve(args: argparse.Namespace) -> int:
 
 
 def cmd_systemd(args: argparse.Namespace) -> int:
+    """Generate systemd unit and env files from CLI flags.
+
+    Prompts when stdin is a TTY, ``--non-interactive`` is unset, and
+    ``--output-dir`` is unset. ``--output-dir`` implies dry-run (no ``/etc``).
+
+    Returns:
+        Always 0 on success.
+    """
     interactive = not args.non_interactive and sys.stdin.isatty() and args.output_dir is None
     dry_run = args.output_dir is not None
     install_systemd(
@@ -505,6 +594,19 @@ def cmd_systemd(args: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Dispatch ``logstashui`` subcommands.
+
+    Args:
+        argv: Token list without the program name. ``None`` uses ``sys.argv[1:]``.
+
+    Returns:
+        Process exit code (0 on success, 2 on unknown command).
+
+    Examples:
+        main(["serve", "--bind", "0.0.0.0:8443", "--workers", "2"])
+        main(["manage", "migrate", "--noinput"])
+        main(["systemd", "--print"])
+    """
     parser = build_parser()
     args = parser.parse_args(argv)
     command = args.command or "serve"

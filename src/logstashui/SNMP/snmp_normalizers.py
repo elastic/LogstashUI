@@ -2,23 +2,21 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
+"""Logstash filter fragments for SNMP profile normalizers (multiply, ratio, translate)."""
+
 
 def _next_id(base, counter):
-    """
-    Return a deduplicated ID by appending an ever-increasing integer suffix.
+    """Return `base` plus an incrementing suffix, mutating `counter` in place.
 
-    The counter dict is mutated in-place so the same dict can be shared
-    across multiple calls to _apply_normalizers, guaranteeing uniqueness
-    even when normalizer blocks from several profiles are merged into a
-    single Logstash pipeline.
+    Share one counter across `_apply_normalizers` calls so IDs stay unique when
+    several profiles merge into a single pipeline.
 
     Args:
-        base: Base ID string (e.g. "normalizer_multiply_get")
-        counter: Shared mutable dict tracking how many times each base ID
-                 has been issued so far
+        base: ID prefix (e.g. ``normalizer_multiply_get``).
+        counter: Mutable dict of base → last issued integer.
 
     Returns:
-        Unique ID string (e.g. "normalizer_multiply_get_1")
+        Unique ID such as ``normalizer_multiply_get_1``.
     """
     n = counter.get(base, 0) + 1
     counter[base] = n
@@ -26,22 +24,17 @@ def _next_id(base, counter):
 
 
 def _apply_normalizers(normalizers, id_counter=None):
-    """
-    Generate Logstash filter components from normalizer configurations.
-    Groups normalizers by operation and scope for efficient processing.
-    
+    """Build Logstash filter components from profile normalizer configs.
+
+    Groups by operation and scope. Pass the same `id_counter` for every profile in
+    a pipeline so plugin IDs stay unique (Logstash rejects duplicate IDs).
+
     Args:
-        normalizers: List of normalizer configurations from profile
-        id_counter: Optional shared dict used to track ID usage across
-                    multiple calls. Pass the same dict for every profile
-                    in a pipeline so that IDs like
-                    ``normalizer_multiply_get_1`` / ``normalizer_multiply_get_2``
-                    are unique across the whole pipeline, not just within
-                    a single profile's normalizer block. If omitted a
-                    fresh dict is created (safe for single-call use).
-        
+        normalizers: Normalizer dicts from a profile.
+        id_counter: Optional shared ID map; a new dict is used when omitted.
+
     Returns:
-        List of Logstash filter components
+        List of Logstash filter component dicts.
     """
     if not normalizers:
         return []
@@ -86,6 +79,14 @@ def _apply_normalizers(normalizers, id_counter=None):
                             filters.extend(filter_components)
                         else:
                             filters.append(filter_components)
+            elif operation == 'sum':
+                if scope in ('get', 'table'):
+                    filter_components = _generate_sum_get_filter(normalizer_list, scope, id_counter)
+                    if filter_components:
+                        if isinstance(filter_components, list):
+                            filters.extend(filter_components)
+                        else:
+                            filters.append(filter_components)
             elif operation == 'translate':
                 if scope in ('get', 'table'):
                     filter_components = _generate_translate_filter(normalizer_list, id_counter)
@@ -99,21 +100,15 @@ def _apply_normalizers(normalizers, id_counter=None):
 
 
 def _generate_multiply_get_filter(normalizers, scope='get', id_counter=None):
-    """
-    Generate Ruby filter for multiply operations on get or table fields.
-    Consolidates multiple multiply operations into a single Ruby filter.
+    """Emit one Ruby filter that applies multiply ops for a get or table scope.
 
     Args:
-        normalizers: List of multiply normalizers for the given scope
-        scope: Target scope ('get' or 'table'), used to keep generated
-            Logstash filter component IDs unique across scopes so a
-            get-scope multiply and a table-scope multiply on the same
-            profile don't emit duplicate plugin IDs (Logstash rejects
-            pipelines with duplicate IDs at compile time).
-        id_counter: Shared mutable dict for deduplicating IDs across calls.
+        normalizers: Multiply normalizers for `scope`.
+        scope: ``get`` or ``table``; included in plugin IDs so scopes cannot collide.
+        id_counter: Shared mutable ID map.
 
     Returns:
-        Logstash filter component dict
+        Logstash filter component dict.
     """
     if id_counter is None:
         id_counter = {}
@@ -133,12 +128,20 @@ def _generate_multiply_get_filter(normalizers, scope='get', id_counter=None):
         # e.g., "system.cpu.total.norm.pct" -> "[system][cpu][total][norm][pct]"
         field_parts = field.split('.')
         field_path = ''.join(f'[{part}]' for part in field_parts)
-        
+
+        # Use output_field if specified, otherwise overwrite the source field in-place
+        output_field = normalizer.get('params', {}).get('output_field', '').strip()
+        if output_field:
+            output_parts = output_field.split('.')
+            output_path = ''.join(f'[{part}]' for part in output_parts)
+        else:
+            output_path = field_path
+
         # Generate Ruby code for this field
         ruby_lines.append(
             f'v = event.get("{field_path}")\n'
             f'if v\n'
-            f'  event.set("{field_path}", v.to_f * {multiply_value})\n'
+            f'  event.set("{output_path}", v.to_f * {multiply_value})\n'
             f'end'
         )
     
@@ -153,7 +156,9 @@ def _generate_multiply_get_filter(normalizers, scope='get', id_counter=None):
         field = normalizer.get('target', {}).get('field')
         multiply_value = normalizer.get('params', {}).get('multiply_value')
         if field and multiply_value is not None:
-            field_list.append(f"  - {field} × {multiply_value}")
+            output_field = normalizer.get('params', {}).get('output_field', '').strip()
+            dest = f" → {output_field}" if output_field and output_field != field else ""
+            field_list.append(f"  - {field} × {multiply_value}{dest}")
     
     comment_text = "Normalizer: Multiply\n"
     comment_text += "Multiplies field values by configured factors:\n"
@@ -181,21 +186,15 @@ def _generate_multiply_get_filter(normalizers, scope='get', id_counter=None):
 
 
 def _generate_ratio_get_filter(normalizers, scope='get', id_counter=None):
-    """
-    Generate Ruby filter for ratio operations on get or table fields.
-    Calculates ratios from two input fields and optionally creates total and ratio output fields.
+    """Emit one Ruby filter that computes ratios (and optional totals) for a scope.
 
     Args:
-        normalizers: List of ratio normalizers for the given scope
-        scope: Target scope ('get' or 'table'), used to keep generated
-            Logstash filter component IDs unique across scopes so a
-            get-scope ratio and a table-scope ratio on the same profile
-            don't emit duplicate plugin IDs (Logstash rejects pipelines
-            with duplicate IDs at compile time).
-        id_counter: Shared mutable dict for deduplicating IDs across calls.
+        normalizers: Ratio normalizers for `scope`.
+        scope: ``get`` or ``table``; included in plugin IDs so scopes cannot collide.
+        id_counter: Shared mutable ID map.
 
     Returns:
-        Logstash filter component dict
+        Logstash filter component dict.
     """
     if id_counter is None:
         id_counter = {}
@@ -319,18 +318,107 @@ def _generate_ratio_get_filter(normalizers, scope='get', id_counter=None):
     ]
 
 
-def _generate_translate_filter(normalizers, id_counter=None):
-    """
-    Generate Logstash translate plugin filters for value-mapping operations.
-    Each normalizer produces its own translate filter that maps raw SNMP values
-    (typically integers) to human-readable strings in-place.
+def _generate_sum_get_filter(normalizers, scope='get', id_counter=None):
+    """Emit one Ruby filter that sums lists of fields for a get or table scope.
+
+    Each normalizer entry must supply ``input_fields`` (a list of field names to
+    add together) and ``output_field`` (the field to write the result to).  All
+    input fields must be non-nil for the sum to be written; missing fields are
+    silently skipped so partially-populated events do not produce misleading
+    zeros.
 
     Args:
-        normalizers: List of translate normalizers
-        id_counter: Shared mutable dict for deduplicating IDs across calls.
+        normalizers: Sum normalizers for ``scope``.
+        scope: ``get`` or ``table``; included in plugin IDs so scopes cannot
+            collide with other sum filters in the same pipeline.
+        id_counter: Shared mutable ID map.
 
     Returns:
-        List of Logstash filter component dicts, or None
+        List of Logstash filter component dicts, or ``None`` when there is
+        nothing to emit.
+
+    Examples:
+        >>> n = [{
+        ...     'operation': 'sum',
+        ...     'target': {'scope': 'get'},
+        ...     'params': {
+        ...         'input_fields': ['system.cpu.pct.user', 'system.cpu.pct.system'],
+        ...         'output_field': 'system.cpu.active.pct',
+        ...     },
+        ... }]
+        >>> result = _generate_sum_get_filter(n)
+        >>> result[1]['plugin']
+        'ruby'
+    """
+    if id_counter is None:
+        id_counter = {}
+    if not normalizers:
+        return None
+
+    ruby_lines = []
+    desc_lines = []
+
+    for normalizer in normalizers:
+        params = normalizer.get('params', {})
+        input_fields = params.get('input_fields', [])
+        output_field = params.get('output_field', '').strip()
+
+        if not input_fields or not output_field:
+            continue
+
+        output_path = ''.join(f'[{part}]' for part in output_field.split('.'))
+        input_paths = [
+            ''.join(f'[{part}]' for part in f.split('.'))
+            for f in input_fields
+        ]
+
+        # Guard: only write when every input field is present.
+        nil_checks = ' && '.join(f'event.get("{p}")' for p in input_paths)
+        sum_expr = ' + '.join(f'event.get("{p}").to_f' for p in input_paths)
+
+        ruby_lines.append(
+            f'if {nil_checks}\n'
+            f'  event.set("{output_path}", {sum_expr})\n'
+            f'end'
+        )
+        fields_list = ' + '.join(input_fields)
+        desc_lines.append(f'  - {fields_list} → {output_field}')
+
+    if not ruby_lines:
+        return None
+
+    ruby_code = '\n'.join(ruby_lines)
+
+    comment_text = 'Normalizer: Sum\n'
+    comment_text += 'Sums input fields into a single output field:\n'
+    comment_text += '\n'.join(desc_lines)
+
+    base = f'normalizer_sum_{scope}'
+    return [
+        {
+            'id': _next_id(f'{base}_comment', id_counter),
+            'type': 'filter',
+            'plugin': 'comment',
+            'config': {'text': comment_text},
+        },
+        {
+            'id': _next_id(base, id_counter),
+            'type': 'filter',
+            'plugin': 'ruby',
+            'config': {'code': ruby_code},
+        },
+    ]
+
+
+def _generate_translate_filter(normalizers, id_counter=None):
+    """Emit translate filters that map raw SNMP values to display strings in place.
+
+    Args:
+        normalizers: Translate normalizer configs.
+        id_counter: Shared mutable ID map.
+
+    Returns:
+        List of filter component dicts, or None when there is nothing to emit.
     """
     if not normalizers:
         return None

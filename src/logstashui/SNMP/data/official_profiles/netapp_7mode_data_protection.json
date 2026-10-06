@@ -1,0 +1,106 @@
+{
+  "official_key": "netapp_7mode_data_protection",
+  "name": "netapp_7mode_data_protection",
+  "description": "SnapMirror relationship state and lag, SnapVault destination status, and SIS (dedup/compression) efficiency statistics for NetApp ONTAP 7-Mode filers. Uses NETAPP-MIB (1.3.6.1.4.1.789).",
+  "vendor": "NetApp",
+  "product": "ONTAP 7-Mode",
+  "model": "Any",
+  "get": {
+    "data_protection.snapmirror.enabled":       "1.3.6.1.4.1.789.1.9.1.0",
+    "data_protection.snapmirror.relation_count": "1.3.6.1.4.1.789.1.9.2.0",
+    "data_protection.snapvault.enabled":         "1.3.6.1.4.1.789.1.16.1.0",
+    "data_protection.sis.enabled":               "1.3.6.1.4.1.789.1.18.1.1.0",
+    "data_protection.sis.compression_enabled":   "1.3.6.1.4.1.789.1.18.1.2.0"
+  },
+  "walk": {},
+  "table": {
+    "data_protection.snapmirror.relation": {
+      "columns": {
+        "index":                "1.3.6.1.4.1.789.1.9.3.1.1",
+        "source_path":          "1.3.6.1.4.1.789.1.9.3.1.2",
+        "destination_path":     "1.3.6.1.4.1.789.1.9.3.1.3",
+        "state":                "1.3.6.1.4.1.789.1.9.3.1.4",
+        "lag_secs":             "1.3.6.1.4.1.789.1.9.3.1.5",
+        "last_transfer_secs":   "1.3.6.1.4.1.789.1.9.3.1.6",
+        "status":               "1.3.6.1.4.1.789.1.9.3.1.7",
+        "in_progress":          "1.3.6.1.4.1.789.1.9.3.1.8"
+      }
+    },
+    "data_protection.snapvault.destination": {
+      "columns": {
+        "index":                "1.3.6.1.4.1.789.1.16.4.1.1",
+        "vfiler_name":          "1.3.6.1.4.1.789.1.16.3.1.2",
+        "status":               "1.3.6.1.4.1.789.1.16.3.1.7",
+        "state":                "1.3.6.1.4.1.789.1.16.3.1.9"
+      }
+    },
+    "data_protection.sis.volume": {
+      "columns": {
+        "index":                "1.3.6.1.4.1.789.1.18.2.1.0",
+        "savings_pct":          "1.3.6.1.4.1.789.1.18.2.5.0",
+        "last_op_size_kb":      "1.3.6.1.4.1.789.1.18.2.9.0",
+        "last_op_status":       "1.3.6.1.4.1.789.1.18.2.16.0"
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "get",
+        "field": "data_protection.snapmirror.enabled"
+      },
+      "params": {
+        "mapping": {
+          "1": "ENABLED",
+          "2": "DISABLED"
+        }
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "get",
+        "field": "data_protection.snapvault.enabled"
+      },
+      "params": {
+        "mapping": {
+          "1": "ENABLED",
+          "2": "DISABLED"
+        }
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "table",
+        "table": "data_protection.snapmirror.relation",
+        "field": "data_protection.snapmirror.relation.state"
+      },
+      "params": {
+        "mapping": {
+          "1": "UNINITIALIZED",
+          "2": "SNAPMIRRORED",
+          "3": "BROKEN_OFF",
+          "4": "QUIESCED",
+          "5": "SOURCE",
+          "6": "UNKNOWN"
+        }
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "table",
+        "table": "data_protection.snapmirror.relation",
+        "field": "data_protection.snapmirror.relation.in_progress"
+      },
+      "params": {
+        "mapping": {
+          "1": "TRUE",
+          "2": "FALSE"
+        }
+      }
+    }
+  ]
+}

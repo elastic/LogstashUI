@@ -2,6 +2,8 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
+"""Thin wrappers around the Elasticsearch Logstash pipeline API."""
+
 from Common.elastic_utils import get_elastic_connection
 
 import logging
@@ -11,6 +13,15 @@ logger = logging.getLogger(__name__)
 
 
 def get_logstash_pipeline(es_id, pipeline_name):
+    """Fetch one central-pipeline document from Elasticsearch.
+
+    Args:
+        es_id: Primary key of a CENTRALIZED ``Connection``.
+        pipeline_name: Pipeline id in Elasticsearch.
+
+    Returns:
+        Pipeline document dict, or ``None`` if missing or on error.
+    """
     try:
         es = get_elastic_connection(es_id)
         pipeline_doc = es.logstash.get_pipeline(id=pipeline_name)[pipeline_name]

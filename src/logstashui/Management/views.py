@@ -2,6 +2,8 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
+"""Users, logs, settings, API tokens, and first-run login."""
+
 from django.shortcuts import render, redirect
 from django.contrib.auth import views as auth_views
 from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
@@ -26,17 +28,25 @@ from Common.decorators import require_admin_role
 logger = logging.getLogger(__name__)
 
 class BootstrapLoginView(auth_views.LoginView):
+    """First-run registration when no users exist; otherwise standard login.
+
+    An empty ``User`` table renders ``UserCreationForm`` and creates the
+    first account as a superuser admin. After that, the view is a normal
+    ``AuthenticationForm`` login.
+    """
+
     template_name = "registration/login.html"
     def get_form_class(self):
+        """Return ``UserCreationForm`` on first run, else ``AuthenticationForm``."""
         # Dynamically choose between login form and registration form
         if not User.objects.exists():
             return UserCreationForm
         return AuthenticationForm
 
     def get_form_kwargs(self):
-        """
-        LoginView normally passes `request` into form kwargs.
-        UserCreationForm doesn't accept it, so strip it out.
+        """Drop ``request`` from kwargs when using ``UserCreationForm``.
+
+        ``LoginView`` injects ``request``; ``UserCreationForm`` does not accept it.
         """
         kwargs = super().get_form_kwargs()
         if self.get_form_class() == UserCreationForm:
@@ -44,15 +54,24 @@ class BootstrapLoginView(auth_views.LoginView):
         return kwargs
 
     def get_context_data(self, **kwargs):
+        """Add ``is_first_run`` so the template can switch copy and fields."""
         context = super().get_context_data(**kwargs)
         context["is_first_run"] = not User.objects.exists()
         return context
 
     def form_valid(self, form):
-        """
-        Handle POST — if no users exist, create the first user and log them in.
-        Otherwise, fall back to normal login behavior.
-        Uses atomic transaction to prevent race condition.
+        """Create and log in the first admin, or complete a normal login.
+
+        Uses ``select_for_update`` so two concurrent first-run POSTs cannot
+        both create a user.
+
+        Args:
+            form: Bound ``UserCreationForm`` or ``AuthenticationForm``.
+
+        Returns:
+            Redirect to ``/`` after first-user creation, back to this path
+            if another request won the race, or the parent ``LoginView``
+            response.
         """
         # Check if this is first-run (no users exist)
         if isinstance(form, UserCreationForm):
@@ -85,10 +104,16 @@ class BootstrapLoginView(auth_views.LoginView):
             return super().form_valid(form)
 
 def Management(request):
+    """Render the management landing page."""
     return render(request, 'management.html')
 
 def _set_django_permissions(user, role):
-    """Set Django is_superuser and is_staff flags based on role"""
+    """Mirror ``admin`` / ``readonly`` onto Django ``is_superuser`` / ``is_staff``.
+
+    Args:
+        user: Django ``User`` to update.
+        role: ``admin`` or ``readonly``.
+    """
     if role == 'admin':
         user.is_superuser = True
         user.is_staff = True
@@ -98,7 +123,14 @@ def _set_django_permissions(user, role):
     user.save()
 
 def _generate_user_table_rows(users, request):
-    """Helper function to generate user table rows HTML using template partial"""
+    """Render ``user_row.html`` for each user as an htmx table-body swap.
+
+    Args:
+        users: Iterable of Django ``User`` rows.
+
+    Returns:
+        Concatenated HTML string of table rows.
+    """
     rows_html = ''
     for user in users:
         rows_html += render_to_string('components/user_row.html', {
@@ -108,6 +140,12 @@ def _generate_user_table_rows(users, request):
     return rows_html
 
 def Users(request):
+    """List users and handle add, password, role, and delete POSTs.
+
+    GET renders the user table. POST is admin-only and dispatches on
+    ``action`` (``add``, ``update_password``, ``update_role``, ``delete``).
+    The last remaining user and the caller's own account cannot be deleted.
+    """
     if request.method == 'POST':
         # Check if user has admin role for any POST operations
         if hasattr(request.user, 'profile') and request.user.profile.role != 'admin':
@@ -270,7 +308,18 @@ def Users(request):
     return render(request, 'users.html', {'users': users})
 
 def _read_log_file(log_path, user_filter=None):
-    """Helper function to read and optionally filter log file"""
+    """Read a log file and optionally keep lines matching a substring.
+
+    Returns at most the last 1000 matching lines. Missing files and I/O
+    errors yield an empty list.
+
+    Args:
+        log_path: Absolute path to the log file.
+        user_filter: Case-insensitive substring; ``None`` keeps every line.
+
+    Returns:
+        A list of log line strings.
+    """
     log_lines = []
     
     if not os.path.exists(log_path):
@@ -294,11 +343,13 @@ def _read_log_file(log_path, user_filter=None):
         return []
 
 def Logs(request):
+    """Render the last 1000 lines of ``logstashui.log``."""
     log_path = os.path.join(settings.LOGS_DIR, 'logstashui.log')
     log_lines = _read_log_file(log_path)
     return render(request, 'logs.html', {'log_lines': log_lines})
 
 def LogsFilter(request):
+    """Return an HTML fragment of log lines matching ``user_filter``."""
     user_filter = request.GET.get('user_filter', '').strip()
     log_path = os.path.join(settings.LOGS_DIR, 'logstashui.log')
     log_lines = _read_log_file(log_path, user_filter if user_filter else None)
@@ -325,6 +376,7 @@ def LogsFilter(request):
     return HttpResponse(html)
 
 def LogsDownload(request):
+    """Download ``logstashui.log`` as an attachment."""
     log_path = os.path.join(settings.LOGS_DIR, 'logstashui.log')
     
     if not os.path.exists(log_path):
@@ -341,6 +393,12 @@ def LogsDownload(request):
 
 @require_admin_role
 def SettingsView(request):
+    """Show and save singleton settings, including TLS status for the UI cert.
+
+    POST updates experimental mode, agent callback URL, and the tarball
+    source. Changing ``agent_ui_url`` may re-issue the product UI leaf so
+    SANs match the new callback host.
+    """
     app_settings = Settings.get_settings()
 
     if request.method == 'POST':
@@ -422,7 +480,11 @@ def SettingsView(request):
 
 @require_admin_role
 def SettingsTlsUpload(request):
-    """Upload a custom UI server certificate (replaces product default leaf only)."""
+    """Replace the UI server leaf with an uploaded certificate and key.
+
+    Does not change the product CA used by agents. Rejected under
+    ``LOGSTASHUI_INSECURE_HTTP``.
+    """
     if request.method != 'POST':
         return JsonResponse({'success': False, 'message': 'Method not allowed'}, status=405)
     from LogstashUI.insecure_http import INSECURE_HTTP_WARNING, insecure_http
@@ -467,7 +529,7 @@ def SettingsTlsUpload(request):
 
 @require_admin_role
 def SettingsTlsRevert(request):
-    """Revert UI server cert to product-CA-signed default."""
+    """Restore the UI server cert to the product-CA-signed default leaf."""
     if request.method != 'POST':
         return JsonResponse({'success': False, 'message': 'Method not allowed'}, status=405)
     from LogstashUI.insecure_http import INSECURE_HTTP_WARNING, insecure_http
@@ -504,7 +566,7 @@ def _token_error(message):
 
 
 def _generate_token_table_rows(tokens, request):
-    """Render the token table body, reused for htmx swaps after revoke/delete."""
+    """Render ``api_token_row.html`` for htmx swaps after revoke or delete."""
     rows_html = ''
     for token in tokens:
         rows_html += render_to_string('components/api_token_row.html', {
@@ -516,11 +578,11 @@ def _generate_token_table_rows(tokens, request):
 
 @require_admin_role
 def ApiTokens(request):
-    """Mint, list, revoke and delete admin API tokens.
+    """Mint, list, revoke, and delete admin API tokens.
 
-    A token acts as its owning user, so the caller's own account is the owner —
-    that keeps audit lines like "User 'x' added connection" meaningful, and
-    means a readonly user's token is readonly.
+    A token acts as its owning user, so the caller's account is the owner.
+    That keeps audit lines like "User 'x' added connection" meaningful, and
+    a readonly user's token stays readonly.
     """
     from PipelineManager.models import ApiKey
 
@@ -619,10 +681,10 @@ def _artifact_in_flight(artifacts):
 
 
 def _render_artifact_tbody(artifacts, request):
-    """Render the whole tbody, not just rows.
+    """Render the whole tbody so htmx polling attributes stay attached.
 
-    The polling attributes live on the tbody, so it has to be swapped as a unit
-    (outerHTML) for polling to be able to stop.
+    The polling attributes live on the tbody, so it has to be swapped as a
+    unit (outerHTML) for polling to be able to stop.
     """
     return render_to_string('components/logstash_artifact_tbody.html', {
         'artifacts': artifacts,
@@ -643,7 +705,7 @@ def LogstashArtifacts(request):
     from PipelineManager.models import LogstashArtifact, parse_artifact_filename
 
     def _all_artifacts():
-        """Artifacts, each tagged with whether a policy still pins its version.
+        """Return artifacts tagged with whether a policy still pins the version.
 
         Deleting an in-use tarball is allowed — an operator may be reclaiming
         disk deliberately — but it silently sends every agent on that policy

@@ -596,54 +596,101 @@
           </div>
         </div>
 
-        {# ── Fatals ── #}
-        {% if lw.fatals_since_last_checkin %}
+        {# ── Fatals (aggregated by logger) ── #}
+        {% if logwatcher_grouped.fatals %}
         <div class="pt-3 border-t border-gray-700/40">
-          <div class="flex items-center gap-2 mb-2">
+          <div class="flex items-center gap-2 mb-3">
             <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Fatals</p>
             <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-900/50 text-red-300 border border-red-700/40">{{ lw.fatals_since_last_checkin|length }}</span>
           </div>
-          <div class="space-y-2">
-            {% for entry in lw.fatals_since_last_checkin %}
-            <div class="rounded-lg bg-red-950/30 border border-red-800/30 p-2.5">
-              {% if entry.logger %}<p class="text-[10px] font-mono text-red-400/70 mb-0.5 truncate">{{ entry.logger }}</p>{% endif %}
-              <p class="text-xs text-red-200/80 break-words">{{ entry.message }}</p>
+          <div class="space-y-1.5">
+            {% for logger_name, entries in logwatcher_grouped.fatals %}
+            <div class="rounded-lg border border-red-800/30 overflow-hidden">
+              {# Clickable logger header #}
+              <button type="button"
+                      onclick="this.nextElementSibling.classList.toggle('hidden'); this.querySelector('.log-chevron').classList.toggle('rotate-90')"
+                      class="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 bg-red-950/30 hover:bg-red-950/50 transition-colors text-left">
+                <span class="text-[10px] font-mono text-red-400/80 truncate">{{ logger_name }}</span>
+                <span class="flex items-center gap-1.5 flex-shrink-0">
+                  <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-900/60 text-red-300 border border-red-700/50">{{ entries|length }}</span>
+                  <svg class="log-chevron w-3 h-3 text-red-400/60 transition-transform duration-150" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+                </span>
+              </button>
+              {# Expandable message list — hidden by default, scrollable #}
+              <div class="hidden max-h-56 overflow-y-auto divide-y divide-red-900/20">
+                {% for entry in entries %}
+                <div class="px-2.5 py-2 bg-red-950/20">
+                  {% if entry.ts_formatted %}<p class="text-[10px] font-mono text-red-400/50 mb-0.5">{{ entry.ts_formatted }}</p>{% endif %}
+                  <p class="text-xs text-red-200/80 break-words">{{ entry.message }}</p>
+                </div>
+                {% endfor %}
+              </div>
             </div>
             {% endfor %}
           </div>
         </div>
         {% endif %}
 
-        {# ── Errors ── #}
-        {% if lw.errors_since_last_checkin %}
+        {# ── Errors (aggregated by logger) ── #}
+        {% if logwatcher_grouped.errors %}
         <div class="pt-3 border-t border-gray-700/40">
-          <div class="flex items-center gap-2 mb-2">
+          <div class="flex items-center gap-2 mb-3">
             <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Errors</p>
             <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-900/50 text-red-300 border border-red-700/40">{{ lw.errors_since_last_checkin|length }}</span>
           </div>
-          <div class="space-y-2">
-            {% for entry in lw.errors_since_last_checkin %}
-            <div class="rounded-lg bg-red-950/20 border border-red-800/20 p-2.5">
-              {% if entry.logger %}<p class="text-[10px] font-mono text-red-400/60 mb-0.5 truncate">{{ entry.logger }}</p>{% endif %}
-              <p class="text-xs text-red-200/70 break-words">{{ entry.message }}</p>
+          <div class="space-y-1.5">
+            {% for logger_name, entries in logwatcher_grouped.errors %}
+            <div class="rounded-lg border border-red-800/20 overflow-hidden">
+              <button type="button"
+                      onclick="this.nextElementSibling.classList.toggle('hidden'); this.querySelector('.log-chevron').classList.toggle('rotate-90')"
+                      class="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 bg-red-950/20 hover:bg-red-950/40 transition-colors text-left">
+                <span class="text-[10px] font-mono text-red-400/70 truncate">{{ logger_name }}</span>
+                <span class="flex items-center gap-1.5 flex-shrink-0">
+                  <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-900/50 text-red-300 border border-red-700/40">{{ entries|length }}</span>
+                  <svg class="log-chevron w-3 h-3 text-red-400/50 transition-transform duration-150" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+                </span>
+              </button>
+              <div class="hidden max-h-56 overflow-y-auto divide-y divide-red-900/20">
+                {% for entry in entries %}
+                <div class="px-2.5 py-2 bg-red-950/10">
+                  {% if entry.ts_formatted %}<p class="text-[10px] font-mono text-red-400/50 mb-0.5">{{ entry.ts_formatted }}</p>{% endif %}
+                  <p class="text-xs text-red-200/70 break-words">{{ entry.message }}</p>
+                </div>
+                {% endfor %}
+              </div>
             </div>
             {% endfor %}
           </div>
         </div>
         {% endif %}
 
-        {# ── Warnings ── #}
-        {% if lw.warnings_since_last_checkin %}
+        {# ── Warnings (aggregated by logger) ── #}
+        {% if logwatcher_grouped.warnings %}
         <div class="pt-3 border-t border-gray-700/40">
-          <div class="flex items-center gap-2 mb-2">
+          <div class="flex items-center gap-2 mb-3">
             <p class="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Warnings</p>
             <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-yellow-900/40 text-yellow-300 border border-yellow-700/30">{{ lw.warnings_since_last_checkin|length }}</span>
           </div>
-          <div class="space-y-2">
-            {% for entry in lw.warnings_since_last_checkin %}
-            <div class="rounded-lg bg-yellow-950/20 border border-yellow-800/20 p-2.5">
-              {% if entry.logger %}<p class="text-[10px] font-mono text-yellow-400/60 mb-0.5 truncate">{{ entry.logger }}</p>{% endif %}
-              <p class="text-xs text-yellow-200/70 break-words">{{ entry.message }}</p>
+          <div class="space-y-1.5">
+            {% for logger_name, entries in logwatcher_grouped.warnings %}
+            <div class="rounded-lg border border-yellow-800/20 overflow-hidden">
+              <button type="button"
+                      onclick="this.nextElementSibling.classList.toggle('hidden'); this.querySelector('.log-chevron').classList.toggle('rotate-90')"
+                      class="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 bg-yellow-950/20 hover:bg-yellow-950/40 transition-colors text-left">
+                <span class="text-[10px] font-mono text-yellow-400/70 truncate">{{ logger_name }}</span>
+                <span class="flex items-center gap-1.5 flex-shrink-0">
+                  <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-yellow-900/40 text-yellow-300 border border-yellow-700/30">{{ entries|length }}</span>
+                  <svg class="log-chevron w-3 h-3 text-yellow-400/50 transition-transform duration-150" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+                </span>
+              </button>
+              <div class="hidden max-h-56 overflow-y-auto divide-y divide-yellow-900/20">
+                {% for entry in entries %}
+                <div class="px-2.5 py-2 bg-yellow-950/10">
+                  {% if entry.ts_formatted %}<p class="text-[10px] font-mono text-yellow-400/50 mb-0.5">{{ entry.ts_formatted }}</p>{% endif %}
+                  <p class="text-xs text-yellow-200/70 break-words">{{ entry.message }}</p>
+                </div>
+                {% endfor %}
+              </div>
             </div>
             {% endfor %}
           </div>

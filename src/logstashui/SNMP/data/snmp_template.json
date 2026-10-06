@@ -1,13 +1,18 @@
 {
-  "index_patterns": ["metrics-snmp.polling-*"],
+  "index_patterns": [
+    "metrics-snmp.polling-*"
+  ],
   "data_stream": {},
-  "composed_of": ["metrics-mappings", "metrics-settings"],
+  "composed_of": [
+    "metrics-mappings",
+    "metrics-settings"
+  ],
   "priority": 500,
   "_meta": {
     "description": "SNMP polling metrics index template for LogstashUI. Extends the built-in metrics component templates with TSDS mode, a geo_point location field, and time-series metric/dimension annotations.",
     "managed_by": "LogstashUI",
     "template_name": "metrics-snmp.polling",
-    "version": "1.6"
+    "version": "1.7"
   },
   "template": {
     "settings": {
@@ -18,7 +23,6 @@
           "tsds.category"
         ]
       }
-
     },
     "mappings": {
       "dynamic_templates": [
@@ -190,6 +194,12 @@
               "type": "long",
               "index": false,
               "time_series_metric": "counter"
+            },
+            "admin_status": {
+              "type": "keyword"
+            },
+            "oper_status": {
+              "type": "keyword"
             }
           }
         },
@@ -388,6 +398,37 @@
                   "time_series_metric": "gauge"
                 }
               }
+            },
+            "ap": {
+              "properties": {
+                "ip": {
+                  "type": "ip"
+                },
+                "name": {
+                  "type": "keyword"
+                },
+                "serial": {
+                  "type": "keyword"
+                },
+                "index": {
+                  "type": "keyword"
+                },
+                "status": {
+                  "type": "keyword"
+                },
+                "radio": {
+                  "properties": {
+                    "band": {
+                      "type": "keyword"
+                    },
+                    "channel": {
+                      "type": "long",
+                      "index": false,
+                      "time_series_metric": "gauge"
+                    }
+                  }
+                }
+              }
             }
           }
         },
@@ -410,6 +451,170 @@
             "supply": {
               "properties": {
                 "level": {
+                  "type": "long",
+                  "index": false,
+                  "time_series_metric": "gauge"
+                }
+              }
+            }
+          }
+        },
+        "ups": {
+          "properties": {
+            "battery": {
+              "properties": {
+                "capacity_pct": {
+                  "type": "long",
+                  "index": false,
+                  "time_series_metric": "gauge"
+                },
+                "current_amps": {
+                  "type": "float",
+                  "index": false,
+                  "time_series_metric": "gauge"
+                },
+                "seconds_on_battery": {
+                  "type": "long",
+                  "index": false,
+                  "time_series_metric": "gauge"
+                },
+                "status": {
+                  "type": "keyword"
+                },
+                "temperature_c": {
+                  "type": "long",
+                  "index": false,
+                  "time_series_metric": "gauge"
+                },
+                "time_remaining_minutes": {
+                  "type": "long",
+                  "index": false,
+                  "time_series_metric": "gauge"
+                },
+                "voltage": {
+                  "type": "float",
+                  "index": false,
+                  "time_series_metric": "gauge"
+                }
+              }
+            },
+            "input": {
+              "properties": {
+                "line_bads": {
+                  "type": "long",
+                  "index": false,
+                  "time_series_metric": "counter"
+                },
+                "num_phases": {
+                  "type": "long",
+                  "index": false,
+                  "time_series_metric": "gauge"
+                },
+                "source": {
+                  "type": "keyword"
+                },
+                "phase": {
+                  "properties": {
+                    "current_amps": {
+                      "type": "float",
+                      "index": false,
+                      "time_series_metric": "gauge"
+                    },
+                    "frequency_hz": {
+                      "type": "float",
+                      "index": false,
+                      "time_series_metric": "gauge"
+                    },
+                    "index": {
+                      "type": "long",
+                      "index": false
+                    },
+                    "power_w": {
+                      "type": "long",
+                      "index": false,
+                      "time_series_metric": "gauge"
+                    },
+                    "voltage": {
+                      "type": "long",
+                      "index": false,
+                      "time_series_metric": "gauge"
+                    }
+                  }
+                }
+              }
+            },
+            "output": {
+              "properties": {
+                "frequency_hz": {
+                  "type": "float",
+                  "index": false,
+                  "time_series_metric": "gauge"
+                },
+                "load_pct": {
+                  "type": "float",
+                  "index": false,
+                  "time_series_metric": "gauge"
+                },
+                "num_phases": {
+                  "type": "long",
+                  "index": false,
+                  "time_series_metric": "gauge"
+                },
+                "source": {
+                  "type": "keyword"
+                },
+                "phase": {
+                  "properties": {
+                    "current_amps": {
+                      "type": "float",
+                      "index": false,
+                      "time_series_metric": "gauge"
+                    },
+                    "index": {
+                      "type": "long",
+                      "index": false
+                    },
+                    "load_pct": {
+                      "type": "long",
+                      "index": false,
+                      "time_series_metric": "gauge"
+                    },
+                    "power_w": {
+                      "type": "long",
+                      "index": false,
+                      "time_series_metric": "gauge"
+                    },
+                    "voltage": {
+                      "type": "long",
+                      "index": false,
+                      "time_series_metric": "gauge"
+                    }
+                  }
+                }
+              }
+            },
+            "alarms": {
+              "properties": {
+                "present": {
+                  "type": "long",
+                  "index": false,
+                  "time_series_metric": "gauge"
+                }
+              }
+            },
+            "env": {
+              "properties": {
+                "humidity_pct": {
+                  "type": "long",
+                  "index": false,
+                  "time_series_metric": "gauge"
+                },
+                "remote_temperature_c": {
+                  "type": "long",
+                  "index": false,
+                  "time_series_metric": "gauge"
+                },
+                "temperature_c": {
                   "type": "long",
                   "index": false,
                   "time_series_metric": "gauge"

@@ -2,7 +2,7 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
-"""Optional OpenTelemetry bootstrap.
+"""Bootstrap optional OpenTelemetry tracing and metrics.
 
 Enabled by ``LOGSTASHUI_OTEL=true`` and the ``LogstashUI[otel]`` extra. Absent
 either, every entry point here is a no-op — LogstashUI ships as an air-gapped
@@ -46,7 +46,15 @@ def _enabled():
 
 
 def init_telemetry():
-    """Set up tracing and metrics. Returns True when instrumentation is live."""
+    """Set up tracing and metrics.
+
+    No-op when ``LOGSTASHUI_OTEL`` is unset/false, the otel extra is missing,
+    or this process already initialized. Failures are logged; worker boot
+    continues.
+
+    Returns:
+        True when instrumentation is live, otherwise False.
+    """
     global _initialized
     if _initialized or not _enabled():
         return False
@@ -123,6 +131,9 @@ def _start_hub_lag_probe(meter_provider):
     Reading it: lag stays flat as load rises => the NIC is the ceiling and adding
     workers will not help. Lag climbs => greenlets are starving, so more workers
     or cores will.
+
+    Args:
+        meter_provider: OpenTelemetry ``MeterProvider`` already installed.
     """
     meter = meter_provider.get_meter('logstashui.runtime')
     state = {'lag': 0.0}

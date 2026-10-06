@@ -37,6 +37,8 @@ class TestCreate:
         # The stored value is a hash, so the page is the only source of the raw
         # secret — and the list view must never render it.
         assert token.api_key not in body
+        assert '/Documentation/logstashui/rest_api/' in body
+        assert 'AddConnection' not in body
 
     def test_created_token_is_usable(self, authenticated_client):
         import re
@@ -139,7 +141,10 @@ class TestListing:
 
     def test_empty_state(self, authenticated_client):
         response = authenticated_client.get(URL)
-        assert 'No API tokens yet' in response.content.decode()
+        body = response.content.decode()
+        assert 'No API tokens yet' in body
+        # Copy lives on this page, not the HTMX create fragment.
+        assert 'function copyNewToken' in body
 
     def test_secret_never_rendered_in_list(self, authenticated_client, test_user):
         token, raw = ApiKey.issue_for_user(test_user, name='mine')

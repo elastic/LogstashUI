@@ -14,6 +14,12 @@ LogstashUI provides a visual interface for designing, testing, and operating Log
 
 Instead of editing configuration files manually, pipelines can be authored visually, simulated against sample events, and deployed to multiple Logstash nodes from a single interface.
 
+### Supported Platforms
+
+Officially, if all other requirements are met, LogstashUI can run on any x86-64 or arm64 platform that can run Docker.
+
+It should be noted that at this time, Windows cannot run LogstashUI natively via Python due to a lack of support. However, running via Docker in Windows is fully supported.
+
 ## Features
 
 <details>
@@ -61,15 +67,8 @@ Instead of editing configuration files manually, pipelines can be authored visua
 ## Requirements
 
 ### System Requirements
-**Minimum:**
-- 8 GB RAM
-- 4 CPU Cores
 
-**Why these requirements?**
-
-LogstashUI can run on smaller instances for light usage, especially when only using the editor or basic configuration workflows. The minimum requirements above are intended to provide a reliable baseline for common usage and heavier operations like pipeline simulation and multiple instances of Logstash Agent.
-
-If you choose to run LogstashUI with fewer resources, it will likely work fine, but performance can vary depending on the operation. If the UI feels slow, simulations take too long, or agent operations appear delayed, increase CPU and memory before troubleshooting further.
+Start with **8 GB RAM and 4 vCPUs**. See the [Deployment Recommendations](docs/docs/logstashui/general/deployment-recs.md) for more details.
 
 ## How to Deploy
 

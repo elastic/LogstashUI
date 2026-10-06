@@ -4,14 +4,14 @@ build-backend = "hatchling.build"
 
 [project]
 name = "LogstashUI"
-version = "0.5.2"
+version = "0.5.3-dev0"
 description = "A control plane and UI for Logstash!"
 readme = "README.md"
 license = { file = "LICENSE.txt" }
 requires-python = ">=3.12"
 dependencies = [
     "cryptography>=46.0.6",
-    "django>=6.0.3",
+    "django>=6.0.8,<6.1",
     "django-browser-reload>=1.21.0",
     "django-htmx>=1.27.0",
     "django-login-required-middleware>=0.9.0",
@@ -37,13 +37,13 @@ Homepage = "https://github.com/elastic/LogstashUI"
 
 [project.optional-dependencies]
 postgres = [
-    "psycopg[binary]>=3.2.0",
+    "psycopg[binary,pool]>=3.2.0",
 ]
 mysql = [
     "PyMySQL>=1.1.1",
 ]
 databases = [
-    "psycopg[binary]>=3.2.0",
+    "psycopg[binary,pool]>=3.2.0",
     "PyMySQL>=1.1.1",
 ]
 # Deliberately HTTP/protobuf, never gRPC: grpcio's native C-core threads cannot
@@ -57,6 +57,9 @@ otel = [
 
 [tool.uv]
 package = true
+override-dependencies = [
+    "sqlparse>=0.6.0",
+]
 
 [tool.hatch.build.targets.sdist]
 include = [
@@ -95,6 +98,7 @@ exclude = [
 "src/logstashui/Site" = "Site"
 "src/logstashui/Documentation" = "Documentation"
 "src/logstashui/AI" = "AI"
+"src/logstashui/API" = "API"
 "src/logstashui/theme" = "theme"
 "src/logstashui/Common" = "Common"
 "docs/docs" = "Documentation/content/docs"
@@ -104,7 +108,7 @@ exclude = [
 [dependency-groups]
 dev = [
     "pre-commit>=4.5.1",
-    "pytest>=9.0.2",
+    "pytest>=9.0.3",
     "pytest-cov>=7.1.0",
     "pytest-django>=4.10.0",
     "testcontainers[postgres]>=4.15.0",

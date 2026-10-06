@@ -2,22 +2,14 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
-"""
-SNMP walk reduce-and-ground.
+"""Reduce a raw SNMP walk into MIB-grounded columns plus ungrounded subtrees.
 
-Turns a raw SNMP walk into a compact, authoritative set of "grounded columns"
-(name + type + enum sourced from compiled MIBs) plus an "un-grounded subtrees"
-coverage report. This is what the snmp-profile-author agent should consume instead
-of the raw walk: it removes the agent's need to recall MIB semantics (which is the
-source of the power_mw / scrambled-enum hallucinations) and collapses 10k-50k line
-walks to ~100 rows.
+This is what `snmp-profile-author` should consume instead of a 10k–50k line
+walk: names, types, and enums come from compiled MIBs so the agent does not
+invent units or enum labels.
 
-Pipeline role:
-    walk_text --> reduce_and_ground() --> {grounded_columns, ungrounded_subtrees} --> agent
-
-Grounding index:
-    data/grounding/grounding.json  (numeric column OID -> {name, mib, type, enum, nodetype})
-    Built offline from pysmi-compiled MIB JSON. See data/grounding/build_grounding.py.
+Index: `data/grounding/grounding.json` (column OID → name/mib/type/enum).
+Rebuild with `data/grounding/build_grounding.py`.
 """
 import json
 import os
@@ -31,13 +23,10 @@ TC_ENUMS = {"TruthValue": {1: "true", 2: "false"}}
 
 
 def build_grounding(json_dir):
-    """Flatten pysmi-compiled MIB JSON into {oid: entry}.
+    """Flatten pysmi-compiled MIB JSON into `{oid: entry}`.
 
-    Each entry keeps only what's needed to author a profile field (functional schema),
-    not documentation prose:
-      name, mib, type, enum, nodetype, access
-      units  (only when defined)
-      table, index  (only for table columns -> how rows are keyed)
+    Each entry keeps authoring fields only: name, mib, type, enum, nodetype,
+    access, optional units, and table/index for columns.
     """
     import glob
     parsed, rows = [], {}   # rows: entry_oid -> [index object names]
@@ -83,8 +72,12 @@ def build_grounding(json_dir):
 
 
 def load_grounding(path=GROUNDING_PATH):
-    """Load the persisted grounding index. Returns {} (not an error) if missing,
-    so importing this module never crashes the Django app."""
+    """Load the persisted grounding index.
+
+    Returns:
+        Empty dict (not an error) if the file is missing, so importing this module
+        cannot crash the Django app.
+    """
     try:
         with open(path) as f:
             return json.load(f)
@@ -107,13 +100,16 @@ def _parse(walk_text):
 
 
 def reduce_and_ground(walk_text, grounding=None, max_index_depth=14):
-    """
-    walk_text -> (grounded_columns, ungrounded_subtrees)
+    """Group walk lines by MIB column OID and list unmatched subtrees.
 
-    grounded_columns: list of {oid, name, mib, type, enum, instances, sample}
-                      grouped by the real MIB column OID (handles multi-index tables).
-    ungrounded_subtrees: list of (prefix, count) for OIDs with no MIB match
-                         -> "device exposes these subtrees; load their MIBs to cover them".
+    Args:
+        walk_text: Raw SNMP walk text (`oid = value` lines).
+        grounding: Optional OID index; defaults to the module-level `GROUNDING`.
+        max_index_depth: Max instance arcs stripped when matching a column OID.
+
+    Returns:
+        Tuple `(grounded_columns, ungrounded_subtrees)` where columns include
+        name/type/enum/instances/sample, and ungrounded is `(prefix, count)` pairs.
     """
     if grounding is None:
         grounding = GROUNDING

@@ -2,6 +2,8 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
+"""CDP/LLDP topology queries and D3 graph conversion for the SNMP network map."""
+
 from django.http import JsonResponse
 from datetime import datetime, timedelta, timezone
 from Common.elastic_utils import get_elastic_connection
@@ -14,20 +16,18 @@ logger = logging.getLogger(__name__)
 
 
 def get_cdp_adjacencies(network_ids=None):
-    """
-    Query all Elasticsearch clusters for CDP/LLDP neighbor data.
-    Builds an adjacency table structure for network topology visualization.
+    """Query Elasticsearch for CDP/LLDP neighbor docs and build an adjacency table.
 
-    network.neighbor documents do NOT carry a network.name field, so we
-    query without that filter and resolve each device's network via the DB.
+    Neighbor documents have no `network.name`, so each device is resolved to a
+    network via the database.
 
     Args:
-        network_ids: Optional list of Network PKs to restrict scope. When provided
-                     only devices belonging to those networks are considered managed,
-                     and only adjacency entries for those networks appear in the result.
+        network_ids: Optional Network PKs. When set, only those networks' devices
+            are treated as managed and only their adjacency rows are returned.
 
     Returns:
-        dict: Adjacency table structure organized by network -> device -> interface
+        Dict with `success`, `adjacency_table` (network → device → interface), and
+        optional `errors`.
     """
     try:
         # Step 1: Get connections that have at least one SNMP network
@@ -57,8 +57,16 @@ def get_cdp_adjacencies(network_ids=None):
         # network.name being present in every document type.
         device_network_map = {}    # device.name (display) → "NetworkName (range)"
         device_poll_target_map = {}  # hostname or ip_address → "NetworkName (range)"
-        # Track which network labels are in-scope so we can filter adjacency entries
+        # Track which network labels are in-scope so we can filter adjacency entries.
+        # Two sets are kept:
+        #   scoped_network_labels — full "Name (range)" labels built from the DB
+        #   scoped_network_names  — bare names only ("Name") as a fallback, because
+        #     ES documents may carry a network.name with a different CIDR notation
+        #     (e.g. "Homelab (192.168.7.0/24)") than the one stored in the database
+        #     (e.g. "Homelab (192.168.4.0/24)"), causing exact-match filtering to
+        #     incorrectly drop every entry.
         scoped_network_labels = set()
+        scoped_network_names  = set()
         try:
             devices_qs = Device.objects.select_related('network').all()
             if network_ids:
@@ -67,6 +75,7 @@ def get_cdp_adjacencies(network_ids=None):
                 if dev.network:
                     net_label = f"{dev.network.name} ({dev.network.network_range})"
                     scoped_network_labels.add(net_label)
+                    scoped_network_names.add(dev.network.name)
                     if dev.name:
                         device_network_map[dev.name] = net_label
                     poll_target = dev.hostname or dev.ip_address
@@ -83,6 +92,10 @@ def get_cdp_adjacencies(network_ids=None):
             )
 
         adjacency_table = {}
+        # Maps host.sysname → host.name across all connections; populated as
+        # buckets are processed and returned so convert_adjacency_to_graph can
+        # use host.name as a device_id fallback when sysname doesn't match the DB.
+        sysname_to_host_name = {}
         errors = []
 
         now = datetime.now(timezone.utc)
@@ -127,9 +140,9 @@ def get_cdp_adjacencies(network_ids=None):
                                         }
                                     },
                                     {
-                                        "cdp_row_index": {
+                                        "neighbor_device_id": {
                                             "terms": {
-                                                "field": "network.neighbor.index"
+                                                "field": "network.neighbor.device_id"
                                             }
                                         }
                                     }
@@ -152,6 +165,7 @@ def get_cdp_adjacencies(network_ids=None):
                                                     "host.polled_address",
                                                     "host.hostname",
                                                     "host.sysname",
+                                                    "host.name",
                                                     "network.name",
                                                     "network.neighbor.index",
                                                     "network.neighbor.device_id",
@@ -190,21 +204,45 @@ def get_cdp_adjacencies(network_ids=None):
                             device_name      = source.get('host', {}).get('sysname', '')
                             polled_address   = source.get('host', {}).get('polled_address', '')
                             host_hostname    = source.get('host', {}).get('hostname', '')
+                            host_name        = source.get('host', {}).get('name', '')
                             doc_network_name = source.get('network', {}).get('name', '')
                             neighbor_data    = source.get('network', {}).get('neighbor', {})
                             table_index      = neighbor_data.get('index', '')
+                            neighbor_dev_id  = neighbor_data.get('device_id', '')
 
-                            # network.neighbor.index format: "ifIndex.cdpCacheIfIndex"
-                            if device_name and '.' in table_index:
-                                if_index = table_index.split('.')[0]
-                                interface_lookup_pairs.append((device_name, if_index, polled_address))
+                            # Track sysname → host.name so the graph builder can fall
+                            # back to host.name when matching against the DB inventory.
+                            if device_name and host_name:
+                                sysname_to_host_name[device_name] = host_name
 
-                                key = f"{device_name}:{table_index}"
+                            # Determine local ifIndex for interface-name resolution.
+                            # CDP index format: "ifIndex.cdpCacheIndex" (dot-separated).
+                            # LLDP docs do not carry a local interface index field, so
+                            # interface name resolution is skipped for those entries.
+                            if device_name:
+                                if '.' in table_index:
+                                    # CDP: extract ifIndex from the left side of the dot
+                                    if_index = table_index.split('.')[0]
+                                else:
+                                    # LLDP (or other): no local interface index available
+                                    if_index = ''
+
+                                if if_index:
+                                    interface_lookup_pairs.append((device_name, if_index, polled_address))
+
+                                # Key must be unique per (device, neighbor).  For CDP,
+                                # table_index carries that uniqueness; for LLDP (no index)
+                                # the neighbor device_id serves as the unique discriminator —
+                                # the composite already deduplicates on
+                                # (host_name, neighbor_device_id).
+                                key = f"{device_name}:{neighbor_dev_id or table_index}"
                                 cdp_data_by_device_index[key] = {
                                     'neighbor': neighbor_data,
                                     'polled_address': polled_address,
                                     'host_hostname': host_hostname,
-                                    'doc_network_name': doc_network_name
+                                    'doc_network_name': doc_network_name,
+                                    'if_index': if_index,
+                                    'neighbor_dev_id': neighbor_dev_id,
                                 }
 
                 # Step 2b: Resolve local interface names via interface events
@@ -262,18 +300,28 @@ def get_cdp_adjacencies(network_ids=None):
                     polled_address   = entry['polled_address']
                     host_hostname    = entry['host_hostname']
                     doc_network_name = entry['doc_network_name']
+                    if_index         = entry.get('if_index', '')
 
                     # Prefer network.name from the document itself; fall back to DB lookup
                     network_name = doc_network_name or resolve_network(device_name, polled_address)
 
-                    # When a network filter is active, skip devices outside the scope
+                    # When a network filter is active, skip devices outside the scope.
+                    # Try the full "Name (range)" label first; fall back to just the
+                    # name part in case the ES document carries a different CIDR
+                    # notation than the database (e.g. "Homelab (192.168.7.0/24)"
+                    # vs "Homelab (192.168.4.0/24)").
                     if network_ids and scoped_network_labels and network_name not in scoped_network_labels:
-                        logger.debug(f"Skipping {device_name} — network '{network_name}' not in filter scope")
-                        continue
+                        name_part = network_name.split(' (')[0] if ' (' in network_name else network_name
+                        if name_part not in scoped_network_names:
+                            logger.debug(f"Skipping {device_name} — network '{network_name}' not in filter scope")
+                            continue
 
-                    if_index = table_index.split('.')[0] if '.' in table_index else table_index
                     friendly_interface_name = interface_name_lookup.get(
-                        f"{device_name}:{if_index}", table_index
+                        f"{device_name}:{if_index}",
+                        # For CDP: fall back to the raw "ifIndex.remIndex" table_index.
+                        # For LLDP: no local interface is known; use the remote device_id
+                        # (the second half of the key) so each neighbor gets a unique slot.
+                        entry.get('neighbor_dev_id') or table_index or if_index
                     )
 
                     adjacency_table.setdefault(network_name, {}).setdefault(device_name, {})
@@ -301,6 +349,7 @@ def get_cdp_adjacencies(network_ids=None):
         return {
             'success': True,
             'adjacency_table': adjacency_table,
+            'sysname_to_host_name': sysname_to_host_name,
             'errors': errors if errors else None
         }
 
@@ -309,24 +358,23 @@ def get_cdp_adjacencies(network_ids=None):
         return {
             'success': False,
             'error': str(e),
-            'adjacency_table': {}
+            'adjacency_table': {},
+            'sysname_to_host_name': {},
         }
 
 
-def convert_adjacency_to_graph(adjacency_table):
-    """
-    Convert adjacency table to D3.js-compatible graph structure with nodes and edges.
-    Handles bidirectional connections to avoid duplicate edges.
-    Distinguishes between managed devices (in inventory) and discovered-only devices.
-    
+def convert_adjacency_to_graph(adjacency_table, sysname_to_host_name=None):
+    """Convert an adjacency table to a D3 graph, collapsing bidirectional duplicates.
+
     Args:
-        adjacency_table: Dictionary of network -> device -> interface -> CDP data
-        
+        adjacency_table: Nested dict of network → device → interface → neighbor data.
+        sysname_to_host_name: Optional dict mapping host.sysname → host.name.
+            Used as a fallback when the sysname doesn't match any DB device field
+            but host.name does (e.g. vendor-internal sysname vs inventory name).
+
     Returns:
-        dict: {
-            'nodes': [{'id': device_name, 'network': network_name, 'managed': bool, ...}],
-            'edges': [{'source': device1, 'target': device2, 'source_interface': ..., 'target_interface': ...}]
-        }
+        Dict with `nodes` (id, network, managed, optional device_id) and `edges`
+        (source/target plus interface names).
     """
     nodes = {}  # Use dict to avoid duplicates, keyed by device name
     edges = []
@@ -407,8 +455,13 @@ def convert_adjacency_to_graph(adjacency_table):
     nodes_list = list(nodes.values())
     
     # Enrich managed nodes with database device IDs for click-through detail panel.
-    # node_id is now host.sysname — try matching against device display name, then
-    # hostname, then IP as fallbacks.
+    # node_id is host.sysname from Elasticsearch — several fallback strategies are
+    # tried in order so common naming mismatches are handled transparently:
+    #   1. Exact sysname vs device.name / hostname / ip_address
+    #   2. Short label (before first dot) for FQDN sysnames
+    #   3. host.name from the ES document — often matches the inventory name when
+    #      the sysname is a vendor-internal identifier (e.g. "DUMSYS-20")
+    _host_name_map = sysname_to_host_name or {}
     try:
         db_devices = list(Device.objects.values('id', 'name', 'ip_address', 'hostname'))
         name_to_device_id     = {d['name']: d['id'] for d in db_devices}
@@ -416,11 +469,19 @@ def convert_adjacency_to_graph(adjacency_table):
         ip_to_device_id       = {d['ip_address']: d['id'] for d in db_devices if d['ip_address']}
 
         for node in nodes_list:
-            node_id = node['id']
+            node_id  = node['id']
+            # Short label = everything before the first dot (no-op for bare names)
+            short_id  = node_id.split('.')[0] if '.' in node_id else node_id
+            # host.name from the ES document — may match the DB name when sysname doesn't
+            host_name = _host_name_map.get(node_id, '')
             device_id = (
                 name_to_device_id.get(node_id)
                 or hostname_to_device_id.get(node_id)
                 or ip_to_device_id.get(node_id)
+                or name_to_device_id.get(short_id)
+                or hostname_to_device_id.get(short_id)
+                or (name_to_device_id.get(host_name) if host_name else None)
+                or (hostname_to_device_id.get(host_name) if host_name else None)
             )
             if device_id:
                 node['device_id'] = device_id
@@ -436,12 +497,10 @@ def convert_adjacency_to_graph(adjacency_table):
 
 
 def get_network_map_data(request):
-    """
-    Django view endpoint to fetch network map data.
-    Returns CDP adjacency data as JSON for frontend visualization.
+    """Return CDP adjacency plus D3 graph JSON for the topology UI.
 
-    Optional GET params:
-        networks: one or more Network PKs to restrict scope, e.g. ?networks=1&networks=2
+    Args:
+        networks: Optional repeated GET Network PKs (`?networks=1&networks=2`).
     """
     try:
         # Parse optional network filter
@@ -453,7 +512,10 @@ def get_network_map_data(request):
         
         if result['success'] and result['adjacency_table']:
             # Convert adjacency table to graph structure
-            graph = convert_adjacency_to_graph(result['adjacency_table'])
+            graph = convert_adjacency_to_graph(
+                result['adjacency_table'],
+                sysname_to_host_name=result.get('sysname_to_host_name', {}),
+            )
             
             # Add graph data to result
             result['graph'] = graph
@@ -482,11 +544,10 @@ def get_network_map_data(request):
 
 
 def get_networks_list(request):
-    """
-    Return a lightweight list of all SNMP Networks for the topology filter dropdown.
-    Includes device_count (from the DB, no ES query) so the JS can auto-select the
-    most-populated network by default.
-    Response: { networks: [{id, name, network_range, device_count}, ...] }
+    """Return networks for the topology filter dropdown, including DB `device_count`.
+
+    Returns:
+        JSON `{success, networks: [{id, name, network_range, device_count}]}`.
     """
     try:
         from django.db.models import Count
@@ -502,20 +563,16 @@ def get_networks_list(request):
 
 
 def get_edge_interface_detail(request):
-    """
-    Query Elasticsearch for live interface data on both ends of a topology edge.
+    """Return live interface docs for both ends of a topology edge.
 
-    GET params:
-        source      — host.sysname of the source device
-        source_iface — interface name on the source side
-        target      — host.sysname of the target device
-        target_iface — interface name on the target side
+    Args:
+        source: Source `host.sysname`.
+        source_iface: Interface name on the source.
+        target: Target `host.sysname`.
+        target_iface: Interface name on the target.
 
-    Response: {
-        success: bool,
-        source: { sysname, iface_name, interface: {...} | null },
-        target: { sysname, iface_name, interface: {...} | null },
-    }
+    Returns:
+        JSON `{success, source: {sysname, iface_name, interface}, target: {...}}`.
     """
     source_sysname  = request.GET.get('source', '').strip()
     source_iface    = request.GET.get('source_iface', '').strip()

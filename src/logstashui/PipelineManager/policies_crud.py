@@ -2,6 +2,8 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
+"""HTTP views for policy CRUD, enrollment tokens, and default config files."""
+
 from Common.decorators import require_admin_role
 from PipelineManager.models import Policy, EnrollmentToken, Pipeline, Keystore, Connection as ConnectionTable
 from django.http import JsonResponse
@@ -16,9 +18,7 @@ logger = logging.getLogger(__name__)
 
 @require_admin_role
 def get_policies(request):
-    """
-    Get all policies
-    """
+    """Return all non-embedded policies as JSON, with active agent counts."""
     try:
         from django.db.models import Count, Q
         qs = Policy.objects.annotate(
@@ -62,8 +62,12 @@ def get_policies(request):
 
 @require_admin_role
 def add_policy(request):
-    """
-    Create a new policy
+    """Create a policy and mint its default enrollment token.
+
+    Args:
+        name: Unique policy name (required).
+        policy_type: PACKAGED, MANAGED, or SIMULATE.
+        settings_path, logs_path, binary_path, …: Optional path/config fields.
     """
     if request.method != 'POST':
         return JsonResponse({"success": False, "error": "Method not allowed"}, status=405)
@@ -206,8 +210,14 @@ def add_policy(request):
 
 @require_admin_role
 def update_policy(request):
-    """
-    Update an existing policy
+    """Update an existing policy's paths and config files.
+
+    Policy type cannot change. EMBEDDED is immutable. System SIMULATE/MANAGED
+    rows lock the path scheme.
+
+    Args:
+        policy_name: Existing policy name (required).
+        settings_path, logstash_yml, jvm_options, …: Optional fields to set.
     """
     if request.method != 'POST':
         return JsonResponse({"success": False, "error": "Method not allowed"}, status=405)
@@ -352,8 +362,10 @@ def update_policy(request):
 
 @require_admin_role
 def delete_policy(request):
-    """
-    Delete a policy
+    """Delete a non-system policy that is not assigned to any connection.
+
+    Args:
+        policy_name: Policy name.
     """
     if request.method != 'POST':
         return JsonResponse({"success": False, "error": "Method not allowed"}, status=405)
@@ -406,8 +418,14 @@ def delete_policy(request):
 
 @require_admin_role
 def clone_policy(request):
-    """
-    Clone an existing policy with all its pipelines and keystore entries
+    """Clone a policy with its pipelines and keystore entries.
+
+    PACKAGED/DEFAULT clones become MANAGED (path scheme rewritten).
+    EMBEDDED cannot be cloned.
+
+    Args:
+        source_policy_id: Source policy pk.
+        new_policy_name: Unique name for the clone.
     """
     if request.method != 'POST':
         return JsonResponse({"success": False, "error": "Method not allowed"}, status=405)
@@ -551,8 +569,10 @@ def clone_policy(request):
 
 @require_admin_role
 def get_enrollment_tokens(request):
-    """
-    Get all enrollment tokens for a specific policy.
+    """Return encoded enrollment tokens and install commands for a policy.
+
+    Args:
+        policy_id: Policy primary key.
     """
     try:
         policy_id = request.GET.get('policy_id')
@@ -616,8 +636,11 @@ def get_enrollment_tokens(request):
 
 @require_admin_role
 def add_enrollment_token(request):
-    """
-    Create a new enrollment token for a policy.
+    """Create a new enrollment token for a policy.
+
+    Args:
+        policy_id: Policy primary key.
+        name: Token label (default ``default``).
     """
     if request.method != 'POST':
         return JsonResponse({"success": False, "error": "Method not allowed"}, status=405)
@@ -663,8 +686,10 @@ def add_enrollment_token(request):
 
 @require_admin_role
 def delete_enrollment_token(request):
-    """
-    Delete an enrollment token.
+    """Delete an enrollment token.
+
+    Args:
+        token_id: ``EnrollmentToken`` primary key.
     """
     if request.method != 'POST':
         return JsonResponse({"success": False, "error": "Method not allowed"}, status=405)
@@ -700,7 +725,14 @@ def delete_enrollment_token(request):
         return JsonResponse({"success": False, "error": str(e)}, status=500)
 
 def load_default_config(filename):
-    """Load default configuration file from the data directory"""
+    """Read a default config file from this app's ``data/`` directory.
+
+    Args:
+        filename: Basename under ``PipelineManager/data/``.
+
+    Returns:
+        File contents, or ``""`` if missing.
+    """
     current_dir = os.path.dirname(os.path.abspath(__file__))
     file_path = os.path.join(current_dir, 'data', filename)
     try:
@@ -716,15 +748,15 @@ def load_default_config(filename):
 
 
 def get_default_logstash_yml():
-    """Get default logstash.yml configuration"""
+    """Return the packaged default ``logstash.yml`` text."""
     return load_default_config('default_logstash.yml')
 
 
 def get_default_jvm_options():
-    """Get default jvm.options configuration"""
+    """Return the packaged default ``jvm.options`` text."""
     return load_default_config('default_jvm.options')
 
 
 def get_default_log4j2_properties():
-    """Get default log4j2.properties configuration"""
+    """Return the packaged default ``log4j2.properties`` text."""
     return load_default_config('default_log4j2.properties')

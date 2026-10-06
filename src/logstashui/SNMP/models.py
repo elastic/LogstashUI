@@ -2,6 +2,12 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
+"""Django models for the SNMP NMS.
+
+Rows cover monitored networks and devices, SNMP credentials, poll profiles,
+device templates, and a singleton deployment-state tracker.
+"""
+
 from django.db import models
 from django.core.exceptions import ValidationError
 from django.utils import timezone
@@ -11,8 +17,11 @@ import ipaddress
 
 
 class Network(models.Model):
-    """
-    SNMP Network model for defining networks to monitor
+    """Monitored IP range that owns devices and generated Logstash pipelines.
+
+    `deployment_mode` is CENTRALIZED (Elasticsearch CPM) or AGENT (LogstashAgent).
+    Centralized networks also choose `credential_mode`: KEYSTORE references
+    (`${snmp_…}`) versus PLAINTEXT secrets embedded in LSCL.
     """
 
     DEPLOYMENT_MODE_CHOICES = [
@@ -122,8 +131,10 @@ class Network(models.Model):
         return f"{self.name} ({self.network_range})"
     
     def clean(self):
-        """
-        Validate network_range is a valid CIDR notation
+        """Validate that `network_range` is CIDR notation.
+
+        Raises:
+            ValidationError: If the range is not a valid IPv4 or IPv6 network.
         """
         super().clean()
         
@@ -137,12 +148,15 @@ class Network(models.Model):
                 })
     
     def save(self, *args, **kwargs):
+        """Run `full_clean()` then persist the row."""
         self.full_clean()
         super().save(*args, **kwargs)
 
 class Device(models.Model):
-    """
-    SNMP Device model for individual devices to monitor
+    """Individual SNMP-polled host.
+
+    At least one of `ip_address` or `hostname` is required. Unassigned devices
+    receive the official `default` template on save when that row exists.
     """
     
     name = models.CharField(
@@ -272,8 +286,10 @@ class Device(models.Model):
         return f"{self.name} ({identifier})"
     
     def clean(self):
-        """
-        Validate device fields
+        """Require an address and validate IP/hostname format.
+
+        Raises:
+            ValidationError: If both address fields are empty or a field is malformed.
         """
         super().clean()
 
@@ -301,6 +317,7 @@ class Device(models.Model):
                 })
     
     def save(self, *args, **kwargs):
+        """Assign the official default template when unset, then `full_clean()` and persist."""
         # If no device template is assigned, use the Default template
         # (synced from official_device_templates/default.json as 'default')
         if not self.device_template_id:
@@ -318,8 +335,10 @@ class Device(models.Model):
 
 
 class Credential(models.Model):
-    """
-    SNMP Credential model supporting SNMPv1, v2c, and v3
+    """SNMP v1, v2c, or v3 secret used to poll devices or receive traps.
+
+    Community, auth, and privacy strings are Fernet-encrypted on save. Use
+    `get_community`, `get_auth_pass`, and `get_priv_pass` to decrypt.
     """
     
     SNMP_VERSION_CHOICES = [
@@ -432,8 +451,10 @@ class Credential(models.Model):
         return f"{self.name} (SNMPv{self.version})"
     
     def clean(self):
-        """
-        Validate credential fields based on SNMP version
+        """Enforce version-specific required fields and reject the other version's fields.
+
+        Raises:
+            ValidationError: If community/USM fields do not match `version` and `security_level`.
         """
         super().clean()
         
@@ -512,6 +533,7 @@ class Credential(models.Model):
                 )
     
     def save(self, *args, **kwargs):
+        """Validate, encrypt plaintext secrets that are not already Fernet tokens, then persist."""
         self.full_clean()
         
         # Encrypt sensitive fields before saving
@@ -525,27 +547,27 @@ class Credential(models.Model):
         super().save(*args, **kwargs)
     
     def _is_encrypted(self, value):
-        """Check if a value is already encrypted (Fernet tokens start with 'gAAAAA')"""
+        """Return True if `value` looks like a Fernet token (prefix ``gAAAAA``)."""
         return value and value.startswith('gAAAAA')
     
     def get_community(self):
-        """Get decrypted community string"""
+        """Return the decrypted v1/v2c community string, or None."""
         return decrypt_credential(self.community) if self.community else None
     
     def get_auth_pass(self):
-        """Get decrypted auth password"""
+        """Return the decrypted SNMPv3 auth password, or None."""
         return decrypt_credential(self.auth_pass) if self.auth_pass else None
     
     def get_priv_pass(self):
-        """Get decrypted priv password"""
+        """Return the decrypted SNMPv3 privacy password, or None."""
         return decrypt_credential(self.priv_pass) if self.priv_pass else None
 
 
 class Profile(models.Model):
-    """
-    SNMP Profile model for storing user-created device profiles
-    Official profiles are stored in SNMP/data/official_profiles/ as JSON files
-    User-created profiles are stored in the database
+    """OID map (get/walk/table) plus normalizers applied by a device template.
+
+    Official catalog rows set `official_key` from bundled JSON; user rows leave it
+    null. Catalog JSON also lives under `SNMP/data/official_profiles/`.
     """
     
     name = models.CharField(
@@ -601,8 +623,10 @@ class Profile(models.Model):
         return self.name
     
     def clean(self):
-        """
-        Validate profile data is valid JSON structure
+        """Require `profile_data` to be a JSON object when present.
+
+        Raises:
+            ValidationError: If `profile_data` is not a dict.
         """
         super().clean()
         
@@ -617,14 +641,16 @@ class Profile(models.Model):
             # For now, just ensure it's valid JSON
     
     def save(self, *args, **kwargs):
+        """Run `full_clean()` then persist the row."""
         self.full_clean()
         super().save(*args, **kwargs)
 
 
 class DeviceTemplate(models.Model):
-    """
-    Device Template model for grouping profiles and auto-matching devices
-    Templates define which profiles should be applied to devices based on matching rules
+    """Named bundle of profiles with substring matching rules for auto-assignment.
+
+    Official templates cannot be overwritten by AI import. Deleting a non-default
+    template reassigns its devices to the official `default` template.
     """
     
     name = models.CharField(
@@ -700,8 +726,10 @@ class DeviceTemplate(models.Model):
         return self.name
     
     def clean(self):
-        """
-        Validate template fields
+        """Require `matching_rules` to be a list of strings when set.
+
+        Raises:
+            ValidationError: If `matching_rules` is not a list of strings.
         """
         super().clean()
         
@@ -719,13 +747,15 @@ class DeviceTemplate(models.Model):
                 })
     
     def save(self, *args, **kwargs):
+        """Run `full_clean()` then persist the row."""
         self.full_clean()
         super().save(*args, **kwargs)
     
     def delete(self, *args, **kwargs):
-        """
-        Before deleting a template, reassign all its devices to the Default template.
-        Prevents deletion of the Default template itself.
+        """Reassign devices to the official default template, then delete.
+
+        Raises:
+            ValidationError: If this is the official `default` template.
         """
         # Prevent deletion of the Default template
         if self.name == 'default' and self.official:
@@ -745,14 +775,13 @@ class DeviceTemplate(models.Model):
         super().delete(*args, **kwargs)
     
     def matches_device(self, device_info):
-        """
-        Check if this template matches the given device information
-        
+        """Return True if any matching rule is a case-insensitive substring of `device_info`.
+
         Args:
-            device_info (str): Device identification string (e.g., sysDescr)
-        
+            device_info: Device identification string (typically sysDescr).
+
         Returns:
-            bool: True if any matching rule is found in device_info
+            False when rules or `device_info` are empty; otherwise whether any rule matches.
         """
         if not self.matching_rules or not device_info:
             return False
@@ -762,10 +791,7 @@ class DeviceTemplate(models.Model):
 
 
 class SNMPDeploymentState(models.Model):
-    """
-    Track SNMP deployment state to optimize change detection.
-    Uses timestamps to avoid expensive reconciliation for the indicator.
-    """
+    """Singleton timestamps used to cheaply detect undeployed SNMP config changes."""
     last_deployment = models.DateTimeField(
         null=True, 
         blank=True,
@@ -784,10 +810,7 @@ class SNMPDeploymentState(models.Model):
     
     @classmethod
     def mark_config_changed(cls):
-        """
-        Mark that SNMP configuration has changed.
-        Call this after any CRUD operation on networks, devices, credentials, templates, or profiles.
-        """
+        """Stamp `last_config_change` after CRUD on networks, devices, credentials, templates, or profiles."""
         from django.utils import timezone
         state, _ = cls.objects.get_or_create(id=1)
         state.last_config_change = timezone.now()
@@ -795,12 +818,13 @@ class SNMPDeploymentState(models.Model):
     
     @classmethod
     def has_undeployed_changes(cls):
-        """
-        Fast timestamp-based check for undeployed changes.
-        Returns True if config has changed since last deployment.
-        
-        Note: May have false positives if user changes then reverts config.
-        These are cleared when user opens the diff modal and sees no changes.
+        """Return True if config has changed since the last successful deploy.
+
+        Never-deployed state is treated as dirty.
+
+        Note:
+            Change-then-revert can still look dirty (false positive). Opening the deploy
+            diff with no actual pipeline changes clears the indicator.
         """
         state = cls.objects.filter(id=1).first()
         

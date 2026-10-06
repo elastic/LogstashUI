@@ -13,11 +13,11 @@ data:
   LOGSTASHUI_TLS: "true"
   LOGSTASHUI_WORKERS: "2"
   DEBUG: "false"
-  ALLOWED_HOSTS: logstashui.example.com,logstashui,logstashui.logstashui.svc,logstashui.logstashui.svc.cluster.local
-  CSRF_TRUSTED_ORIGINS: https://logstashui.example.com
-  LOGSTASHUI_TLS_SANS: logstashui.example.com,logstashui.logstashui.svc.cluster.local
-  LOGSTASHUI_HOST_HOSTNAME: logstashui.example.com
-  LOGSTASHUI_AGENT_UI_URL: https://logstashui.example.com
+  ALLOWED_HOSTS: localhost,logstashui,logstashui.logstashui.svc,logstashui.logstashui.svc.cluster.local
+  CSRF_TRUSTED_ORIGINS: https://logstashui
+  LOGSTASHUI_TLS_SANS: localhost,logstashui,logstashui.logstashui.svc.cluster.local
+  LOGSTASHUI_HOST_HOSTNAME: logstashui
+  LOGSTASHUI_AGENT_UI_URL: https://logstashui.logstashui.svc.cluster.local
   LOGSTASHUI_DB_ENGINE: postgresql
   LOGSTASHUI_DB_HOST: postgres.example.svc.cluster.local
   LOGSTASHUI_DB_PORT: "5432"

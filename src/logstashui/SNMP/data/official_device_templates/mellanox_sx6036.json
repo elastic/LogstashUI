@@ -10,6 +10,7 @@
     "generic_interfaces",
     "generic_system",
     "generic_entity_sensor",
+    "generic_host_system_metrics",
     "mellanox_mlnx_os"
   ],
   "matching_rules": [

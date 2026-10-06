@@ -1,0 +1,77 @@
+{
+  "official_key": "isilon_protocols",
+  "name": "isilon_protocols",
+  "description": "Per-node SMB (CIFS) and NFS protocol statistics for Dell EMC Isilon OneFS, including operations, throughput, errors, and connection counts. Also covers FTP, HTTP, and NDMP service state. Uses ISILON-MIB (1.3.6.1.4.1.12124).",
+  "vendor": "Dell EMC",
+  "product": "Isilon OneFS",
+  "model": "Any",
+  "get": {},
+  "walk": {},
+  "table": {
+    "network.protocol.smb.node": {
+      "columns": {
+        "index":               "1.3.6.1.4.1.12124.2.52.1.1",
+        "node_num":            "1.3.6.1.4.1.12124.2.52.1.2",
+        "connections":         "1.3.6.1.4.1.12124.2.52.1.3",
+        "ops":                 "1.3.6.1.4.1.12124.2.52.1.4",
+        "read_bytes":          "1.3.6.1.4.1.12124.2.52.1.5",
+        "write_bytes":         "1.3.6.1.4.1.12124.2.52.1.6",
+        "latency_us":          "1.3.6.1.4.1.12124.2.52.1.7",
+        "errors":              "1.3.6.1.4.1.12124.2.52.1.8"
+      }
+    },
+    "network.protocol.nfs.node": {
+      "columns": {
+        "index":               "1.3.6.1.4.1.12124.2.51.1.1",
+        "node_num":            "1.3.6.1.4.1.12124.2.51.1.2",
+        "ops":                 "1.3.6.1.4.1.12124.2.51.1.3",
+        "read_bytes":          "1.3.6.1.4.1.12124.2.51.1.4",
+        "health":              "1.3.6.1.4.1.12124.2.51.1.5"
+      }
+    },
+    "network.protocol.http.node": {
+      "columns": {
+        "index":               "1.3.6.1.4.1.12124.2.54.1.1",
+        "node_num":            "1.3.6.1.4.1.12124.2.54.1.2",
+        "ops":                 "1.3.6.1.4.1.12124.2.54.1.3",
+        "errors":              "1.3.6.1.4.1.12124.2.54.1.4",
+        "read_bytes":          "1.3.6.1.4.1.12124.2.54.1.5",
+        "write_bytes":         "1.3.6.1.4.1.12124.2.54.1.6"
+      }
+    },
+    "network.protocol.ftp.node": {
+      "columns": {
+        "index":               "1.3.6.1.4.1.12124.2.53.1.1",
+        "node_num":            "1.3.6.1.4.1.12124.2.53.1.2",
+        "connections":         "1.3.6.1.4.1.12124.2.53.1.3",
+        "ops":                 "1.3.6.1.4.1.12124.2.53.1.4"
+      }
+    },
+    "network.protocol.ndmp.node": {
+      "columns": {
+        "index":               "1.3.6.1.4.1.12124.2.55.1.1",
+        "node_num":            "1.3.6.1.4.1.12124.2.55.1.2",
+        "sessions":            "1.3.6.1.4.1.12124.2.55.1.3"
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "table",
+        "table": "network.protocol.nfs.node",
+        "field": "network.protocol.nfs.node.health"
+      },
+      "params": {
+        "mapping": {
+          "-1": "UNKNOWN",
+          "0":  "HEALTHY",
+          "1":  "ATTN",
+          "2":  "DEGRADED",
+          "3":  "CRITICAL"
+        }
+      }
+    }
+  ]
+}

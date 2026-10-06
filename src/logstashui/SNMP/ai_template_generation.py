@@ -1,29 +1,18 @@
 #Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
-"""
-SNMP AI template-and-profile generation stream.
+"""SSE stream that turns an SNMP walk into AI-authored templates and profiles.
 
-Extracted from views.py to keep views thin.  The public entry point is
-``stream_template_generation``, which yields SSE-formatted strings for use with
-Django's ``StreamingHttpResponse``.
+Public entry point is `stream_template_generation`, which yields SSE strings for
+Django `StreamingHttpResponse`.
 
-Architecture summary
-─────────────────────
-1. ``snmp_grounding.reduce_and_ground`` — OID condenser.
-   Turns the raw SNMP walk into compact, MIB-grounded columns (name, type,
-   enum, units, instance count).  Runs locally; nothing is written to any
-   backend.
-
-2. ``inline_grounding.build_grounding(vendor)`` — reference-context grounding.
-   Loads the field-naming schema, standard-MIB references, and vendor-filtered
-   reference profiles from SNMP/data/ and sends them INLINE with each request
-   via ``configuration_overrides.instructions``.  The agent conforms to what it
-   is handed; nothing authoritative lives on the backend.
-
-3. ``Common.ai.agent_builder.AgentBuilder.invoke_agent`` — SSE streaming.
-   Invokes the persistent ``snmp-profile-author`` agent on Kibana and streams
-   its response back to the browser.
+Pipeline:
+    1. `snmp_grounding.reduce_and_ground` condenses the walk into MIB-grounded
+       columns locally.
+    2. `inline_grounding.build_grounding(vendor)` sends schema, standard-MIB
+       references, and vendor-filtered profiles inline via
+       `configuration_overrides.instructions`.
+    3. `AgentBuilder.invoke_agent` streams the `snmp-profile-author` agent.
 """
 import json
 import os
@@ -51,11 +40,7 @@ _VENDOR_PREFIXES = {
 
 
 def _infer_vendor(grounded_columns):
-    """
-    Return a vendor hint string (e.g. ``"Cisco"``) from the most-common
-    vendor-specific MIB prefix in the grounded columns, or ``""`` if the walk
-    is exclusively standard MIBs.
-    """
+    """Return a vendor hint such as ``Cisco`` from grounded MIB prefixes, or ``""``."""
     counts = {}
     for col in grounded_columns:
         mib = (col.get("mib") or "").upper()
@@ -77,7 +62,7 @@ def _sse(payload):
 # ── Instruction assembly ──────────────────────────────────────────────────────
 
 def _load_base_instructions():
-    """Load the base agent instructions from the local agent JSON definition."""
+    """Load base agent instructions from the local `snmp-profile-author` JSON."""
     try:
         with open(_AGENT_JSON, 'r', encoding='utf-8') as fh:
             agent_def = json.load(fh)
@@ -87,14 +72,10 @@ def _load_base_instructions():
 
 
 def _assemble_instructions(grounded_columns):
-    """
-    Build the full ``configuration_overrides.instructions`` string.
+    """Build `configuration_overrides.instructions` from the agent JSON plus inline grounding.
 
-    Replaces the previous ``template_profile_context.md`` flat-dump approach
-    with ``inline_grounding.build_grounding(vendor)``, which sends:
-      - field-naming schema  (schema_reference/*.md)
-      - standard-MIB references  (mib_reference/*.json)
-      - vendor-filtered reference profiles  (official_profiles/*.json)
+    Sends the field-naming schema, standard-MIB references, and vendor-filtered
+    reference profiles rather than a flat `template_profile_context.md` dump.
     """
     from .inline_grounding import build_grounding
 
@@ -111,17 +92,18 @@ def _assemble_instructions(grounded_columns):
 # ── Main stream generator ─────────────────────────────────────────────────────
 
 def stream_template_generation(connection_id, kibana_url, walk_text, inference_id):
-    """
-    Generator — yields SSE-formatted strings for ``StreamingHttpResponse``.
+    """Yield SSE `data:` lines for template/profile generation.
 
-    Phases emitted:
-        grounding       — MIB-grounding in progress
-        grounding_done  — grounding succeeded
-        invoking        — about to call the agent
-        conversation_link / conversation_title / reasoning / agent_chunk /
-        tool_call / tool_done  — agent response events
-        done            — stream finished cleanly
-        error           — terminal error (stream stops after this)
+    Args:
+        connection_id: Elasticsearch/Kibana connection primary key.
+        kibana_url: Optional Kibana origin override.
+        walk_text: Raw SNMP walk output.
+        inference_id: Agent Builder inference model id.
+
+    Yields:
+        SSE strings whose JSON `phase` is one of `grounding`, `grounding_done`,
+        `invoking`, `conversation_link`, `conversation_title`, `reasoning`,
+        `agent_chunk`, `tool_call`, `tool_done`, `done`, or `error`.
     """
     from Common.ai.agent_builder import AgentBuilder
     from .snmp_grounding import reduce_and_ground

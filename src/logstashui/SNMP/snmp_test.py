@@ -2,6 +2,8 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
+"""Live SNMP GET/WALK/TABLE tests and full-walk JSON endpoints."""
+
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.conf import settings
@@ -24,6 +26,7 @@ from pysnmp.hlapi.v3arch.asyncio import (
     ContextData,
     ObjectType,
     ObjectIdentity,
+    bulk_cmd,
     get_cmd,
     next_cmd,
     usmHMACMD5AuthProtocol,
@@ -38,12 +41,16 @@ import asyncio
 
 
 def _device_poll_address(device):
-    """Return the address used by generated SNMP polling pipelines."""
+    """Return the hostname or IP used by generated SNMP polling pipelines."""
     return device.hostname or device.ip_address
 
 
 def _resolve_device_poll_address(device):
-    """Resolve a hostname locally, falling back to the stored IP when possible."""
+    """Resolve a device hostname locally, falling back to the stored IP.
+
+    Returns:
+        Tuple of `(poll_address, warning_or_None)`.
+    """
     if not device.hostname:
         return device.ip_address, None
 
@@ -66,7 +73,7 @@ def _resolve_device_poll_address(device):
 
 
 def _device_response_data(device, poll_address=None):
-    """Serialize device addressing consistently for SNMP test responses."""
+    """Serialize device addressing fields for SNMP test JSON responses."""
     return {
         'id': device.id,
         'name': device.name,
@@ -78,9 +85,7 @@ def _device_response_data(device, poll_address=None):
 
 
 def _format_snmp_value(value):
-    """
-    Format SNMP value - convert binary values to hex for MAC/IP addresses
-    """
+    """Format an SNMP value, converting binary MAC/IP payloads to hex."""
     value_str = str(value)
     
     # Count printable vs non-printable characters
@@ -111,14 +116,13 @@ def _format_snmp_value(value):
 
 
 def _load_profile_data(profile):
-    """
-    Load profile data from JSON file (for official profiles) or database (for custom profiles)
-    
+    """Load official profile JSON from disk or a custom profile from the database.
+
     Args:
-        profile: Profile object
-        
+        profile: Profile row.
+
     Returns:
-        dict: Profile data containing get, walk, and table OIDs
+        Profile dict containing get, walk, and table OID maps.
     """
     if profile.profile_data.get('is_official_placeholder'):
         profile_name = profile.name.replace('.json', '')
@@ -136,14 +140,13 @@ def _load_profile_data(profile):
 
 
 def _merge_profile_oids(profiles):
-    """
-    Merge OIDs from multiple profiles
-    
+    """Merge get/walk/table OIDs from multiple profiles.
+
     Args:
-        profiles: List of Profile objects
-        
+        profiles: Profile rows.
+
     Returns:
-        dict: Merged OIDs with structure {'get': {}, 'walk': {}, 'table': {}}
+        Dict `{'get': {}, 'walk': {}, 'table': {}}`.
     """
     merged = {
         'get': {},
@@ -165,14 +168,13 @@ def _merge_profile_oids(profiles):
 
 
 def _create_auth_data(credential):
-    """
-    Create PySNMP authentication data based on credential type
-    
+    """Build PySNMP `CommunityData` or `UsmUserData` from a credential.
+
     Args:
-        credential: Credential object
-        
+        credential: Credential row.
+
     Returns:
-        CommunityData or UsmUserData object
+        PySNMP auth object for the credential's SNMP version.
     """
     if credential.version in ['1', '2c']:
         # SNMPv1/v2c - use community string
@@ -229,7 +231,7 @@ def _create_auth_data(credential):
 
 
 async def _perform_snmp_get_async(device, credential, oids, poll_address=None):
-    """Perform SNMP GET operations (async)"""
+    """Perform SNMP GET operations asynchronously."""
     results = {}
     
     if not oids:
@@ -268,7 +270,7 @@ async def _perform_snmp_get_async(device, credential, oids, poll_address=None):
     return results
 
 def _perform_snmp_get(device, credential, oids, poll_address=None):
-    """Synchronous wrapper - runs async code in a thread"""
+    """Run async SNMP GETs on a worker thread and return the result dict."""
     import threading
     result = [None]  # Use list to allow modification in nested function
     exception = [None]
@@ -305,7 +307,7 @@ def _perform_snmp_get(device, credential, oids, poll_address=None):
 
 
 async def _perform_snmp_walk_async(device, credential, oids, poll_address=None):
-    """Perform SNMP WALK operations (async)"""
+    """Perform SNMP WALK operations asynchronously."""
     results = {}
     
     if not oids:
@@ -371,7 +373,7 @@ async def _perform_snmp_walk_async(device, credential, oids, poll_address=None):
     return results
 
 def _perform_snmp_walk(device, credential, oids, poll_address=None):
-    """Synchronous wrapper - runs async code in a thread"""
+    """Run async SNMP WALKs on a worker thread and return the result dict."""
     import threading
     result = [None]
     exception = [None]
@@ -406,7 +408,7 @@ def _perform_snmp_walk(device, credential, oids, poll_address=None):
     return result[0] if result[0] is not None else {'error': 'No response from device'}
 
 async def _perform_snmp_table_async(device, credential, tables, poll_address=None):
-    """Perform SNMP table operations (async)"""
+    """Perform SNMP table walks asynchronously."""
     results = {}
     
     if not tables:
@@ -475,7 +477,7 @@ async def _perform_snmp_table_async(device, credential, tables, poll_address=Non
     return results
 
 def _perform_snmp_table(device, credential, tables, poll_address=None):
-    """Synchronous wrapper - runs async code in a thread"""
+    """Run async SNMP table walks on a worker thread and return the result dict."""
     import threading
     result = [None]
     exception = [None]
@@ -512,15 +514,18 @@ def _perform_snmp_table(device, credential, tables, poll_address=None):
 
 @require_http_methods(["POST"])
 def RunSNMPTest(request):
-    """
-    Run SNMP test against a device using a device template
-    
-    Expected POST data:
-    {
-        "device_id": int,
-        "template_id": int (optional - if not provided, uses device's assigned template)
-    }
-    }
+    """Poll a device with a template's merged profile OIDs.
+
+    Args:
+        device_id: Device primary key.
+        template_id: Optional template PK; defaults to the device's assigned template.
+
+    Returns:
+        JSON with `success`, `results` (get/walk/table), `device`, `template`, and
+        timing/error fields.
+
+    Examples:
+        payload = {"device_id": 12, "template_id": 3}
     """
     import time
     start_time = time.time()
@@ -771,7 +776,21 @@ def RunSNMPTest(request):
 
 
 async def _perform_full_walk_async(host, port, credential, start_oid='1.3.6.1'):
-    """Perform a full SNMP walk from a starting OID (async)"""
+    """Walk the MIB tree from ``start_oid`` asynchronously.
+
+    Uses GETBULK (SNMPv2c/v3) for fast multi-OID-per-request walking, falling
+    back to GETNEXT for SNMPv1.
+
+    Args:
+        host: Device IP or hostname.
+        port: UDP port.
+        credential: Credential row used to build auth data.
+        start_oid: Root OID to walk from; defaults to ``1.3.6.1``.
+
+    Returns:
+        Dict with ``results`` (list of ``{oid, value}`` dicts) and an optional
+        ``error`` key if the walk was interrupted.
+    """
     try:
         auth_data = _create_auth_data(credential)
     except Exception as e:
@@ -785,19 +804,31 @@ async def _perform_full_walk_async(host, port, credential, start_oid='1.3.6.1'):
     snmp_engine = SnmpEngine()
     results = []
     current_oid = start_oid
-    max_iterations = 10000
     oid_prefix = start_oid + '.'
+    use_bulk = credential.version in ('2c', '3')
+    bulk_size = 25  # OIDs fetched per GETBULK request
 
-    for _ in range(max_iterations):
+    while True:
         try:
-            errorIndication, errorStatus, errorIndex, varBinds = await next_cmd(
-                snmp_engine,
-                auth_data,
-                transport,
-                ContextData(),
-                ObjectType(ObjectIdentity(current_oid)),
-                lexicographic_mode=False
-            )
+            if use_bulk:
+                errorIndication, errorStatus, errorIndex, varBinds = await bulk_cmd(
+                    snmp_engine,
+                    auth_data,
+                    transport,
+                    ContextData(),
+                    0,          # nonRepeaters
+                    bulk_size,  # maxRepetitions
+                    ObjectType(ObjectIdentity(current_oid)),
+                )
+            else:
+                errorIndication, errorStatus, errorIndex, varBinds = await next_cmd(
+                    snmp_engine,
+                    auth_data,
+                    transport,
+                    ContextData(),
+                    ObjectType(ObjectIdentity(current_oid)),
+                    lexicographic_mode=False,
+                )
         except Exception as e:
             return {'error': f'SNMP error: {str(e)}', 'results': results}
 
@@ -814,25 +845,26 @@ async def _perform_full_walk_async(host, port, credential, start_oid='1.3.6.1'):
         if not varBinds:
             break
 
-        varBind = varBinds[0]
-        next_oid_str = str(varBind[0])
+        last_oid = None
+        for varBind in varBinds:
+            oid_str = str(varBind[0])
+            if not oid_str.startswith(oid_prefix):
+                # Walked past the subtree — signal outer loop to stop
+                last_oid = None
+                break
+            results.append({'oid': oid_str, 'value': _format_snmp_value(varBind[1])})
+            last_oid = oid_str
 
-        # Stop if we've walked past the starting subtree
-        if not next_oid_str.startswith(oid_prefix):
+        if last_oid is None:
             break
 
-        results.append({
-            'oid': next_oid_str,
-            'value': _format_snmp_value(varBind[1])
-        })
-
-        current_oid = next_oid_str
+        current_oid = last_oid
 
     return {'results': results}
 
 
 def _perform_full_walk(host, port, credential, start_oid='1.3.6.1'):
-    """Synchronous wrapper for the full walk"""
+    """Run a full async SNMP walk on a worker thread (up to five minutes)."""
     import threading
     result = [None]
     exception = [None]
@@ -868,16 +900,19 @@ def _perform_full_walk(host, port, credential, start_oid='1.3.6.1'):
 
 @require_http_methods(["POST"])
 def RunSNMPWalk(request):
-    """
-    Perform a full SNMP walk against a host using a credential.
+    """Walk a host from an optional starting OID using a stored credential.
 
-    Expected POST data:
-    {
-        "host": str,           # IP address or hostname
-        "port": int,           # optional, defaults to 161
-        "credential_id": int,
-        "start_oid": str       # optional, defaults to "1.3.6.1"
-    }
+    Args:
+        host: IP address or hostname.
+        port: SNMP port; defaults to 161.
+        credential_id: Credential primary key.
+        start_oid: Walk root; defaults to ``1.3.6.1``.
+
+    Returns:
+        JSON with `success`, `results` (oid/value rows), `oid_count`, and timing.
+
+    Examples:
+        payload = {"host": "192.0.2.10", "credential_id": 4, "start_oid": "1.3.6.1.2.1.1"}
     """
     import time
     start_time = time.time()

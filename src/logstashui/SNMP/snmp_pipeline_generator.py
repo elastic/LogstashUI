@@ -2,6 +2,18 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
+"""Generate Logstash SNMP pipeline fragments (input, filter, output).
+
+Agent mode never embeds secrets: LSCL uses `${KEY}` references and LogstashUI
+provisions matching keystore entries on the agent policy. Centralized mode
+follows `credential_mode` (KEYSTORE vs PLAINTEXT).
+
+Keystore names:
+    snmp_{cred_id}_v1 / snmp_{cred_id}_v2
+    snmp_{cred_id}_v3_auth / snmp_{cred_id}_v3_priv
+    snmp_es_{conn_id}_api_key / snmp_es_{conn_id}_user / snmp_es_{conn_id}_password
+"""
+
 from django.conf import settings
 import os
 import re
@@ -39,14 +51,10 @@ _OFFICIAL_PROFILE_CACHE = {}
 
 
 def _uses_keystore(network):
-    """
-    True when credentials should be emitted as Logstash keystore references
-    (${KEY}) rather than embedded inline.
+    """Return True when credentials should be `${KEY}` references, not inline secrets.
 
-    - Agent mode: always uses the keystore (LogstashUI provisions the entries).
-    - Centralized mode: controlled by the network's credential_mode
-      ('KEYSTORE' = manage keystore manually on the Logstash node,
-       'PLAINTEXT' = embed credentials directly in the pipeline).
+    Agent mode always uses the keystore. Centralized mode uses KEYSTORE (operator
+    runs `logstash-keystore`) or PLAINTEXT (embed secrets in LSCL).
     """
     if getattr(network, 'deployment_mode', 'CENTRALIZED') == 'AGENT':
         return True
@@ -54,47 +62,51 @@ def _uses_keystore(network):
 
 
 def _community_key_name(credential):
-    """Keystore key name holding a v1/v2c community string."""
+    """Return the keystore key for a v1/v2c community string (`snmp_{id}_v1` or `_v2`)."""
     suffix = 'v1' if credential.version == '1' else 'v2'
     return f"snmp_{credential.id}_{suffix}"
 
 
 def _auth_pass_key_name(credential):
-    """Keystore key name holding a v3 auth password."""
+    """Return the keystore key for a v3 auth password (`snmp_{id}_v3_auth`)."""
     return f"snmp_{credential.id}_v3_auth"
 
 
 def _priv_pass_key_name(credential):
-    """Keystore key name holding a v3 priv password."""
+    """Return the keystore key for a v3 privacy password (`snmp_{id}_v3_priv`)."""
     return f"snmp_{credential.id}_v3_priv"
 
 
 def _es_api_key_name(connection):
-    """Keystore key name holding an ES connection API key."""
+    """Return the keystore key for an ES API key (`snmp_es_{id}_api_key`)."""
     return f"snmp_es_{connection.id}_api_key"
 
 
 def _es_user_key_name(connection):
-    """Keystore key name holding an ES connection username."""
+    """Return the keystore key for an ES username (`snmp_es_{id}_user`)."""
     return f"snmp_es_{connection.id}_user"
 
 
 def _es_password_key_name(connection):
-    """Keystore key name holding an ES connection password."""
+    """Return the keystore key for an ES password (`snmp_es_{id}_password`)."""
     return f"snmp_es_{connection.id}_password"
 
 
 def _ref(key_name):
-    """Format a keystore key name as a Logstash keystore reference."""
+    """Format a keystore key name as a Logstash `${KEY}` reference."""
     return "${" + key_name + "}"
 
 
 def snmp_credential_keystore_entries(credential):
-    """
-    Return {key_name: plaintext_value} for an SNMP credential's secrets.
+    """Return `{key_name: plaintext}` for secrets actually set on the credential.
 
-    Used by the Agent deploy path to provision keystore entries. Only includes
-    secrets that are actually set on the credential.
+    Used by Agent deploy to provision keystore rows.
+
+    Args:
+        credential: Credential row, or None.
+
+    Returns:
+        Dict of keystore names to decrypted values.
     """
     entries = {}
     if credential is None:
@@ -121,11 +133,16 @@ def snmp_credential_keystore_entries(credential):
 
 
 def es_connection_keystore_entries(connection):
-    """
-    Return {key_name: plaintext_value} for an Elasticsearch connection's secrets.
+    """Return `{key_name: plaintext}` for an ES connection's secrets.
 
-    Prefers API key auth; falls back to username/password. Used by the Agent
-    deploy path to provision keystore entries for pipeline outputs.
+    Prefers API key auth; otherwise username/password. Used by Agent deploy for
+    pipeline output credentials.
+
+    Args:
+        connection: Elasticsearch Connection row, or None.
+
+    Returns:
+        Dict of keystore names to decrypted values.
     """
     entries = {}
     if connection is None:
@@ -144,14 +161,10 @@ def es_connection_keystore_entries(connection):
 
 
 def snmp_credential_keystore_key_names(credential):
-    """
-    Return the set of keystore key names an SNMP credential's secrets would
-    produce, WITHOUT decrypting anything.
+    """Return keystore key names for a credential without decrypting secrets.
 
-    Names are derived purely from credential id/version/security_level, and
-    presence is tested against the (encrypted) columns being non-empty. This
-    mirrors snmp_credential_keystore_entries() so callers that only need names
-    (e.g. per-check-in scoping) never have to decrypt secrets.
+    Names come from id/version/security_level and non-empty encrypted columns.
+    Mirrors `snmp_credential_keystore_entries` for check-in scoping.
     """
     names = set()
     if credential is None:
@@ -169,10 +182,9 @@ def snmp_credential_keystore_key_names(credential):
 
 
 def es_connection_keystore_key_names(connection):
-    """
-    Return the set of keystore key names an Elasticsearch connection's secrets
-    would produce, WITHOUT decrypting anything. Mirrors the presence logic of
-    es_connection_keystore_entries() using the encrypted columns directly.
+    """Return ES keystore key names without decrypting.
+
+    Mirrors `es_connection_keystore_entries` using encrypted columns directly.
     """
     names = set()
     if connection is None:
@@ -187,23 +199,16 @@ def es_connection_keystore_key_names(connection):
 
 
 def _normalize_template_name(name: str) -> str:
-    """
-    Normalize a device template name so it is safe to use as an Elasticsearch
-    index name component (e.g. a data stream namespace).
+    """Make a template name safe as an Elasticsearch index/namespace component.
 
-    Rules applied in order:
-      1. Strip surrounding whitespace.
-      2. Lowercase.
-      3. Replace any run of whitespace with a single underscore.
-      4. Replace characters that are illegal in ES index names
-         (*, :, /, \\, ?, ", <, >, |, ,, #, space) with underscores.
-      5. Collapse consecutive underscores/hyphens into one underscore.
-      6. Strip any leading characters that ES forbids at position 0: -, _, +, .
-      7. Truncate to 255 bytes (UTF-8).
-      8. Fall back to 'unknown_template' if the result is empty.
+    Strips, lowercases, replaces illegal punctuation, collapses separators, drops
+    leading `-_+.`, truncates to 255 bytes, and falls back to `unknown_template`.
+
+    Args:
+        name: Raw device template name.
 
     Returns:
-        A normalized string safe for use as an ES index name / namespace.
+        Normalized slug safe for an ES index name or data-stream namespace.
     """
     if not name:
         return "unknown_template"
@@ -226,15 +231,13 @@ def _normalize_template_name(name: str) -> str:
 
 
 def _deduplicate_normalizers(normalizers):
-    """
-    Remove duplicate normalizers based on their content.
-    Two normalizers are considered duplicates if they have the same operation, target, and params.
-    
+    """Drop normalizers that share operation, target, and params.
+
     Args:
-        normalizers: List of normalizer configurations
-        
+        normalizers: Normalizer config dicts.
+
     Returns:
-        List of unique normalizers
+        List of unique normalizers.
     """
     if not normalizers:
         return []
@@ -256,22 +259,18 @@ def _deduplicate_normalizers(normalizers):
     return unique
 
 def _generate_input(input_data, profile_cache=None, template_filter=None):
-    """
-    Generate SNMP input components grouped by:
-    1. Device template (all devices with same template in one input)
-    2. Credential (devices with different credentials need separate inputs)
+    """Build SNMP input plugins grouped by device template then credential.
 
-    Each input is enriched with ECS fields from the device template:
-    - [host][type] from template.type
-    - [observer][vendor] from template.vendor
-    - [observer][os][full] from template.product-template.model
+    Each input is enriched with ECS fields from the template (`host.type`,
+    `observer.vendor`, `observer.os.full`).
 
     Args:
-        input_data: Dict containing network and device information
-        profile_cache: Optional dict to cache loaded profile data
-        template_filter: Optional device template ID to filter devices by
+        input_data: Dict with network and devices (`v1_v2c` / `v3` maps).
+        profile_cache: Optional cache of loaded profile data.
+        template_filter: Optional device template ID to include.
 
-    Returns: (input_components, oid_mappings, all_normalizers)
+    Returns:
+        Tuple `(input_components, oid_mappings, all_normalizers)`.
     """
     input_components = []
     network_id = input_data['network'].id
@@ -572,16 +571,15 @@ def _generate_input(input_data, profile_cache=None, template_filter=None):
 
 
 def _generate_discovery_input(network):
-    """
-    Generate SNMP input components for network discovery.
-    Uses the System profile OIDs and scans all IPs in the network range
-    (excluding existing devices).
+    """Build SNMP inputs that scan the network range using System profile OIDs.
+
+    Existing device addresses are excluded from the scan list.
 
     Args:
-        network: Network object
+        network: Network row.
 
     Returns:
-        Tuple of (input_components, oid_mappings)
+        Tuple `(input_components, oid_mappings)`.
     """
     input_components = []
 
@@ -668,16 +666,14 @@ def _generate_discovery_input(network):
 
 
 def _generate_discovery_filters(oid_mappings, network):
-    """
-    Generate filter components for discovery pipeline.
-    Adds event.category: discovery field to distinguish from regular metrics.
+    """Build discovery-pipeline filters, tagging `event.category` as discovery.
 
     Args:
-        oid_mappings: Dictionary with 'get', 'walk', 'table' keys containing OID key-value pairs
-        network: Network object for accessing network name
+        oid_mappings: Dict with `get`, `walk`, and `table` OID maps.
+        network: Network row (name used in filters).
 
     Returns:
-        List of filter components
+        List of filter component dicts.
     """
     # Build rename mappings for get OIDs
     get_renames = {value: _format_field_name(key) for key, value in oid_mappings['get'].items()}
@@ -731,30 +727,17 @@ def _generate_discovery_filters(oid_mappings, network):
 
 
 def _generate_device_enrichment_filters(input_data):
-    """
-    Generate filter blocks that enrich each polled event with per-device
-    name, location, and metadata stored on the Device model.
+    """Enrich poll events with per-device name, location, and metadata.
 
-    A single translate block maps [host][polled_address] to
-    [@metadata][device_enrichment], whose dictionary value is a hash with
-    up to three sub-keys:
-      - name:     the device's display name (always present when device has a name)
-      - location: {site, building, room, geo} (omitted when no location data)
-      - metadata: user-supplied KV pairs     (omitted when device.metadata is empty)
-
-    A ruby filter then scatters the sub-keys to their final destinations
-    ([host][name], [host][location], [host][metadata]) only when they are
-    present, so no existing [host] fields are clobbered.
-
-    The polling address key matches what the SNMP input plugin exposes via
-    %{[@metadata][host_address]} — the hostname if one is set, otherwise the IP.
+    A translate maps `[host][polled_address]` to `[@metadata][device_enrichment]`;
+    a ruby filter copies present sub-keys to `[host][name]`, `[host][location]`,
+    and `[host][metadata]`. The poll key matches `%{[@metadata][host_address]}`.
 
     Args:
-        input_data: Dict containing 'devices' with 'v1_v2c' and 'v3' sub-dicts
-                    of {device_name: Device} mappings.
+        input_data: Dict whose `devices` maps hold Device rows.
 
     Returns:
-        List of filter component dicts (may be empty).
+        List of filter component dicts (possibly empty).
     """
     # Merge v1/v2c and v3 into a single address → device map.
     # Use hostname-first to match what the SNMP input's host field uses.
@@ -839,18 +822,16 @@ def _generate_device_enrichment_filters(input_data):
 
 
 def _generate_filters(oid_mappings, network, normalizers=None, input_data=None):
-    """
-    Generate filter components based on OID mappings from profiles.
+    """Build poll-pipeline filters from profile OID mappings and normalizers.
 
     Args:
-        oid_mappings: Dictionary with 'get', 'walk', 'table' keys containing OID key-value pairs
-        network: Network object for accessing network name and other properties
-        normalizers: List of normalizer configurations from profiles
-        input_data: Optional input_data dict; when provided, per-device location and
-                    metadata translate blocks are appended to the filter list.
+        oid_mappings: Dict with `get`, `walk`, and `table` OID maps.
+        network: Network row.
+        normalizers: Normalizer configs from the device's profiles.
+        input_data: Optional devices dict; when set, enrichment filters are appended.
 
     Returns:
-        List of filter components
+        List of filter component dicts.
     """
     # Build rename mappings for get OIDs
     get_renames = {value: _format_field_name(key) for key, value in oid_mappings['get'].items()}
@@ -958,18 +939,17 @@ def _generate_filters(oid_mappings, network, normalizers=None, input_data=None):
 
 
 def _generate_output(network_db_object, snmp_type="polling", device_template=None):
-    """
-    Generate Elasticsearch output configuration with data stream settings.
+    """Build the Elasticsearch output with data-stream settings.
 
     Args:
-        network_db_object: Network model instance
-        snmp_type: Type of SNMP operation - "discovery", "traps", or "polling" (default)
-        device_template: Optional DeviceTemplate instance. When provided and
-            network_db_object.namespace_from_device_template is True, the
-            normalized template name is used as the data stream namespace.
+        network_db_object: Network row.
+        snmp_type: ``discovery``, ``traps``, or ``polling``.
+        device_template: Optional template. When
+            `namespace_from_device_template` is True, the normalized template name
+            becomes the data-stream namespace.
 
     Returns:
-        List of output components
+        List of output component dicts.
     """
     output_components = []
 
@@ -1042,13 +1022,14 @@ def _generate_output(network_db_object, snmp_type="polling", device_template=Non
 
 
 def _get_device_profiles(device, profile_cache=None):
-    """
-    Get all profiles for a device and return merged OID data and normalizers.
-    Returns a tuple: (profile_ids_tuple, merged_oids_dict, normalizers_list)
+    """Load and merge a device's template profiles.
 
     Args:
-        device: Device object with prefetched device_template and its profiles
-        profile_cache: Optional dict to cache loaded profile data
+        device: Device with prefetched `device_template.profiles`.
+        profile_cache: Optional cache of loaded profile JSON.
+
+    Returns:
+        Tuple `(profile_ids_tuple, merged_oids_dict, normalizers_list)`.
     """
 
     if profile_cache is None:
@@ -1148,9 +1129,10 @@ def _get_device_profiles(device, profile_cache=None):
 
 
 def _load_system_profile_oids():
-    """
-    Load the System profile OIDs for discovery.
-    Returns a dictionary with 'get', 'walk', 'table' keys.
+    """Load System profile OIDs used by discovery.
+
+    Returns:
+        Dict with `get`, `walk`, and `table` keys.
     """
     system_profile_path = os.path.join(settings.BASE_DIR, 'SNMP', 'data', 'official_profiles', 'generic_system.json')
 
@@ -1168,14 +1150,13 @@ def _load_system_profile_oids():
 
 
 def _get_discovery_ip_addresses(network):
-    """
-    Get all IP addresses in the network range, excluding existing devices.
+    """List IPs in the network CIDR, excluding addresses already assigned to devices.
 
     Args:
-        network: Network object with network_range field
+        network: Network row with `network_range`.
 
     Returns:
-        List of IP addresses (as strings) to scan for discovery
+        List of IP strings to scan.
     """
     try:
         # Parse the network range
@@ -1208,19 +1189,16 @@ def _get_discovery_ip_addresses(network):
 
 
 def _format_field_name(field_name):
-    """
-    Format field name for Logstash filter usage.
+    """Convert dotted field names to Logstash bracket notation.
 
-    Rules:
-    - If starts with [ and ends with ], leave it alone
-    - If doesn't start with [ and has a dot, convert to bracket notation: system.cpu -> [system][cpu]
-    - Otherwise, leave it alone
+    Names already wrapped in `[...]` are left unchanged. `system.cpu` becomes
+    `[system][cpu]`.
 
     Args:
-        field_name: The field name to format
+        field_name: Raw field name.
 
     Returns:
-        Formatted field name
+        Field name suitable for Logstash filter config.
     """
     # Already in bracket notation
     if field_name.startswith('[') and field_name.endswith(']'):
@@ -1236,13 +1214,13 @@ def _format_field_name(field_name):
 
 
 def _ruby_table_nested_entry(table_name, value_expr):
-    """
-    Generate a Ruby hash key-value entry for a (possibly dot-separated) table name.
-    Dot-separated names produce nested Ruby hashes.
+    """Return a Ruby hash entry for a possibly dotted table name.
 
     Examples:
-        "ifTable",      "row" -> '"ifTable" => row'
-        "component.fan","row" -> '"component" => { "fan" => row }'
+        _ruby_table_nested_entry("ifTable", "row")
+        # '"ifTable" => row'
+        _ruby_table_nested_entry("component.fan", "row")
+        # '"component" => { "fan" => row }'
     """
     parts = table_name.split('.')
 
@@ -1255,18 +1233,16 @@ def _ruby_table_nested_entry(table_name, value_expr):
 
 
 def _ruby_row_rename_statements(columns):
-    """
-    Generate Ruby statements that rename OID keys to column names inside a row Hash.
-    Dot-separated column names are expanded into nested hashes.
+    """Emit Ruby that renames OID keys to column names, expanding dotted paths.
 
-    Each parent path is initialized with ||= {} only once, regardless of how many
-    columns share that parent.
+    Parent hashes are initialized with `||= {}` once even when many columns share
+    a parent.
 
     Args:
-        columns: Dict of {column_name: oid}
+        columns: Mapping of column name → OID.
 
     Returns:
-        Multi-line string of 4-space-indented Ruby statements
+        4-space-indented Ruby statements.
     """
     statements = []
     initialized_paths = set()
@@ -1287,9 +1263,10 @@ def _ruby_row_rename_statements(columns):
 
 
 def _ruby_row_value_expr(table_name, field):
-    """Ruby expression that reads a (possibly nested) column from a renamed row.
+    """Return a Ruby expression that reads a (possibly nested) renamed row column.
 
-    ``table_name='component.cpu', field='component.cpu.load_pct'`` → ``row["load_pct"]``
+    `table_name='component.cpu'` and `field='component.cpu.load_pct'` yield
+    `row["load_pct"]`.
     """
     prefix = table_name + '.'
     col_path = field[len(prefix):] if field.startswith(prefix) else field
@@ -1307,15 +1284,14 @@ _KEEP_WHEN_VALUE_RE = re.compile(r'^[0-9A-Za-z._-]+$')
 
 
 def _ruby_keep_when_statements(table_data):
-    """Ruby that keeps only table rows whose discriminator column matches.
+    """Emit Ruby that keeps table rows whose discriminator column matches.
 
-    ENTITY-SENSOR-MIB (and similar) mix sensor kinds in one table. Cisco-schema
-    profiles split those rows onto ``component.fan`` vs ``component.sensor`` by
-    ``entPhySensorType`` (10=rpm, 8=celsius). The discriminator column is polled
-    so the filter can run, then removed so emitted docs match the target schema.
+    ENTITY-SENSOR-MIB mixes sensor kinds; Cisco-schema profiles split rows onto
+    `component.fan` vs `component.sensor` by `entPhySensorType`. The discriminator
+    is polled then dropped. Invalid tokens are ignored so profile JSON cannot
+    inject Ruby.
 
-    ``table_data['keep_when']`` shape: ``{"column": "type", "equals": ["10"]}``.
-    Invalid column/value tokens are ignored so profile JSON cannot inject Ruby.
+    `table_data['keep_when']` shape: `{"column": "type", "equals": ["10"]}`.
     """
     if not isinstance(table_data, dict):
         return ''
@@ -1341,31 +1317,19 @@ def _ruby_keep_when_statements(table_data):
 
 
 def _generate_table_split_filters(oid_mappings, average_normalizers=None):
-    """
-    Generate Ruby filter components that split SNMP table data into per-row events.
+    """Emit Ruby filters that split SNMP tables into per-row events.
 
-    For each table in oid_mappings, emits a ruby filter that iterates over the
-    array of row hashes produced by the SNMP input plugin, renames OID keys to
-    their human-readable column names (expanding dotted names into nested hashes),
-    creates a new LogStash::Event per row carrying the original event metadata,
-    and removes the raw table field from the original event.
-
-    Optional ``keep_when`` on a table keeps only rows whose discriminator column
-    matches (then drops that column from the emitted row).
-
-    If average_normalizers are provided, their accumulation logic is injected
-    directly into each table's Ruby block. Accumulators are declared before the
-    loop, values are collected inside the loop (after column rename), and the
-    computed average is written to the original event (the metrics doc) after the
-    loop and after the raw table array is removed.
+    Each table becomes a ruby filter that renames OID keys, optionally applies
+    `keep_when`, clones a LogStash::Event per row, and removes the raw table from
+    the original event. Average normalizers accumulate inside that loop and write
+    scalars onto the metrics doc after the table array is removed.
 
     Args:
-        oid_mappings: Dictionary with 'get', 'walk', 'table' keys containing OID
-                      key-value pairs (only 'table' is used here)
-        average_normalizers: Optional list of average normalizer configs from profiles
+        oid_mappings: OID maps; only `table` is used.
+        average_normalizers: Optional average normalizer configs.
 
     Returns:
-        List of ruby filter component dicts, one per table that has columns defined
+        List of ruby filter dicts, one per table with columns.
     """
     special_filters = []
     average_normalizers = average_normalizers or []
@@ -1471,18 +1435,13 @@ def _generate_table_split_filters(oid_mappings, average_normalizers=None):
 
 
 def _ruby_avg_pre_loop(table_averages):
-    """
-    Generate Ruby variable declarations for average accumulators, placed before
-    the row iteration loop inside a table-split Ruby block.
-
-    Each average normalizer gets a unique sum and count variable derived from
-    a sanitized version of the output field name.
+    """Declare Ruby sum/count locals for average normalizers before the row loop.
 
     Args:
-        table_averages: List of average normalizer configs targeting this table
+        table_averages: Average normalizer configs for this table.
 
     Returns:
-        Indented Ruby string, or empty string if no averages
+        Indented Ruby, or empty string when there are no averages.
     """
     if not table_averages:
         return ""
@@ -1495,24 +1454,17 @@ def _ruby_avg_pre_loop(table_averages):
 
 
 def _ruby_avg_in_loop(table_averages, table_name):
-    """
-    Generate Ruby accumulation statements to be injected inside the row loop,
-    after rename_statements have run so column friendly names are available.
+    """Accumulate average inputs inside the row loop after column rename.
 
-    The column path within the row hash is derived by stripping the full
-    table_name prefix from the target field. table_name is passed explicitly
-    from _generate_table_split_filters so dotted names (e.g. "component.cpu")
-    are handled correctly regardless of whether the normalizer stores target.table.
-
-    e.g. table_name="component.cpu", field="component.cpu.load_pct" → row["load_pct"]
-    e.g. table_name="interface",     field="interface.in_octets"     → row["in_octets"]
+    The column path is `target.field` with the `table_name` prefix stripped, so
+    dotted tables such as `component.cpu` resolve to `row["load_pct"]`.
 
     Args:
-        table_averages: List of average normalizer configs targeting this table
-        table_name: The table name string from oid_mappings (may contain dots)
+        table_averages: Average normalizer configs for this table.
+        table_name: Table key from `oid_mappings` (may contain dots).
 
     Returns:
-        Indented Ruby string, or empty string if no averages
+        Indented Ruby, or empty string when there are no averages.
     """
     if not table_averages:
         return ""
@@ -1536,16 +1488,13 @@ def _ruby_avg_in_loop(table_averages, table_name):
 
 
 def _ruby_avg_post_loop(table_averages):
-    """
-    Generate Ruby event.set calls that write computed averages to the original
-    event (the metrics doc). These run after event.remove() clears the raw table
-    array, so the namespace is free for scalar fields.
+    """Write computed averages onto the original event after the table is removed.
 
     Args:
-        table_averages: List of average normalizer configs targeting this table
+        table_averages: Average normalizer configs for this table.
 
     Returns:
-        Indented Ruby string, or empty string if no averages
+        Indented Ruby, or empty string when there are no averages.
     """
     if not table_averages:
         return ""
@@ -1566,16 +1515,9 @@ def _ruby_avg_post_loop(table_averages):
 
 
 def _avg_var_name(normalizer):
-    """
-    Derive a safe Ruby variable name prefix from the normalizer's output field.
+    """Build a safe Ruby local prefix from the normalizer output field.
 
-    e.g. "interface.avg_in_octets" → "avg_interface_avg_in_octets"
-
-    Args:
-        normalizer: Average normalizer config dict
-
-    Returns:
-        String safe for use as a Ruby local variable prefix
+    `interface.avg_in_octets` becomes `avg_interface_avg_in_octets`.
     """
     output_field = normalizer.get('params', {}).get('output_field', '').strip()
     if output_field:
@@ -1587,24 +1529,15 @@ def _avg_var_name(normalizer):
 
 
 def _generate_snmp_error_cleanup_filter():
-    """
-    Generate a Ruby filter component that strips SNMP error response strings from
-    all event fields before OID renaming or normalization.
+    """Strip SNMP error strings so they never reach typed Elasticsearch fields.
 
-    The SNMP input plugin emits string values like "error: no such instance currently
-    exists at this OID" when a device does not support a polled OID. If these strings
-    reach Elasticsearch they cause document_parsing_exception errors because the mapped
-    field type (e.g. long, float) does not accept strings.
-
-    The helper method is defined in 'init' (runs once at pipeline start) to avoid Ruby
-    method-redefinition warnings that would occur if 'def' appeared in the per-event
-    'code' block.
-
-    The event is tagged with '_snmp_oid_error' when at least one field was removed so
-    operators can identify partially-incomplete poll responses.
+    The input plugin emits values like ``error: no such instance currently exists
+    at this OID``. Those strings would fail mapping (long/float). The helper is
+    defined in `init` to avoid per-event method-redefinition warnings. Events that
+    lost a field are tagged `_snmp_oid_error`.
 
     Returns:
-        Logstash filter component dict
+        Logstash ruby filter component dict.
     """
     ruby_init = (
         "def snmp_remove_errors(obj)\n"

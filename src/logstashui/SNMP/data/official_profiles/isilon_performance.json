@@ -1,0 +1,92 @@
+{
+  "official_key": "isilon_performance",
+  "name": "isilon_performance",
+  "description": "Cluster-level and per-node I/O performance for Dell EMC Isilon OneFS: disk read/write bytes and ops, network bytes in/out, CPU busy/idle/system/user ticks, and per-node CPU utilization table. Uses ISILON-MIB (1.3.6.1.4.1.12124).",
+  "vendor": "Dell EMC",
+  "product": "Isilon OneFS",
+  "model": "Any",
+  "get": {
+    "storage.disk.read.bytes":         "1.3.6.1.4.1.12124.2.1.1.0",
+    "storage.disk.write.bytes":        "1.3.6.1.4.1.12124.2.1.2.0",
+    "storage.disk.read.ops":           "1.3.6.1.4.1.12124.2.1.3.0",
+    "storage.disk.write.ops":          "1.3.6.1.4.1.12124.2.1.4.0",
+
+    "network.bytes.in":                "1.3.6.1.4.1.12124.2.2.1.1.0",
+    "network.bytes.out":               "1.3.6.1.4.1.12124.2.2.1.2.0",
+    "network.packets.in":              "1.3.6.1.4.1.12124.2.2.1.3.0",
+    "network.packets.out":             "1.3.6.1.4.1.12124.2.2.1.4.0",
+
+    "system.cpu.busy_ticks":           "1.3.6.1.4.1.12124.2.2.2.1.0",
+    "system.cpu.idle_ticks":           "1.3.6.1.4.1.12124.2.2.2.2.0",
+    "system.cpu.system_ticks":         "1.3.6.1.4.1.12124.2.2.2.3.0",
+    "system.cpu.user_ticks":           "1.3.6.1.4.1.12124.2.2.2.4.0"
+  },
+  "walk": {},
+  "table": {
+    "component.node.cpu": {
+      "columns": {
+        "index":                        "1.3.6.1.4.1.12124.2.2.3.10.1.1",
+        "cpu_user_pct":                 "1.3.6.1.4.1.12124.2.2.3.10.1.2",
+        "cpu_sys_pct":                  "1.3.6.1.4.1.12124.2.2.3.10.1.3",
+        "cpu_idle_pct":                 "1.3.6.1.4.1.12124.2.2.3.10.1.4",
+        "cpu_intr_pct":                 "1.3.6.1.4.1.12124.2.2.3.10.1.5"
+      }
+    },
+    "component.node.disk": {
+      "columns": {
+        "index":                        "1.3.6.1.4.1.12124.2.2.3.1.1",
+        "read_bytes":                   "1.3.6.1.4.1.12124.2.2.3.2.1",
+        "write_bytes":                  "1.3.6.1.4.1.12124.2.2.3.3.1",
+        "read_ops":                     "1.3.6.1.4.1.12124.2.2.3.4.1",
+        "write_ops":                    "1.3.6.1.4.1.12124.2.2.3.5.1"
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "ratio",
+      "target": {
+        "scope": "get"
+      },
+      "params": {
+        "value1_field": "system.cpu.busy_ticks",
+        "value2_field": "system.cpu.idle_ticks",
+        "total_output_field": "system.cpu.total_ticks",
+        "ratio1_output_field": "system.cpu.total.norm.pct"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "component.node.cpu",
+        "field": "component.node.cpu.cpu_user_pct"
+      },
+      "params": {
+        "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "component.node.cpu",
+        "field": "component.node.cpu.cpu_sys_pct"
+      },
+      "params": {
+        "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "component.node.cpu",
+        "field": "component.node.cpu.cpu_idle_pct"
+      },
+      "params": {
+        "multiply_value": 0.01
+      }
+    }
+  ]
+}

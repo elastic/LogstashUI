@@ -2,13 +2,15 @@
   "official_key": "epson_printer",
   "name": "epson_printer",
   "type": "Printer",
-  "description": "System identity and interface counters for Epson network printers.",
+  "description": "System identity, interface counters, memory, ink/supply levels, page count, paper trays, cover status, and active alerts for Epson network printers.",
   "vendor": "Epson",
   "product": "Any",
   "model": "Any",
   "profiles": [
     "generic_interfaces",
-    "generic_system"
+    "generic_system",
+    "generic_printer_mib",
+    "generic_host_system_metrics"
   ],
   "matching_rules": [
     "EPSON"

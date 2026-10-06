@@ -2,6 +2,13 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
+"""Read-only Logstash metrics, logs, and health from Elasticsearch.
+
+Queries CENTRALIZED connections only. Agent rows have no Elasticsearch
+endpoint. Metrics come from ``metrics-logstash.*`` data streams; logs
+from ``logs-logstash.log-*``.
+"""
+
 from django.shortcuts import render
 from django.http import JsonResponse
 from PipelineManager.models import Connection as ConnectionTable
@@ -23,7 +30,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 def Monitoring(request):
-    """Monitoring page showing Logstash metrics and health"""
+    """Render the monitoring page with CENTRALIZED connections and index status."""
     # Only query CENTRALIZED connections (non-agent) since we're querying Elasticsearch instances
     connections = list(ConnectionTable.objects.filter(
         connection_type=ConnectionTable.ConnectionType.CENTRALIZED
@@ -48,6 +55,15 @@ def Monitoring(request):
 
 
 def check_for_monitoring_indices(es_connections):
+    """Report which required Logstash monitoring data streams exist per cluster.
+
+    Args:
+        es_connections: List of dicts from ``get_elastic_connections_from_list``.
+
+    Returns:
+        Mapping of connection name to ``has_all``, ``has_none``, and
+        ``missing`` stream names.
+    """
     monitoring_indices = {}
 
     required_data_streams = [
@@ -107,6 +123,17 @@ def check_for_monitoring_indices(es_connections):
 
 
 def get_logs(es, logstash_node="", pipeline_name=""):
+    """Fetch the newest 1000 Logstash log hits, optionally filtered.
+
+    Args:
+        es: Elasticsearch client.
+        logstash_node: Filter on ``host.hostname``.
+        pipeline_name: Filter on ``logstash.log.pipeline_id``.
+
+    Returns:
+        A list of ``_source`` dicts with ``log.level``, ``message``, and
+        ``@timestamp``.
+    """
     if not logstash_node and not pipeline_name:
         query = {
             "match_all": {}
@@ -150,12 +177,17 @@ def get_logs(es, logstash_node="", pipeline_name=""):
 
 
 def get_node_metrics(es_connections, connection_name="", logstash_host="", pipeline=""):
-    """
-    Get node-level metrics for Logstash instances.
-    Query parameters:
-    - connection: Filter by connection ID (optional)
-    - host: Filter by host name (optional)
-    - pipeline: Filter by pipeline name (optional)
+    """Aggregate node-level Logstash metrics from the last two hours.
+
+    Args:
+        es_connections: List of dicts from ``get_elastic_connections_from_list``.
+        connection_name: Restrict to this connection's display name.
+        logstash_host: Restrict to this ``host.hostname``.
+        pipeline: Unused; kept for call-site symmetry with pipeline metrics.
+
+    Returns:
+        Dict of node names, per-node buckets, and summed reload, event,
+        CPU, and heap stats.
     """
     logger.info(
         f"get_node_metrics called with: connection_name='{connection_name}', logstash_host='{logstash_host}', pipeline='{pipeline}'")
@@ -277,6 +309,18 @@ def get_node_metrics(es_connections, connection_name="", logstash_host="", pipel
 
 
 def get_pipeline_metrics(es_connections, connection_name="", logstash_host="", pipeline=""):
+    """Aggregate pipeline-level metrics from the last two hours.
+
+    Args:
+        es_connections: List of dicts from ``get_elastic_connections_from_list``.
+        connection_name: Restrict to this connection's display name.
+        logstash_host: Restrict to ``logstash.pipeline.host.name``.
+        pipeline: Unused; kept for call-site symmetry with node metrics.
+
+    Returns:
+        Dict of hosts, pipeline names, per-pipeline buckets, and summed
+        reload, event, and duration stats.
+    """
     logger.info(
         f"Getting pipeline metrics for connection_name='{connection_name}', logstash_host='{logstash_host}', pipeline='{pipeline}'")
     aggs = {
@@ -422,6 +466,15 @@ def get_pipeline_metrics(es_connections, connection_name="", logstash_host="", p
 
 
 def get_pipeline_health_report(es, pipeline_name=""):
+    """Return the latest health-report document for one pipeline.
+
+    Args:
+        es: Elasticsearch client.
+        pipeline_name: ``logstash.pipeline.id`` to match.
+
+    Returns:
+        The hit ``_source``, or an empty dict when nothing matches.
+    """
     index = "metrics-logstash.health_report-*"
     query = {
         "bool": {
@@ -447,6 +500,11 @@ def get_pipeline_health_report(es, pipeline_name=""):
 
 
 def GetNodeMetrics(request):
+    """Render node metric cards as HTML.
+
+    Query params: ``connection``, ``host``, ``pipeline``. Sets
+    ``X-Available-Hosts`` to a JSON list of node names for the dropdown.
+    """
     connection_name = request.GET.get("connection", "")
     logstash_host = request.GET.get("host", "")
     pipeline = request.GET.get("pipeline", "")
@@ -518,6 +576,19 @@ def GetNodeMetrics(request):
 
 
 def GetPipelineHealthReport(request):
+    """Return the latest pipeline health-report document as JSON.
+
+    Query params: ``connection_id``, ``pipeline``.
+
+    Returns:
+        JsonResponse of the Elasticsearch ``_source``, or
+        ``{"error": ...}`` with status 500 on failure.
+
+    Examples:
+        GET /Monitoring/GetPipelineHealthReport?connection_id=1&pipeline=main
+
+        {"logstash": {"pipeline": {"id": "main"}}, "@timestamp": "..."}
+    """
     connection_id = request.GET.get("connection_id", "")
     pipeline = request.GET.get("pipeline", "")
 
@@ -532,6 +603,10 @@ def GetPipelineHealthReport(request):
 
 
 def GetPipelineMetrics(request):
+    """Render pipeline metric rows as HTML.
+
+    Query params: ``connection``, ``host``, ``pipeline``.
+    """
     connection_name = request.GET.get("connection", "")
     logstash_host = request.GET.get("host", "")
     pipeline = request.GET.get("pipeline", "")
@@ -618,6 +693,20 @@ def GetPipelineMetrics(request):
 
 
 def GetLogs(request):
+    """Return recent Logstash logs for a connection as a JSON array.
+
+    Query params: ``connection_id`` (required), ``logstash_node``,
+    ``pipeline_name``.
+
+    Returns:
+        JsonResponse list of ``_source`` dicts, or an error object with
+        status 400/500.
+
+    Examples:
+        GET /Monitoring/GetLogs?connection_id=1&logstash_node=ls-01
+
+        [{"log.level": "INFO", "message": "...", "@timestamp": "..."}]
+    """
     logstash_node = request.GET.get("logstash_node", "")
     pipeline_name = request.GET.get("pipeline_name", "")
     connection_id = request.GET.get("connection_id", "")

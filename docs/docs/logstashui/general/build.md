@@ -103,8 +103,8 @@ cd src/logstashui/theme/static_src
 npm install && npm run build
 cd ../../../..
 uv build
-# dist/logstashui-0.5.2.tar.gz
-# dist/logstashui-0.5.2-py3-none-any.whl
+# dist/logstashui-0.5.3.tar.gz
+# dist/logstashui-0.5.3-py3-none-any.whl
 ```
 
 The wheel includes systemd templates (`LogstashUI/packaging/`) and the `logstashui` console script.

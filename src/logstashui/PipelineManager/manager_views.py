@@ -2,8 +2,11 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
+"""HTTP views for the connections page, inspect flyout, and status SSE."""
+
 from django.shortcuts import render
 from django.http import HttpResponse, StreamingHttpResponse
+from django.db import connections as db_connections
 
 from django.conf import settings
 
@@ -27,13 +30,15 @@ logger = logging.getLogger(__name__)
 
 
 def _logstash_yml_cpm_enabled(yml):
-    """
-    Determine whether a logstash.yml enables Centralized Pipeline Management
-    (xpack.management.enabled: true).
+    """True when ``logstash.yml`` enables Centralized Pipeline Management.
 
-    Logstash accepts both flat dotted keys and nested YAML for this setting, so
-    we parse the YAML and flatten it to dotted keys before checking. Falls back
-    to a whitespace-tolerant string match if the YAML can't be parsed.
+    Logstash accepts both flat dotted keys and nested YAML for
+    ``xpack.management.enabled``, so YAML is parsed and flattened to dotted
+    keys. Falls back to a whitespace-tolerant string match if the YAML
+    cannot be parsed.
+
+    Args:
+        yml: Policy ``logstash_yml`` text.
     """
     if not yml:
         return False
@@ -65,169 +70,57 @@ def _logstash_yml_cpm_enabled(yml):
 
 @require_admin_role
 def AgentPolicies(request):
-    """
-    View for managing Logstash Agent Policies
-    """
+    """Render the Agent Policies management page."""
     context = {}
     return render(request, "components/pipeline_manager/agent_policies.html", context=context)
 
 
 def PipelineManager(request):
-    """Builds the table of pipelines"""
-    context = {}
-    # Refresh sticky embedded row (probe + last_check_in) in the background.
-    # The probe is a blocking HTTP call; a daemon thread means the page renders
-    # immediately and the SSE stream picks up the result shortly after.
-    try:
-        from PipelineManager.agent_modes import refresh_embedded_connection_async
+    """Render the connections page shell.
 
+    The connection rows are loaded asynchronously by ``connections_table.js``
+    via :func:`~PipelineManager.connections_crud.GetConnectionsTable`.
+    This view only needs to know whether *any* connections exist so it can
+    choose between the empty-state and the table shell.
+    """
+    # Refresh sticky embedded row in the background (probe is blocking; daemon
+    # thread keeps page render fast and SSE picks up result shortly after).
+    try:
+        from PipelineManager.agent_modes import (
+            is_embedded_connection,
+            refresh_embedded_connection_async,
+        )
         refresh_embedded_connection_async()
     except Exception:
         pass
 
-    from PipelineManager.agent_modes import is_embedded_connection
-    from PipelineManager.agent_versions import (
-        agent_version_relation,
-        resolve_running_logstash_version,
-    )
+    try:
+        from PipelineManager.agent_modes import is_embedded_connection
 
-    connections = [
-        conn
-        for conn in ConnectionTable.objects.values(
-            "connection_type", "name", "host", "cloud_id", "cloud_url", "pk",
-            "policy__name", "policy_id", "policy__policy_type", "agent_id",
-            "last_check_in", "status_blob", "desired_agent_version",
-            "logstash_version_resolved",
+        has_connections = any(
+            not is_embedded_connection(c)
+            for c in ConnectionTable.objects.values(
+                'connection_type', 'agent_id', 'policy__policy_type'
+            )
         )
-        if not is_embedded_connection(conn)
-    ]
-    
-    # Add is_online flag based on last_check_in time (within 10 minutes)
-    now = datetime.now(timezone.utc)
-    for conn in connections:
-        if conn['last_check_in']:
-            time_diff = now - conn['last_check_in']
-            conn['is_online'] = time_diff.total_seconds() < 600  # 10 minutes = 600 seconds
-        else:
-            conn['is_online'] = False
-        # Adopt the authoritative health-report status when the node-info root
-        # reports "unknown" (keeps the page-load fallback inspect card in sync
-        # with the live AgentInspect endpoint).
-        _normalize_status_blob_api_status(conn.get('status_blob'))
+    except Exception:
+        has_connections = ConnectionTable.objects.exists()
 
-        blob = conn.get("status_blob") if isinstance(conn.get("status_blob"), dict) else None
-        agent_ver = blob.get("agent_version") if blob else None
-        conn["logstash_version"] = resolve_running_logstash_version(
-            logstash_version_resolved=conn.get("logstash_version_resolved"),
-            status_blob=blob,
-        )
-        conn["agent_version_relation"] = agent_version_relation(
-            agent_ver, settings.__PREFERRED_LS_AGENT_VERSION__
-        )
-    
-    # Sort connections: centralized first, then by policy name
-    # This groups agents with the same policy together
-    def sort_key(conn):
-        if conn['connection_type'] == 'CENTRALIZED':
-            return (0, '')  # Centralized first
-        else:
-            return (1, conn['policy__name'] or 'zzz_no_policy')  # Then by policy name
-    
-    connections.sort(key=sort_key)
-    
-    # Add grouping metadata for visual styling
-    # Treat each connection (centralized or agent policy) as its own group
-    prev_policy = None
-    policy_color_index = 0
-    colors = ['blue', 'green', 'purple', 'pink', 'yellow', 'cyan']
-    
-    for i, conn in enumerate(connections):
-        if conn['connection_type'] == 'AGENT':
-            current_policy = conn['policy__name'] or 'No Policy'
-        else:
-            # Each centralized connection is its own unique "policy"
-            current_policy = f"CENTRALIZED_{conn['pk']}"
-        
-        # Check if this is the first row of a policy group
-        if current_policy != prev_policy:
-            conn['is_group_start'] = True
-            # Assign a color to this policy group
-            conn['group_color'] = colors[policy_color_index % len(colors)]
-            policy_color_index += 1
-        else:
-            conn['is_group_start'] = False
-            # Use the same color as the previous connection in the group
-            conn['group_color'] = connections[i-1]['group_color']
-        
-        # Check if this is the last row of a policy group
-        is_last = (i == len(connections) - 1)
-        if not is_last:
-            next_conn = connections[i + 1]
-            if next_conn['connection_type'] == 'AGENT':
-                next_policy = next_conn.get('policy__name') or 'No Policy'
-            else:
-                next_policy = f"CENTRALIZED_{next_conn['pk']}"
-            conn['is_group_end'] = (current_policy != next_policy)
-        else:
-            conn['is_group_end'] = True
-        
-        prev_policy = current_policy
-
-    # Feature badges per connection:
-    #  - CPM: Centralized connections always; Agents whose policy enables
-    #    xpack.management (centralized pipeline management via logstash.yml)
-    #  - LogstashAgent: every agent connection
-    #  - SNMP: agents that have Agent-mode SNMP networks assigned to them
-    from .models import Policy
-    from SNMP.models import Network
-
-    policy_ids = {c['policy_id'] for c in connections if c.get('policy_id')}
-    policy_cpm = {}
-    if policy_ids:
-        for pid, yml in Policy.objects.filter(id__in=policy_ids).values_list('id', 'logstash_yml'):
-            policy_cpm[pid] = _logstash_yml_cpm_enabled(yml)
-
-    # Any connection referenced by the SNMP Network table gets the SNMP flag.
-    # This covers both the Elasticsearch output connection (Network.connection,
-    # used by CENTRALIZED networks) and the agent connection
-    # (Network.agent_connection, used by AGENT networks). We can determine this
-    # purely from our own DB without calling out to Elasticsearch.
-    snmp_connection_ids = set(
-        Network.objects.values_list('connection_id', flat=True)
-    )
-    snmp_connection_ids.update(
-        Network.objects.exclude(agent_connection_id__isnull=True)
-        .values_list('agent_connection_id', flat=True)
-    )
-    snmp_connection_ids.discard(None)
-
-    for conn in connections:
-        if conn['connection_type'] == 'CENTRALIZED':
-            conn['feature_cpm'] = True
-            conn['feature_agent'] = False
-            conn['feature_snmp'] = conn['pk'] in snmp_connection_ids
-        else:
-            conn['feature_agent'] = True
-            conn['feature_cpm'] = policy_cpm.get(conn.get('policy_id'), False)
-            conn['feature_snmp'] = conn['pk'] in snmp_connection_ids
-
-    context['connections'] = connections
-    context['has_connections'] = len(connections) > 0
-    context['form'] = ConnectionForm()
-    context['preferred_agent_version'] = settings.__PREFERRED_LS_AGENT_VERSION__
-
-    return render(request, "pipeline_manager.html", context=context)
+    return render(request, "pipeline_manager.html", {
+        'has_connections': has_connections,
+        'form': ConnectionForm(),
+        'preferred_agent_version': settings.__PREFERRED_LS_AGENT_VERSION__,
+    })
 
 def test_connectivity(connection_id):
-    """
-    Test connectivity to an Elasticsearch connection.
-    Pure Python function for programmatic use.
-    
+    """Test connectivity to an Elasticsearch connection.
+
     Args:
-        connection_id: ID of the connection to test
-        
+        connection_id: ``Connection`` primary key.
+
     Returns:
-        tuple: (success: bool, message: str)
+        ``(success, message)`` where ``message`` is cluster info JSON or an
+        error string.
     """
     if not connection_id:
         return (False, "No connection ID provided")
@@ -243,9 +136,10 @@ def test_connectivity(connection_id):
 
 
 def TestConnectivity(request):
-    """
-    Django view to test connectivity to an Elasticsearch connection.
-    Returns HTML response for HTMX.
+    """Test Elasticsearch connectivity and return an htmx HTML snippet.
+
+    Args:
+        test: Connection pk.
     """
     test_id = request.GET.get('test')
     
@@ -287,23 +181,26 @@ def TestConnectivity(request):
 
 
 def _normalize_status_blob_api_status(blob):
-    """
-    Surface the authoritative Logstash status on a status_blob.
+    """Surface the authoritative Logstash status on a status blob.
 
-    The Logstash node-info root ("GET /") aggregates all health indicators and
-    frequently reports status="unknown" even when the instance is perfectly
-    healthy (e.g. immediately after a pipeline reload). The agent also polls the
-    dedicated /_health_report endpoint, which is the authoritative source of the
-    node's status.
+    The Logstash node-info root (``GET /``) aggregates all health indicators
+    and frequently reports ``status="unknown"`` even when the instance is
+    perfectly healthy (e.g. immediately after a pipeline reload). The agent
+    also polls the dedicated ``/_health_report`` endpoint, which is the
+    authoritative source of the node's status.
 
     The inspect card hides API details, the health report, and node stats
-    whenever ``logstash_api.status == 'unknown'``, so a root status of "unknown"
-    leaves the card stuck on the "status hasn't been read yet" warmup message —
-    hiding data the agent already collected. When the root status is unknown but
-    the health report has a real status, adopt it so the full details render.
+    whenever ``logstash_api.status == 'unknown'``, so a root status of
+    "unknown" leaves the card stuck on the "status hasn't been read yet"
+    warmup message — hiding data the agent already collected. When the root
+    status is unknown but the health report has a real status, adopt it so
+    the full details render.
 
-    Mutates the given ``blob`` dict in place (the caller's in-memory copy only;
-    never persisted).
+    Mutates the given ``blob`` dict in place (the caller's in-memory copy
+    only; never persisted).
+
+    Args:
+        blob: Agent ``status_blob`` dict, or a falsey value (no-op).
     """
     if not blob:
         return
@@ -322,19 +219,61 @@ def _normalize_status_blob_api_status(blob):
 
 
 def _normalize_logstash_api_status(connection):
-    """Normalize the Logstash API status on a ConnectionTable instance's blob."""
+    """Normalize the Logstash API status on a ``Connection`` instance's blob.
+
+    Args:
+        connection: Agent ``Connection`` whose in-memory ``status_blob`` is
+            rewritten.
+    """
     blob = connection.status_blob or {}
     _normalize_status_blob_api_status(blob)
     connection.status_blob = blob
 
 
+def _group_log_entries(entries):
+    """Group log entries by logger name, inject ``ts_formatted``, sort by count desc.
+
+    Args:
+        entries: List of log entry dicts, each with keys ``ts`` (epoch ms),
+            ``logger``, and ``message``.
+
+    Returns:
+        List of ``(logger_name, entries)`` tuples sorted by descending count.
+        Each entry dict is augmented with a ``ts_formatted`` key
+        (``HH:MM:SS UTC`` string, or ``None`` if ``ts`` is absent/invalid).
+
+    Example:
+        >>> entries = [
+        ...     {"ts": 1726668000000, "logger": "org.example.Foo", "message": "boom"},
+        ...     {"ts": 1726668001000, "logger": "org.example.Foo", "message": "boom2"},
+        ... ]
+        >>> _group_log_entries(entries)
+        [("org.example.Foo", [{"ts": ..., "ts_formatted": "14:00:00 UTC", ...}, ...])]
+    """
+    from collections import defaultdict
+
+    groups = defaultdict(list)
+    for entry in (entries or []):
+        ts = entry.get('ts')
+        ts_fmt = None
+        if ts:
+            try:
+                ts_fmt = datetime.fromtimestamp(ts / 1000, tz=timezone.utc).strftime('%H:%M:%S UTC')
+            except Exception:
+                pass
+        groups[entry.get('logger') or '(unknown)'].append({**entry, 'ts_formatted': ts_fmt})
+    return sorted(groups.items(), key=lambda x: -len(x[1]))
+
+
 @require_admin_role
 def get_agent_inspect(request, connection_id):
-    """
-    Return fresh rendered HTML for the agent inspect modal.
+    """Return fresh HTML for the agent inspect flyout.
 
-    Called via fetch() each time the user opens the flyout so the data is
-    never stale. Renders agent_inspect_content.html with a live DB query.
+    Called via ``fetch()`` each time the user opens the flyout so the data
+    is never stale.
+
+    Args:
+        connection_id: Agent ``Connection`` primary key.
     """
     try:
         connection = ConnectionTable.objects.select_related('policy').get(
@@ -362,29 +301,47 @@ def get_agent_inspect(request, connection_id):
 
     _normalize_logstash_api_status(connection)
 
+    # Pre-group logwatcher entries by logger for the template.
+    logwatcher_grouped = None
+    lw_blob = None
+    if connection.status_blob and isinstance(connection.status_blob, dict):
+        lw_blob = connection.status_blob.get('logwatcher')
+    elif hasattr(connection.status_blob, '__getitem__'):
+        try:
+            lw_blob = connection.status_blob['logwatcher']
+        except (KeyError, TypeError):
+            pass
+
+    if lw_blob:
+        logwatcher_grouped = {
+            'errors':   _group_log_entries(lw_blob.get('errors_since_last_checkin')),
+            'warnings': _group_log_entries(lw_blob.get('warnings_since_last_checkin')),
+            'fatals':   _group_log_entries(lw_blob.get('fatals_since_last_checkin')),
+        }
+
     return render(
         request,
         'components/pipeline_manager/agent_inspect_content.html',
-        {'connection': connection},
+        {'connection': connection, 'logwatcher_grouped': logwatcher_grouped},
     )
 
 
 @require_admin_role
 def agent_status_stream(request):
-    """
-    SSE endpoint — streams agent status for all agent connections every 5 seconds.
+    """Stream agent status for all agent connections every 5 seconds (SSE).
 
-    Each event is a JSON array of objects: {id, name, status, logstash_version}
-    where status is one of: 'restarting' | 'unhealthy' | 'healthy' | 'offline'
-    and logstash_version is the running Logstash version, or null if the agent
-    has never reported one.
+    Each event is a JSON array of objects ``{id, name, status,
+    logstash_version}`` where status is one of ``restarting``,
+    ``unhealthy``, ``healthy``, or ``offline``, and ``logstash_version`` is
+    the running Logstash version or null.
 
-    This mirrors the priority logic in the pipeline_manager.html template so the
-    JS can update badges without a full page reload.
+    This mirrors the priority logic in ``pipeline_manager.html`` so the JS
+    can update badges without a full page reload.
 
-    NOTE: Under standard WSGI each open SSE connection holds one server thread.
-    This is fine for small internal deployments. Move to ASGI/Channels if scale
-    becomes a concern.
+    Note:
+        Under standard WSGI each open SSE connection holds one server
+        thread. Fine for small internal deployments; move to ASGI/Channels
+        if scale becomes a concern.
     """
     def _compute_status(conn):
         blob = conn.get('status_blob') or {}
@@ -461,15 +418,18 @@ def agent_status_stream(request):
                     }
                     for conn in connections
                 ])
+                # Return pool slots before the stream waits for its next event.
+                db_connections.close_all()
                 yield f"data: {payload}\n\n"
                 time.sleep(5)
         except GeneratorExit:
             pass
+        finally:
+            db_connections.close_all()
 
     response = StreamingHttpResponse(_event_stream(), content_type='text/event-stream')
     response['Cache-Control'] = 'no-cache'
     response['X-Accel-Buffering'] = 'no'   # prevent nginx from buffering the stream
     return response
-
 
 

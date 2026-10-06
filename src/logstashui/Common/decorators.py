@@ -2,6 +2,8 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
+"""Admin-role gate shared by the browser UI and admin API tokens."""
+
 from functools import wraps
 from django.http import HttpResponse, JsonResponse
 import logging
@@ -10,9 +12,17 @@ logger = logging.getLogger(__name__)
 
 
 def _denied(request, message):
-    """Build a denial a browser *or* a script can read.
+    """Build a 403 a browser or a script can read.
 
-    The HX-Trigger toast is meaningless to curl, so API-token callers get JSON.
+    Token-authenticated callers (``request._api_token``) get JSON. Everyone
+    else gets an ``HX-Trigger`` toast. The toast is meaningless to curl.
+
+    Args:
+        request: Incoming Django request.
+        message: Error text for the toast or JSON ``error`` field.
+
+    Returns:
+        ``JsonResponse`` or ``HttpResponse`` with status 403.
     """
     if getattr(request, '_api_token', None) is not None:
         return JsonResponse({'success': False, 'error': message}, status=403)
@@ -24,9 +34,21 @@ def _denied(request, message):
 
 
 def require_admin_role(view_func):
-    """
-    Decorator to check if user has admin role before allowing access to view.
-    Returns error toast message if user is readonly.
+    """Reject the request unless ``request.user.profile.role`` is ``admin``.
+
+    Unauthenticated and readonly users receive the same 403 shape as
+    ``_denied`` (JSON for API tokens, htmx toast otherwise).
+
+    Args:
+        view_func: View to wrap.
+
+    Returns:
+        The wrapped view.
+
+    Examples:
+        @require_admin_role
+        def add_connection(request):
+            ...
     """
     @wraps(view_func)
     def wrapper(request, *args, **kwargs):

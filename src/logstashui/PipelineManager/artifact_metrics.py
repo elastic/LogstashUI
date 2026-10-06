@@ -47,7 +47,15 @@ def _noop(*_args, **_kwargs):
 
 
 def init(meter_provider=None):
-    """Create the instruments. Called from the OTel bootstrap; safe to skip."""
+    """Create the instruments. Called from the OTel bootstrap; safe to skip.
+
+    Args:
+        meter_provider: Optional OpenTelemetry meter provider; defaults to
+            the global ``opentelemetry.metrics`` API.
+
+    Returns:
+        True when instruments were created; False if OpenTelemetry is absent.
+    """
     global _enabled, _meter, _downloads_active, _requests_counter, _throughput
     global _otel_context
 
@@ -80,6 +88,11 @@ def init(meter_provider=None):
 
 
 def downloads_active_add(delta):
+    """Adjust the in-flight download count and the matching OTel counter.
+
+    Args:
+        delta: ``+1`` when a tarball stream starts, ``-1`` when it finishes.
+    """
     global _active_downloads
     _active_downloads += delta
     if _enabled and _downloads_active is not None:
@@ -92,11 +105,22 @@ def active_downloads():
 
 
 def record_request(result):
+    """Count one tarball request by outcome.
+
+    Args:
+        result: Outcome label (``served``, ``206``, ``401``, ``404``,
+            ``416``, ``429``, ``502``, ``503``).
+    """
     if _enabled and _requests_counter is not None:
         _requests_counter.add(1, {'result': result})
 
 
 def record_throughput(bytes_per_second):
+    """Record effective throughput of a completed tarball transfer.
+
+    Args:
+        bytes_per_second: Bytes transferred divided by elapsed seconds.
+    """
     if _enabled and _throughput is not None:
         _throughput.record(bytes_per_second)
 
@@ -117,6 +141,14 @@ def current_context():
 
 
 def attach_context(context):
+    """Attach a previously captured OTel context to this greenlet.
+
+    Args:
+        context: Value from ``current_context()``, or None.
+
+    Returns:
+        A detach token, or None when OTel is off or attach fails.
+    """
     if context is None or _otel_context is None:
         return None
     try:
@@ -126,6 +158,11 @@ def attach_context(context):
 
 
 def detach_context(token):
+    """Detach a context previously attached with ``attach_context``.
+
+    Args:
+        token: Value returned by ``attach_context``, or None.
+    """
     if token is None or _otel_context is None:
         return
     try:

@@ -1,0 +1,19 @@
+{
+  "official_key": "huawei_ups",
+  "name": "huawei_ups",
+  "type": "UPS",
+  "description": "Normalized battery health, runtime, per-phase input/output power, active alarms, and identity for Huawei UPS devices. Uses standard UPS-MIB OIDs where supported and Huawei OIDs where the UPS5000 reports unsupported standard values.",
+  "vendor": "Huawei",
+  "product": "Any",
+  "model": "Any",
+  "profiles": [
+    "generic_system",
+    "huawei_ups"
+  ],
+  "matching_rules": [
+    "HUAWEI",
+    "Huawei",
+    "UPS5000",
+    "2011.6.174"
+  ]
+}

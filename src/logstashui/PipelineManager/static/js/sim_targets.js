@@ -127,7 +127,7 @@
     targets.forEach((t) => {
       const opt = document.createElement('option');
       opt.value = String(t.connection_id);
-      // Closed control shows terse label; open list + title show host/version
+      // The control shows the full agent name; its title adds host/version details.
       opt.textContent = shortLabel(t);
       opt.dataset.detail = detailLabel(t);
       opt.dataset.policyType = t.policy_type || '';

@@ -3,13 +3,13 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
-"""Django's command-line utility for administrative tasks."""
+"""Django manage.py entry for LogstashUI administrative tasks."""
 import os
 import sys
 
 
 def main():
-    """Run administrative tasks."""
+    """Run Django management commands with ``LogstashUI.settings``."""
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'LogstashUI.settings')
     try:
         from django.core.management import execute_from_command_line

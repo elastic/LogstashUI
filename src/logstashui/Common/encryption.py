@@ -2,6 +2,11 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
+"""Fernet helpers for stored credentials and the Django ``SECRET_KEY``.
+
+Keys resolve from env, then ``DATA_DIR``, then a newly generated file.
+"""
+
 import os
 from pathlib import Path
 from cryptography.fernet import Fernet, InvalidToken
@@ -17,19 +22,19 @@ def _data_dir() -> Path:
 
 
 def get_encryption_key():
-    """
-    Get or generate the encryption key for credential storage.
-    
-    Priority:
-    1. Environment variable CREDENTIAL_KEY
-    2. Key file in DATA_DIR/.secret_key
-    3. Generate new key and save to DATA_DIR/.secret_key
-    
+    """Return the Fernet key used to encrypt stored credentials.
+
+    Resolution order:
+
+    1. Environment variable ``CREDENTIAL_KEY``
+    2. File ``DATA_DIR/.secret_key``
+    3. Generate a new key and write that file (mode ``0o600``)
+
     Returns:
-        bytes: The encryption key
-        
+        The key as bytes.
+
     Raises:
-        RuntimeError: If key cannot be loaded or generated
+        RuntimeError: If the key cannot be loaded or generated.
     """
     try:
         # Check for environment variable first
@@ -104,18 +109,23 @@ def get_encryption_key():
 
 
 def encrypt_credential(plaintext):
-    """
-    Encrypt a credential string.
-    
+    """Encrypt a credential string with the persisted Fernet key.
+
+    Empty values are returned unchanged.
+
     Args:
-        plaintext (str): The plaintext credential to encrypt
-        
+        plaintext: Credential to encrypt.
+
     Returns:
-        str: Base64-encoded encrypted credential, or None if encryption fails
-        
+        Base64-encoded ciphertext, or the original empty value.
+
     Raises:
-        ValueError: If plaintext is not a string
-        RuntimeError: If encryption fails
+        ValueError: If ``plaintext`` is not a string.
+        RuntimeError: If key load or encryption fails.
+
+    Examples:
+        stored = encrypt_credential("s3cret")
+        decrypt_credential(stored) == "s3cret"
     """
     if not plaintext:
         return plaintext
@@ -137,18 +147,19 @@ def encrypt_credential(plaintext):
 
 
 def decrypt_credential(encrypted_text):
-    """
-    Decrypt a credential string.
-    
+    """Decrypt a credential previously produced by ``encrypt_credential``.
+
+    Empty values are returned unchanged.
+
     Args:
-        encrypted_text (str): The encrypted credential
-        
+        encrypted_text: Base64-encoded ciphertext.
+
     Returns:
-        str: Decrypted plaintext credential, or None if decryption fails
-        
+        Plaintext credential, or the original empty value.
+
     Raises:
-        ValueError: If encrypted_text is not a string or is invalid
-        RuntimeError: If decryption fails
+        ValueError: If the value is not a string, or the token/key is wrong.
+        RuntimeError: If key load or decryption fails.
     """
     if not encrypted_text:
         return encrypted_text
@@ -173,22 +184,22 @@ def decrypt_credential(encrypted_text):
 
 
 def get_django_secret_key():
-    """
-    Get or generate Django's SECRET_KEY.
-    
-    Uses the same persistence pattern as credential encryption key:
-    1. Environment variable SECRET_KEY
-    2. Key file in DATA_DIR/.django_secret_key
-    3. Generate new key and save to DATA_DIR/.django_secret_key
-    
-    This ensures each deployment has a unique SECRET_KEY that persists
-    across container restarts (via volume mount).
-    
+    """Return a persisted Django ``SECRET_KEY`` for this data directory.
+
+    Resolution order:
+
+    1. Environment variable ``SECRET_KEY``
+    2. File ``DATA_DIR/.django_secret_key``
+    3. Generate 50 random characters and write that file (mode ``0o600``)
+
+    Each deployment keeps a unique key across container restarts via the
+    data-dir volume.
+
     Returns:
-        str: The Django SECRET_KEY (50 character random string)
-        
+        Secret string (50 characters when generated here).
+
     Raises:
-        RuntimeError: If key cannot be loaded or generated
+        RuntimeError: If the key cannot be loaded or generated.
     """
     try:
         # Check for environment variable first

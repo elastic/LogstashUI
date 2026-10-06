@@ -27,6 +27,7 @@ urlpatterns = [
     path('TestConnectivity', manager_views.TestConnectivity, name='TestConnectivity'),
 
     path("GetConnections/", connections_crud.GetConnections, name="GetConnections"),
+    path("GetConnectionsTable/", connections_crud.GetConnectionsTable, name="GetConnectionsTable"),
     path("AddConnection", connections_crud.AddConnection, name="AddConnection"),
     path("GetConnection/<int:connection_id>/", connections_crud.GetConnection, name="GetConnection"),
     path("UpdateConnection/<int:connection_id>/", connections_crud.UpdateConnection, name="UpdateConnection"),

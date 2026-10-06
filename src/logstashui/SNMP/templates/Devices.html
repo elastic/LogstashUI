@@ -167,10 +167,18 @@
           <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-600" onclick="sortTable('ip_address')">
             IP Address <span id="sort-ip_address" class="ml-1"></span>
           </th>
-          <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Credential</th>
-          <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Network</th>
-          <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Location</th>
-          <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Device Template</th>
+          <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-600" onclick="sortTable('credential__name')">
+            Credential <span id="sort-credential__name" class="ml-1"></span>
+          </th>
+          <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-600" onclick="sortTable('network__name')">
+            Network <span id="sort-network__name" class="ml-1"></span>
+          </th>
+          <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-600" onclick="sortTable('location')">
+            Location <span id="sort-location" class="ml-1"></span>
+          </th>
+          <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-300 uppercase tracking-wider cursor-pointer hover:bg-gray-600" onclick="sortTable('device_template__name')">
+            Device Template <span id="sort-device_template__name" class="ml-1"></span>
+          </th>
           <th scope="col" class="px-6 py-4 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">Actions</th>
         </tr>
       </thead>
@@ -229,6 +237,9 @@
 <!-- Device Visual Preview Component -->
 {% include 'components/snmp_device_visual_preview.html' %}
 
+<!-- SNMP Profile Modal (opened from device expand profile badges) -->
+{% include 'components/snmp_profile_modal.html' %}
+
 <!-- Popup Modal -->
 {% include 'popup.html' %}
 
@@ -239,6 +250,8 @@
 </script>
 <script src="{% static 'js/devices_table.js' %}"></script>
 <script src="{% static 'js/snmp_device_visual_preview.js' %}"></script>
+<script src="{% static 'js/snmp_profile_modal_helpers.js' %}"></script>
+<script src="{% static 'js/snmp_profile_modal.js' %}"></script>
 <script src="{% static 'js/snmp_devices_modal.js' %}"></script>
 <script src="{% static 'js/snmp_credentials_modal.js' %}"></script>
 <script src="{% static 'js/snmp_network_modal.js' %}"></script>

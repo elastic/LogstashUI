@@ -13,6 +13,59 @@ let isSelectionMode = false;
 
 // Note: moveMode is now defined in move_mode.js as window.moveMode
 
+const PINNED_FILTER_PLUGIN = 'elastic_integration';
+
+window.isPinnedPipelineComponent = function isPinnedPipelineComponent(component) {
+    return Boolean(component && component.plugin === PINNED_FILTER_PLUGIN);
+};
+
+function extractPinnedPipelineComponents(componentList, pinnedComponents) {
+    if (!Array.isArray(componentList)) return [];
+
+    return componentList.filter(component => {
+        if (window.isPinnedPipelineComponent(component)) {
+            pinnedComponents.push(component);
+            return false;
+        }
+
+        if (component && component.plugin === 'if' && component.config) {
+            component.config.plugins = extractPinnedPipelineComponents(
+                component.config.plugins,
+                pinnedComponents
+            );
+            (component.config.else_ifs || []).forEach(elseIf => {
+                elseIf.plugins = extractPinnedPipelineComponents(
+                    elseIf.plugins,
+                    pinnedComponents
+                );
+            });
+            if (component.config.else) {
+                component.config.else.plugins = extractPinnedPipelineComponents(
+                    component.config.else.plugins,
+                    pinnedComponents
+                );
+            }
+        }
+        return true;
+    });
+}
+
+window.enforcePinnedPipelineOrder = function enforcePinnedPipelineOrder() {
+    const pinnedComponents = [];
+    ['input', 'filter', 'output'].forEach(type => {
+        if (!Array.isArray(components[type])) return;
+        components[type] = extractPinnedPipelineComponents(
+            components[type],
+            pinnedComponents
+        );
+    });
+    components.filter = pinnedComponents.concat(components.filter || []);
+};
+
+window.getPinnedFilterCount = function getPinnedFilterCount() {
+    return (components.filter || []).filter(window.isPinnedPipelineComponent).length;
+};
+
 /**
  * Trigger pipeline warming / slot preallocation.
  * Used on page load/refresh, after plugin changes, and (as fallback) when the
@@ -1605,11 +1658,16 @@ function updateBlockingProblemsIndicator() {
 }
 
 function loadExistingComponents() {
+    // elastic_integration must remain a top-level prefix of the Filter pipeline.
+    window.enforcePinnedPipelineOrder();
+
     // Check if we're in simulation mode before clearing
     const wasInSimulationMode = document.querySelector('.simulation-executed-badge') !== null;
     const simulationNodes = wasInSimulationMode && window.simulationData ? window.simulationData.nodes : null;
-    const originalEventData = wasInSimulationMode && window.simulationResultsCache ?
-        Object.values(window.simulationResultsCache)[0]?.originalEvent : null;
+    const originalEventData = wasInSimulationMode && window.simulationData ?
+        window.simulationData.originalEvent : null;
+    const outputEventData = wasInSimulationMode && window.simulationData ?
+        window.simulationData.outputEvent : null;
 
     // Clears all existing components first
     const componentTypes = ['input', 'filter', 'output'];
@@ -1670,7 +1728,7 @@ function loadExistingComponents() {
 
     // Restore simulation data if we were in simulation mode
     if (wasInSimulationMode && simulationNodes && typeof markExecutedPlugins === 'function') {
-        markExecutedPlugins(simulationNodes, originalEventData);
+        markExecutedPlugins(simulationNodes, originalEventData, outputEventData);
     }
     
     // If in graph mode, re-render the graph
@@ -1955,12 +2013,13 @@ function createComponentElement(component, depth = 0, isConditional = false, par
 
 // Check if this is a comment plugin - apply special styling
     const isComment = component.plugin === 'comment';
+    const isPinnedPlugin = window.isPinnedPipelineComponent(component);
 
 // Alternate background colors based on depth
     const bgColor = isComment ? 'bg-gray-800' : (depth % 2 === 0 ? 'bg-gray-700' : 'bg-gray-600');
     const el = document.createElement('div');
     const commentClass = isComment ? 'comment-plugin' : '';
-    el.className = `${bgColor} p-3 rounded mb-2 relative group draggable-item ${commentClass}`;
+    el.className = `${bgColor} p-3 rounded mb-2 relative group draggable-item ${commentClass} ${isPinnedPlugin ? 'pinned-component' : ''}`;
     el.dataset.id = component.id;
 
 // Get plugin info for description and type
@@ -2018,8 +2077,17 @@ function createComponentElement(component, depth = 0, isConditional = false, par
     // Validate required fields
     const validation = validateRequiredFields(component);
 
+    const pinIconHtml = isPinnedPlugin ? `
+      <span class="ml-1 inline-flex text-blue-300" title="Pinned to the top of the Filter pipeline" aria-label="Pinned to top">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M8 3h8l-1 6 3 3H6l3-3-1-6ZM12 12v9" />
+        </svg>
+      </span>
+    ` : '';
+
     el.innerHTML = `
-<button class="move-handle" data-component-id="${component.id}" title="Click to move this component">
+<button class="move-handle" data-component-id="${component.id}"
+        title="${isPinnedPlugin ? 'Reorder pinned elastic integrations' : 'Click to move this component'}">
   <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16" />
   </svg>
@@ -2029,6 +2097,7 @@ function createComponentElement(component, depth = 0, isConditional = false, par
     <div class="flex items-center ${isComment ? 'flex-wrap' : ''}">
       ${imageHtml}
       <span class="font-medium text-white">${component.plugin}</span>
+      ${pinIconHtml}
       <span class="ml-2 px-1.5 py-0.5 text-xs rounded-full ${typeColor}">
         ${component.type.charAt(0).toUpperCase() + component.type.slice(1)}
       </span>
@@ -3342,8 +3411,14 @@ function addElseToConditional(componentId) {
 
 
 // Function to delete an else-if block
-function deleteElseIfBlock(componentId, elseIfIndex) {
-    if (!confirm('Are you sure you want to remove this else-if block and all its plugins?')) {
+async function deleteElseIfBlock(componentId, elseIfIndex) {
+    const confirmed = await ConfirmationModal.show(
+        'Are you sure you want to remove this else-if block and all its plugins?',
+        'Remove Else-If Block',
+        'Remove'
+    );
+
+    if (!confirmed) {
         return;
     }
 
@@ -3369,8 +3444,14 @@ function deleteElseIfBlock(componentId, elseIfIndex) {
 }
 
 // Function to delete an else block
-function deleteElseBlock(componentId) {
-    if (!confirm('Are you sure you want to remove this else block and all its plugins?')) {
+async function deleteElseBlock(componentId) {
+    const confirmed = await ConfirmationModal.show(
+        'Are you sure you want to remove this else block and all its plugins?',
+        'Remove Else Block',
+        'Remove'
+    );
+
+    if (!confirmed) {
         return;
     }
 
@@ -3937,6 +4018,21 @@ window.toggleFilePathInput = function(inputId, isIgnored) {
             input.classList.remove('opacity-50', 'cursor-not-allowed');
         }
     }
+};
+
+/**
+ * Independently collapse or expand one of the main pipeline sections.
+ */
+window.togglePipelineSection = function togglePipelineSection(sectionId) {
+    const section = document.getElementById(sectionId);
+    const header = section && section.querySelector('.pipeline-section-header');
+    const contentId = header && header.getAttribute('aria-controls');
+    const content = contentId && document.getElementById(contentId);
+    if (!section || !header || !content) return;
+
+    const willCollapse = header.getAttribute('aria-expanded') === 'true';
+    header.setAttribute('aria-expanded', String(!willCollapse));
+    content.classList.toggle('hidden', willCollapse);
 };
 
 // Browse file path for simulation and upload the file

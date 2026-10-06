@@ -12,6 +12,7 @@ from SNMP.snmp_normalizers import (
     _apply_normalizers,
     _generate_multiply_get_filter,
     _generate_ratio_get_filter,
+    _generate_sum_get_filter,
     _generate_translate_filter,
 )
 
@@ -234,6 +235,145 @@ class TestGenerateRatioGetFilter:
 
 
 # ===========================================================================
+# _generate_sum_get_filter
+# ===========================================================================
+
+class TestGenerateSumGetFilter:
+
+    def test_returns_none_for_empty_list(self):
+        assert _generate_sum_get_filter([]) is None
+
+    def test_returns_comment_and_ruby_filter(self):
+        normalizers = [
+            {
+                'operation': 'sum',
+                'target': {'scope': 'get'},
+                'params': {
+                    'input_fields': ['system.cpu.pct.user', 'system.cpu.pct.system'],
+                    'output_field': 'system.cpu.active.pct',
+                },
+            }
+        ]
+        result = _generate_sum_get_filter(normalizers)
+        assert isinstance(result, list)
+        assert len(result) == 2
+        comment, ruby = result
+        assert comment['plugin'] == 'comment'
+        assert ruby['plugin'] == 'ruby'
+
+    def test_ruby_code_contains_all_input_field_paths(self):
+        normalizers = [
+            {
+                'operation': 'sum',
+                'target': {'scope': 'get'},
+                'params': {
+                    'input_fields': ['system.cpu.pct.user', 'system.cpu.pct.system'],
+                    'output_field': 'system.cpu.active.pct',
+                },
+            }
+        ]
+        result = _generate_sum_get_filter(normalizers)
+        ruby_code = result[1]['config']['code']
+        assert '[system][cpu][pct][user]' in ruby_code
+        assert '[system][cpu][pct][system]' in ruby_code
+
+    def test_ruby_code_contains_output_field_path(self):
+        normalizers = [
+            {
+                'operation': 'sum',
+                'target': {'scope': 'get'},
+                'params': {
+                    'input_fields': ['a.metric', 'b.metric'],
+                    'output_field': 'combined.metric',
+                },
+            }
+        ]
+        result = _generate_sum_get_filter(normalizers)
+        ruby_code = result[1]['config']['code']
+        assert '[combined][metric]' in ruby_code
+
+    def test_skips_normalizer_missing_input_fields(self):
+        normalizers = [
+            {
+                'operation': 'sum',
+                'target': {'scope': 'get'},
+                'params': {'output_field': 'combined.metric'},  # no input_fields
+            }
+        ]
+        result = _generate_sum_get_filter(normalizers)
+        assert result is None
+
+    def test_skips_normalizer_missing_output_field(self):
+        normalizers = [
+            {
+                'operation': 'sum',
+                'target': {'scope': 'get'},
+                'params': {'input_fields': ['a.metric', 'b.metric']},  # no output_field
+            }
+        ]
+        result = _generate_sum_get_filter(normalizers)
+        assert result is None
+
+    def test_comment_mentions_sum(self):
+        normalizers = [
+            {
+                'operation': 'sum',
+                'target': {'scope': 'get'},
+                'params': {
+                    'input_fields': ['a.metric', 'b.metric'],
+                    'output_field': 'combined.metric',
+                },
+            }
+        ]
+        result = _generate_sum_get_filter(normalizers)
+        comment_text = result[0]['config']['text']
+        assert 'Sum' in comment_text
+
+    def test_multiple_sum_normalizers_in_single_filter(self):
+        normalizers = [
+            {
+                'operation': 'sum',
+                'target': {'scope': 'get'},
+                'params': {
+                    'input_fields': ['a.x', 'a.y'],
+                    'output_field': 'a.total',
+                },
+            },
+            {
+                'operation': 'sum',
+                'target': {'scope': 'get'},
+                'params': {
+                    'input_fields': ['b.x', 'b.y'],
+                    'output_field': 'b.total',
+                },
+            },
+        ]
+        result = _generate_sum_get_filter(normalizers)
+        assert isinstance(result, list)
+        ruby_code = result[1]['config']['code']
+        assert '[a][total]' in ruby_code
+        assert '[b][total]' in ruby_code
+
+    def test_ruby_code_guards_against_nil_inputs(self):
+        """All input fields must be checked before the sum is written."""
+        normalizers = [
+            {
+                'operation': 'sum',
+                'target': {'scope': 'get'},
+                'params': {
+                    'input_fields': ['cpu.user', 'cpu.system'],
+                    'output_field': 'cpu.active',
+                },
+            }
+        ]
+        result = _generate_sum_get_filter(normalizers)
+        ruby_code = result[1]['config']['code']
+        # Both fields must appear in the nil-guard condition
+        assert 'event.get("[cpu][user]")' in ruby_code
+        assert 'event.get("[cpu][system]")' in ruby_code
+
+
+# ===========================================================================
 # _generate_translate_filter
 # ===========================================================================
 
@@ -410,6 +550,22 @@ class TestApplyNormalizers:
         plugin_types = [c['plugin'] for c in result]
         assert 'translate' in plugin_types
 
+    def test_applies_sum_normalizer(self):
+        normalizers = [
+            {
+                'operation': 'sum',
+                'target': {'scope': 'get'},
+                'params': {
+                    'input_fields': ['system.cpu.pct.user', 'system.cpu.pct.system'],
+                    'output_field': 'system.cpu.active.pct',
+                },
+            }
+        ]
+        result = _apply_normalizers(normalizers)
+        assert len(result) > 0
+        plugin_types = [c['plugin'] for c in result]
+        assert 'ruby' in plugin_types
+
     def test_applies_multiple_normalizer_types(self):
         normalizers = [
             {
@@ -496,6 +652,14 @@ class TestScopeQualifiedFilterIds:
             'total_output_field': 'interface.state.counters.total_octets',
         },
     }
+    GET_SUM = {
+        'operation': 'sum',
+        'target': {'scope': 'get'},
+        'params': {
+            'input_fields': ['system.cpu.pct.user', 'system.cpu.pct.system'],
+            'output_field': 'system.cpu.active.pct',
+        },
+    }
 
     @staticmethod
     def _assert_unique(components):
@@ -543,3 +707,16 @@ class TestScopeQualifiedFilterIds:
         components = _apply_normalizers([self.GET_MULTIPLY])
         ids = [c['id'] for c in components]
         assert ids == ['normalizer_multiply_get_comment_1', 'normalizer_multiply_get_1']
+
+    def test_sum_get_scope_ids_are_scope_qualified(self):
+        components = _apply_normalizers([self.GET_SUM])
+        self._assert_unique(components)
+        ids = [c['id'] for c in components]
+        assert 'normalizer_sum_get_1' in ids
+        assert 'normalizer_sum_get_comment_1' in ids
+
+    def test_sum_combined_with_other_ops_ids_all_unique(self):
+        components = _apply_normalizers(
+            [self.GET_SUM, self.GET_MULTIPLY, self.GET_RATIO]
+        )
+        self._assert_unique(components)

@@ -2,7 +2,10 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
+"""Agent-facing JSON API: enroll, check-in, cert issue, and config changes."""
+
 from django.http import JsonResponse
+from django.core.exceptions import ValidationError
 from django.views.decorators.csrf import csrf_exempt
 
 from datetime import datetime, timezone
@@ -29,19 +32,18 @@ from .agent_modes import (
     simulate_ports,
 )
 
-from SNMP.snmp_crud import agent_snmp_pipeline_names, agent_snmp_keystore_keys
+from SNMP.snmp_crud import agent_snmp_names
 
 
 logger = logging.getLogger(__name__)
 
 
 def running_in_container() -> bool:
-    """
-    True when LogstashUI appears to run inside a container (Docker/Podman/k8s).
+    """True when LogstashUI appears to run inside a container (Docker/Podman/k8s).
 
     Inside containers, host DNS is often incomplete, so UI→agent callbacks
     should use agent IPs rather than short hostnames or private DNS names.
-    Override with LOGSTASHUI_IN_CONTAINER=1/0 when detection is wrong.
+    Override with ``LOGSTASHUI_IN_CONTAINER=1/0`` when detection is wrong.
     """
     forced = (os.environ.get("LOGSTASHUI_IN_CONTAINER") or "").strip().lower()
     if forced in ("1", "true", "yes", "on"):
@@ -77,11 +79,18 @@ def _is_ip_literal(value: str) -> bool:
 
 
 def resolve_agent_callback_host(data: dict, *, prefer_ip: bool | None = None) -> str | None:
-    """
-    Pick Connection.host from enroll/check-in payload.
+    """Pick ``Connection.host`` from an enroll/check-in payload.
 
-    When *prefer_ip* (default: running_in_container()), prefer callback_ip /
-    IP-literal host so Docker LogstashUI can reach the agent without DNS.
+    When ``prefer_ip`` (default: ``running_in_container()``) is True, prefer
+    ``callback_ip`` / IP-literal host so Docker LogstashUI can reach the
+    agent without DNS.
+
+    Args:
+        data: JSON body from enroll or check-in.
+        prefer_ip: Override container detection; None uses auto-detect.
+
+    Returns:
+        Hostname or IP to store, or None when no usable value is present.
     """
     if prefer_ip is None:
         prefer_ip = running_in_container()
@@ -111,10 +120,14 @@ def resolve_agent_callback_host(data: dict, *, prefer_ip: bool | None = None) ->
 
 
 def expand_instance_path(path: str | None, instance_id) -> str | None:
-    """
-    Expand multi-instance path templates (e.g. simulate-{instance_id}/settings).
+    """Expand multi-instance path templates (e.g. ``simulate-{instance_id}/settings``).
 
-    Policy rows may store the template form; Connection.instance_id is the real N.
+    Policy rows may store the template form; ``Connection.instance_id`` is the
+    real N.
+
+    Args:
+        path: Path that may contain ``{instance_id}``.
+        instance_id: Concrete instance number, or None/empty to leave as-is.
     """
     if path is None:
         return None
@@ -124,7 +137,19 @@ def expand_instance_path(path: str | None, instance_id) -> str | None:
 
 
 def _sign_csr_if_present(data: dict) -> dict | None:
-    """If request includes csr_pem, sign with product CA and return payload fragment."""
+    """Sign ``csr_pem`` with the product CA when present.
+
+    Args:
+        data: Request JSON that may include ``csr_pem`` or
+            ``certificate_signing_request``.
+
+    Returns:
+        Dict with ``server_certificate``, ``ca_certificate``, and
+        ``certificate_fingerprint``, or None when no CSR / insecure HTTP.
+
+    Raises:
+        Exception: CSR signing failed (caller maps this to HTTP 400).
+    """
     from LogstashUI.insecure_http import insecure_http
 
     if insecure_http():
@@ -147,46 +172,47 @@ def _sign_csr_if_present(data: dict) -> dict | None:
 
 
 def _encrypt_for_agent(raw_api_key: str, plaintext: str) -> str:
-    """
-    Encrypt a plaintext value for transport to a specific agent.
-    Uses the agent's raw API key (SHA-256 -> base64) as the Fernet key so that
-    only that agent, which holds the same API key, can decrypt it.
+    """Encrypt a plaintext value for transport to a specific agent.
+
+    Uses the agent's raw API key (SHA-256 → base64) as the Fernet key so
+    that only that agent, which holds the same API key, can decrypt it.
+
+    Args:
+        raw_api_key: Agent's plaintext API key.
+        plaintext: Secret to wrap.
     """
     key = base64.urlsafe_b64encode(hashlib.sha256(raw_api_key.encode("utf-8")).digest())
     return Fernet(key).encrypt(plaintext.encode("utf-8")).decode("utf-8")
 
 
 def _build_snmp_changes(connection, policy, raw_api_key, agent_snmp_pipelines, agent_snmp_keystore):
-    """
-    Compute the SNMP-managed pipeline/keystore delta between the agent's current
-    state (hash maps) and the SNMP records THIS agent is responsible for.
+    """Compute the SNMP pipeline/keystore delta for this agent's networks.
 
     SNMP-managed pipelines/keystore entries are delivered independently of the
     policy revision number so that SNMP deploys never touch policy revision
     history. Comparison uses pre-computed hashes (cheap dict diff).
 
     Scoping is per-agent, never per-policy: a network's pipelines belong to
-    exactly one agent (Network.agent_connection), even though many networks can
-    share one agent and many agents can share one base policy. Delivering the
-    whole policy's SNMP records to every agent on it would make sibling agents
-    poll the same devices (duplicate data), so we restrict delivery to the
-    pipelines/keys owned by this agent's own networks.
+    exactly one agent (``Network.agent_connection``), even though many networks
+    can share one agent and many agents can share one base policy. Delivering
+    the whole policy's SNMP records to every agent on it would make sibling
+    agents poll the same devices (duplicate data), so we restrict delivery to
+    the pipelines/keys owned by this agent's own networks.
 
     Args:
-        connection: the agent Connection checking in
-        policy: the agent's assigned Policy (holds the SNMP records)
-        raw_api_key: the agent's raw API key (for encrypting keystore values)
-        agent_snmp_pipelines: {pipeline_name: pipeline_hash} reported by the agent
-        agent_snmp_keystore: {key_name: kv_hash} reported by the agent
+        connection: Agent ``Connection`` checking in.
+        policy: Assigned ``Policy`` (holds the SNMP records).
+        raw_api_key: Agent's raw API key (for encrypting keystore values).
+        agent_snmp_pipelines: ``{pipeline_name: pipeline_hash}`` from the agent.
+        agent_snmp_keystore: ``{key_name: kv_hash}`` from the agent.
 
     Returns:
-        dict {'pipelines': {...}, 'keystore': {...}} or None if no changes.
+        ``{'pipelines': {...}, 'keystore': {...}}`` or None if no changes.
     """
     agent_snmp_pipelines = agent_snmp_pipelines or {}
     agent_snmp_keystore = agent_snmp_keystore or {}
 
-    own_pipeline_names = agent_snmp_pipeline_names(connection)
-    own_key_names = agent_snmp_keystore_keys(connection)
+    own_pipeline_names, own_key_names = agent_snmp_names(connection)
 
     snmp_pipelines = policy.pipelines.filter(
         managed_by="snmp", name__in=own_pipeline_names
@@ -264,14 +290,17 @@ def _build_snmp_changes(connection, policy, raw_api_key, agent_snmp_pipelines, a
 
 
 def _managed_rollup(pipelines, keystore):
-    """
-    Canonical single-hash summary of a managed source's pipeline + keystore hash
-    maps, used for the cheap per-source "dirty?" check at check-in (Phase 2).
+    """Canonical single-hash summary of a managed source's pipeline + keystore maps.
 
-    MUST stay byte-for-byte identical to the agent's implementation
-    (logstashagent.controller._managed_rollup) so both sides derive the same
-    rollup from the same {name: hash} maps. Built from stored hashes only — no
-    decryption — so it is safe to run on every check-in.
+    Used for the cheap per-source "dirty?" check at check-in (Phase 2). MUST
+    stay byte-for-byte identical to the agent's implementation
+    (``logstashagent.controller._managed_rollup``) so both sides derive the
+    same rollup from the same ``{name: hash}`` maps. Built from stored hashes
+    only — no decryption — so it is safe to run on every check-in.
+
+    Args:
+        pipelines: ``{name: pipeline_hash}``.
+        keystore: ``{name: kv_hash}``.
     """
     import hashlib
     parts = []
@@ -283,14 +312,21 @@ def _managed_rollup(pipelines, keystore):
 
 
 def _snmp_desired_hashes(connection, policy):
+    """Return the SNMP pipeline/keystore hash maps this agent should have.
+
+    Scoped to the agent's own networks. Uses the same scoping/query as
+    ``_build_snmp_changes()`` so the cheap rollup check agrees exactly with
+    the delta the fetch would return. No decryption (stored
+    ``pipeline_hash`` / ``kv_hash`` only).
+
+    Args:
+        connection: Agent ``Connection``.
+        policy: Assigned ``Policy``.
+
+    Returns:
+        ``(pipelines_map, keystore_map)``.
     """
-    The SNMP pipeline/keystore hash maps THIS agent should have, scoped to its
-    own networks. Uses the SAME scoping/query as _build_snmp_changes() so the
-    cheap rollup check agrees exactly with the delta the fetch would return.
-    No decryption (stored pipeline_hash/kv_hash only).
-    """
-    own_pipeline_names = agent_snmp_pipeline_names(connection)
-    own_key_names = agent_snmp_keystore_keys(connection)
+    own_pipeline_names, own_key_names = agent_snmp_names(connection)
     pipelines = {
         p.name: p.pipeline_hash
         for p in policy.pipelines.filter(managed_by="snmp", name__in=own_pipeline_names)
@@ -303,10 +339,15 @@ def _snmp_desired_hashes(connection, policy):
 
 
 def _snmp_changes_available(connection, policy, agent_rollup):
-    """
-    Cheap check: does this agent's reported SNMP rollup differ from the desired
-    (deployed) SNMP state for its networks? No decryption, no payload building.
-    The actual delta is fetched via GetConfigChanges when this returns True.
+    """True when this agent's SNMP rollup differs from the desired state.
+
+    No decryption, no payload building. The actual delta is fetched via
+    ``get_config_changes`` when this returns True.
+
+    Args:
+        connection: Agent ``Connection``.
+        policy: Assigned ``Policy``.
+        agent_rollup: Rollup hash reported at check-in.
     """
     desired_pipelines, desired_keystore = _snmp_desired_hashes(connection, policy)
     expected_rollup = _managed_rollup(desired_pipelines, desired_keystore)
@@ -315,9 +356,33 @@ def _snmp_changes_available(connection, policy, agent_rollup):
 
 @csrf_exempt
 def enroll(request):
-    """
-    Enroll a Logstash Agent using an enrollment token
-    Validates token in database, creates connection, and generates API key
+    """Enroll a Logstash Agent using an enrollment token.
+
+    Validates the token, creates (or replaces) the ``Connection``, and
+    issues an agent API key. EMBEDDED policy enroll is rejected.
+
+    Returns:
+        JSON with ``api_key``, ``policy_id``, ``connection_id``,
+        ``policy_config`` (and optional cert fields); 400/401/405/500
+        on error.
+
+    Examples:
+        # POST body
+        payload = {
+            "enrollment_token": "<base64 json {enrollment_token}>",
+            "host": "agent.example.com",
+            "agent_id": "uuid",
+            "callback_ip": "10.0.0.8",  # optional; preferred in containers
+            "csr_pem": "-----BEGIN CERTIFICATE REQUEST-----...",  # optional
+        }
+        # 200
+        # {
+        #   "success": True,
+        #   "api_key": "<raw>",
+        #   "policy_id": 1,
+        #   "connection_id": 12,
+        #   "policy_config": {...},
+        # }
     """
     if request.method != "POST":
         return JsonResponse({"success": False, "error": "Method not allowed"}, status=405)
@@ -461,13 +526,32 @@ def enroll(request):
 
 @csrf_exempt
 def issue_server_cert(request):
-    """
-    Issue a product-CA-signed agent server certificate from a CSR.
+    """Issue a product-CA-signed agent server certificate from a CSR.
 
     Auth (one of):
-      - Authorization: ApiKey <key> + connection_id (enrolled agents)
-      - X-LogstashUI-Agent-Csr-Secret: matches LOGSTASHUI_AGENT_CSR_SECRET
-        (compose/embedded bootstrap without re-enroll)
+
+      - ``Authorization: ApiKey <key>`` + ``connection_id`` (enrolled agents)
+      - ``X-LogstashUI-Agent-Csr-Secret`` matching
+        ``LOGSTASHUI_AGENT_CSR_SECRET`` (compose/embedded bootstrap without
+        re-enroll)
+
+    Returns:
+        JSON with PEM certs and fingerprint, or ``{"success": True}`` under
+        insecure HTTP; 400/401/405/500 on error.
+
+    Examples:
+        # POST body
+        payload = {
+            "csr_pem": "-----BEGIN CERTIFICATE REQUEST-----...",
+            "connection_id": 12,  # when using ApiKey auth
+        }
+        # 200
+        # {
+        #   "success": True,
+        #   "server_certificate": "-----BEGIN CERTIFICATE-----...",
+        #   "ca_certificate": "-----BEGIN CERTIFICATE-----...",
+        #   "certificate_fingerprint": "<sha256>",
+        # }
     """
     if request.method != "POST":
         return JsonResponse({"success": False, "error": "Method not allowed"}, status=405)
@@ -534,9 +618,32 @@ def issue_server_cert(request):
 
 @csrf_exempt
 def check_in(request):
-    """
-    Handle agent check-in requests
-    Authenticates via API key and updates last_check_in timestamp
+    """Record an agent check-in and return desired policy/runtime state.
+
+    Authenticates via ``Authorization: ApiKey <key>`` plus ``connection_id``.
+    Updates ``last_check_in``, optional host/status, and flags SNMP dirty
+    without building the delta (that happens in ``get_config_changes``).
+
+    Returns:
+        JSON with revision, paths, ``logstash_via_ui``, ``restart``,
+        ``managed_changes_available``; 400/401/405/500 on error.
+
+    Examples:
+        # POST body
+        payload = {
+            "connection_id": 12,
+            "host": "agent.example.com",
+            "status_blob": {"agent_version": "0.5.2", "logstash_api": {"version": "9.4.3"}},
+            "managed_state_hashes": {"snmp": "<rollup>"},
+        }
+        # 200
+        # {
+        #   "success": True,
+        #   "current_revision_number": 3,
+        #   "logstash_via_ui": False,
+        #   "restart": False,
+        #   "managed_changes_available": {"snmp": False},
+        # }
     """
     if request.method != "POST":
         return JsonResponse({"success": False, "error": "Method not allowed"}, status=405)
@@ -557,12 +664,14 @@ def check_in(request):
             return JsonResponse({"success": False, "error": "API key is empty"}, status=401)
 
         data = json.loads(request.body)
+        if not isinstance(data, dict):
+            return JsonResponse({"success": False, "error": "Expected a JSON object"}, status=400)
         connection_id = data.get("connection_id")
         if not connection_id:
             return JsonResponse({"success": False, "error": "Missing connection_id"}, status=400)
 
         try:
-            connection = ConnectionTable.objects.get(id=connection_id)
+            connection = ConnectionTable.objects.select_related("policy").get(id=connection_id)
         except ConnectionTable.DoesNotExist:
             return JsonResponse({"success": False, "error": "Invalid connection_id"}, status=401)
 
@@ -571,6 +680,7 @@ def check_in(request):
             return JsonResponse({"success": False, "error": "Invalid API key"}, status=401)
 
         connection.last_check_in = datetime.now(timezone.utc)
+        updates = {"last_check_in": connection.last_check_in, "updated_at": connection.last_check_in}
 
         # Connection.host must be reachable from this UI process. In containers
         # prefer the agent callback IP (DNS is unpredictable); otherwise accept host.
@@ -578,6 +688,7 @@ def check_in(request):
         if new_host and new_host != connection.host:
             old_host = connection.host or ""
             connection.host = new_host
+            updates["host"] = new_host
             logger.info(
                 "Updated connection %s host %r → %r (callback reachability%s)",
                 connection_id,
@@ -587,9 +698,11 @@ def check_in(request):
             )
 
         status_blob = data.get("status_blob")
+        if status_blob is not None and not isinstance(status_blob, dict):
+            return JsonResponse({"success": False, "error": "status_blob must be an object"}, status=400)
         if status_blob:
             connection.status_blob = status_blob
-            logger.debug(f"Updated status_blob: {status_blob}")
+            updates["status_blob"] = status_blob
             # Surface resolved Logstash version for the LS pill and the sim
             # target dropdown. logstash_api.version comes from the running
             # instance's own API and is the only key that tracks a version
@@ -608,25 +721,35 @@ def check_in(request):
             # last known version out of the UI.
             if resolved:
                 connection.logstash_version_resolved = str(resolved)[:64]
+                updates["logstash_version_resolved"] = connection.logstash_version_resolved
             if status_blob.get("agent_api_port") is not None:
                 try:
                     connection.agent_api_port = int(status_blob["agent_api_port"])
+                    updates["agent_api_port"] = connection.agent_api_port
                 except (TypeError, ValueError):
                     pass
             if status_blob.get("logstash_api_port") is not None:
                 try:
                     connection.logstash_api_port = int(status_blob["logstash_api_port"])
+                    updates["logstash_api_port"] = connection.logstash_api_port
                 except (TypeError, ValueError):
                     pass
 
-        should_restart = connection.restart_on_next_checkin
-        if should_restart:
-            connection.restart_on_next_checkin = False
+        # Validate only heartbeat fields; full_clean also validates unrelated
+        # administrative settings and performs extra database lookups.
+        for name, value in updates.items():
+            ConnectionTable._meta.get_field(name).clean(value, connection)
+        ConnectionTable.objects.filter(pk=connection.pk).update(**updates)
 
-        connection.save()
+        # Consume an observed restart flag atomically. A normal heartbeat must
+        # not overwrite a restart requested after we loaded the connection.
+        should_restart = False
+        if connection.restart_on_next_checkin:
+            should_restart = bool(ConnectionTable.objects.filter(
+                pk=connection.pk, restart_on_next_checkin=True
+            ).update(restart_on_next_checkin=False))
 
-        logger.info(f"Agent check-in: connection_id={connection_id}, agent_id={connection.agent_id}")
-        logger.debug(f"Check-in data: {data}")
+        logger.debug("Agent check-in: connection_id=%s, agent_id=%s", connection_id, connection.agent_id)
 
         policy = connection.policy
         if not policy:
@@ -683,6 +806,8 @@ def check_in(request):
 
         return JsonResponse(response_payload)
 
+    except ValidationError as exc:
+        return JsonResponse({"success": False, "error": "; ".join(exc.messages)}, status=400)
     except json.JSONDecodeError:
         return JsonResponse({"success": False, "error": "Invalid JSON data"}, status=400)
     except Exception as exc:
@@ -692,8 +817,29 @@ def check_in(request):
 
 @csrf_exempt
 def get_config_changes(request):
-    """
-    Compare agent-side config state with the assigned policy and return required updates.
+    """Compare agent-side config with the assigned policy and return updates.
+
+    Authenticates via API key + ``connection_id``. User pipelines/keystore
+    ride the policy channel; SNMP deltas are included in the same response
+    when that source is dirty. Unchanged fields are ``false``.
+
+    Returns:
+        JSON ``{success, changes, policy_name, current_revision}`` plus
+        optional ``snmp_changes``; 400/401/404/405/500 on error.
+
+    Examples:
+        # POST body (hashes of current on-disk state)
+        payload = {
+            "connection_id": 12,
+            "logstash_yml_hash": "<sha256>",
+            "jvm_options_hash": "<sha256>",
+            "log4j2_properties_hash": "<sha256>",
+            "keystore": {"MY_KEY": "<kv_hash>"},
+            "pipelines": {"main": {"config_hash": "<pipeline_hash>"}},
+            "snmp_pipelines": {},
+            "snmp_keystore": {},
+        }
+        # 200 changes values are False when unchanged, or the new content
     """
     if request.method != "POST":
         return JsonResponse({"success": False, "error": "Method not allowed"}, status=405)

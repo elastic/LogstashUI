@@ -2,24 +2,15 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
-"""
-Django management command to generate the LLM context file for SNMP template
-and profile generation.
+"""Generate the committed LLM context Markdown for official templates and profiles.
 
-Reads all official device templates and profiles from the bundled JSON files and
-writes a single Markdown file that can be fed verbatim to an LLM as context.
+Re-run after changing files under `SNMP/data/official_profiles/` or
+`SNMP/data/official_device_templates/`. Default output is
+`SNMP/data/template_profile_context.md`.
 
-The output file is committed to the repository and updated whenever official
-profiles or device templates are added or changed. Re-run this command any time
-you modify files under:
-    SNMP/data/official_profiles/
-    SNMP/data/official_device_templates/
-
-Usage:
+Examples:
     uv run python manage.py generate_template_profile_context
     uv run python manage.py generate_template_profile_context --output path/to/file.md
-
-Output: SNMP/data/template_profile_context.md  (default)
 """
 
 import json
@@ -31,10 +22,10 @@ _INTERNAL_KEYS = {'official_key', 'type'}
 
 
 def _load_json_dir(dirpath):
-    """
-    Load all *.json files from *dirpath*, sorted by filename.
-    Returns a list of (filename_without_extension, parsed_dict) tuples.
-    Silently skips files that cannot be parsed.
+    """Load `*.json` files from `dirpath`, sorted by filename.
+
+    Returns:
+        List of `(stem, parsed_dict)` tuples. Unreadable files are skipped.
     """
     results = []
     if not os.path.isdir(dirpath):
@@ -53,7 +44,7 @@ def _load_json_dir(dirpath):
 
 
 def _strip_internal(d):
-    """Return a copy of *d* with internal-only keys removed."""
+    """Return a copy of `d` without internal-only keys."""
     return {k: v for k, v in d.items() if k not in _INTERNAL_KEYS}
 
 
@@ -62,6 +53,7 @@ def _json_block(obj):
 
 
 class Command(BaseCommand):
+    """Write `template_profile_context.md` from bundled official JSON."""
     help = (
         'Generate SNMP/data/template_profile_context.md — the LLM context file '
         'for SNMP template and profile generation. Re-run whenever official '
@@ -69,6 +61,7 @@ class Command(BaseCommand):
     )
 
     def add_arguments(self, parser):
+        """Add `--output` for the Markdown path."""
         parser.add_argument(
             '--output',
             default=None,
@@ -79,6 +72,7 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        """Load official JSON and write the LLM context file."""
         base = os.path.join(settings.BASE_DIR, 'SNMP', 'data')
 
         profiles_dir   = os.path.join(base, 'official_profiles')
