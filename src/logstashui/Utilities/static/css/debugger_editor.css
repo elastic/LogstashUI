@@ -55,6 +55,10 @@
     color: var(--color-warning);
 }
 
+#simulateSpinner:not(.htmx-request) {
+    display: none;
+}
+
 .debugger-autocomplete {
     position: absolute;
     z-index: 1000;

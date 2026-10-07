@@ -50,7 +50,9 @@ bytes => int
 duration => float
 ```
 
-As in Logstash, converting a field that the pattern never captured adds a tag such as `_dataconversionnullvalue_bytes_int` instead of failing.
+As in Logstash, converting a field that the pattern never captured adds a tag such as `_dataconversionnullvalue_bytes_int` instead of failing. If the pattern captures a field named `tags`, the conversion tags are added after its value, as Logstash does.
+
+Logstash converts values like `1e999999` into integers with a million digits. The debugger shows integers over 4,300 digits as a placeholder like `(integer with 1000001 digits, too large to display)`, because they are too large to display.
 
 ## Reading the results
 

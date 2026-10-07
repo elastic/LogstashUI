@@ -27,7 +27,7 @@ give `host.name: "web01"`, `process.pid: 2240` (a number, because of `:int`), `s
 | `%{WORD}` | Match a built-in pattern without capturing it |
 | `%{WORD:verb}` | Capture into the field `verb` |
 | `%{IP:[source][ip]}` | Capture into a nested field |
-| `%{NUMBER:bytes:int}` | Capture and convert. Only `int` and `float` are supported, as in Logstash |
+| `%{NUMBER:bytes:int}` | Capture and convert. Only `int` and `float` are supported, as in Logstash. Integers over 4,300 digits are shown as a placeholder, because they are too large to display |
 | `(?<queue_id>[0-9A-F]{10,11})` | Inline named capture with your own regex |
 
 Field names with dots, like `%{IP:client.ip}`, are **not** nested: Logstash creates one field literally named `client.ip`. Use `[client][ip]` for nesting.
@@ -76,7 +76,11 @@ The debugger also warns about these common mistakes:
 
 ### Time limits
 
-A badly written regex can take exponential time on some inputs. Each line is stopped after **2 seconds** and reported as `_groktimeout`, which matches the grok filter's tag. A single simulation request is stopped after **15 seconds**, and any remaining lines are marked as skipped. The server is never tied up by one pattern.
+A badly written regex can take exponential time on some inputs. The debugger has these limits so that one pattern can't tie up the server:
+
+- **2 seconds per line.** Matching is stopped and reported as `_groktimeout`, which matches the grok filter's tag.
+- **15 seconds per simulation.** This covers compiling patterns as well as matching, and the Dissect Debugger uses the same limit. Any patterns or lines left when it runs out are marked as skipped.
+- **200,000 characters per pattern after expansion.** Every `%{...}` reference is replaced by its definition before compiling. The largest pattern Logstash ships expands to about 11,000 characters, so only runaway custom patterns, like ones that double in size at each level, hit this. They get a compilation error instead of tying up the server.
 
 ## How closely it matches Logstash
 

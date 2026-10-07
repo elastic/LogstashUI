@@ -20,7 +20,14 @@ import logging
 logger = logging.getLogger(__name__)
 
 GROK_MATCH_TIMEOUT = 2
-GROK_REQUEST_TIMEOUT = 15
+# Applies to both debuggers, covering grok compilation as well as matching.
+REQUEST_TIMEOUT = 15
+
+
+def skipped_match(line_number, sample_line):
+    """Result for a line that was not run because the request ran out of time."""
+    return {'line_number': line_number, 'sample': sample_line, 'success': False,
+            'error': f'Skipped: this simulation hit the {REQUEST_TIMEOUT} second limit.'}
 
 
 def split_sample_lines(sample_data, multiline_mode):
@@ -125,12 +132,16 @@ def simulate_grok(request):
         return HttpResponse(missing)
 
     patterns = {**load_patterns(ecs_compatibility_param(request.POST)), **parse_patterns(custom_patterns)}
-    deadline = time.monotonic() + GROK_REQUEST_TIMEOUT
+    deadline = time.monotonic() + REQUEST_TIMEOUT
     results = []
     for pattern_idx, pattern in enumerate(pattern_lines, 1):
         pattern_result = {'pattern': pattern, 'pattern_number': pattern_idx, 'matches': []}
         try:
-            grok = Grok(pattern, patterns)
+            grok = Grok(pattern, patterns, deadline=deadline)
+        except TimeoutError:
+            pattern_result['matches'] = [skipped_match(*line) for line in sample_lines]
+            results.append(pattern_result)
+            continue
         except GrokError as e:
             pattern_result['warning'] = grok_pattern_warning(pattern)
             for line_idx, sample_line in sample_lines:
@@ -148,8 +159,7 @@ def simulate_grok(request):
             match = {'line_number': line_idx, 'sample': sample_line, 'success': False}
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                match['error'] = f'Skipped: this simulation hit the {GROK_REQUEST_TIMEOUT} second limit.'
-                pattern_result['matches'].append(match)
+                pattern_result['matches'].append(skipped_match(line_idx, sample_line))
                 continue
             try:
                 fields = grok.match(sample_line, timeout=min(GROK_MATCH_TIMEOUT, remaining))
@@ -162,7 +172,8 @@ def simulate_grok(request):
                     match.update(success=True, parsed_data=fields)
                 else:
                     try:
-                        reason = grok.explain_failure(sample_line, timeout=min(GROK_MATCH_TIMEOUT, remaining))
+                        reason = grok.explain_failure(sample_line, timeout=min(GROK_MATCH_TIMEOUT, remaining),
+                                                      deadline=deadline)
                     except TimeoutError:
                         reason = None
                     match['error'] = f"_grokparsefailure: {reason or 'the pattern did not match the input'}"
@@ -215,13 +226,13 @@ def simulate_dissect(request):
     if request.method != 'POST':
         return HttpResponse('<p class="text-error">Invalid request method</p>')
 
-    sample_data = request.POST.get('sample_data', '')
-    dissect_pattern = request.POST.get('dissect_pattern', '')
-    convert_datatype = request.POST.get('convert_datatype', '')
+    sample_data, dissect_pattern, convert_datatype = (
+        request.POST.get(name, '').replace('\r\n', '\n') for name in ('sample_data', 'dissect_pattern', 'convert_datatype')
+    )
     multiline_mode = request.POST.get('multiline_mode', 'false').lower() == 'true'
 
     sample_lines = split_sample_lines(sample_data, multiline_mode)
-    pattern_lines = [line.rstrip('\r') for line in dissect_pattern.split('\n') if line.strip()]
+    pattern_lines = [line for line in dissect_pattern.split('\n') if line.strip()]
     missing = missing_input_html(sample_lines, pattern_lines, 'dissect pattern')
     if missing:
         return HttpResponse(missing)
@@ -230,6 +241,7 @@ def simulate_dissect(request):
     except DissectError as e:
         return HttpResponse(message_html(f'Options > convert_datatype: {e}', 'text-error'))
 
+    deadline = time.monotonic() + REQUEST_TIMEOUT
     results = []
     for pattern_idx, pattern in enumerate(pattern_lines, 1):
         pattern_result = {'pattern': pattern, 'pattern_number': pattern_idx, 'matches': []}
@@ -252,9 +264,12 @@ def simulate_dissect(request):
             continue
 
         for line_idx, sample_line in sample_lines:
+            if time.monotonic() > deadline:
+                pattern_result['matches'].append(skipped_match(line_idx, sample_line))
+                continue
             match = {'line_number': line_idx, 'sample': sample_line}
             try:
-                match.update(success=True, parsed_data=dissector.match(sample_line.rstrip('\r')))
+                match.update(success=True, parsed_data=dissector.match(sample_line))
             except DissectFailure as e:
                 match.update(success=False, error=f'_dissectfailure: {e}')
             pattern_result['matches'].append(match)

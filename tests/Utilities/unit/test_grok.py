@@ -1,7 +1,13 @@
+import time
+from pathlib import Path
+
 import pytest
 
+from Utilities import grok as grok_module
 from Utilities import views
+from Utilities.dissect import too_long_int
 from Utilities.grok import (
+    MAX_EXPANDED_LENGTH,
     PATTERN_SETS,
     Grok,
     GrokError,
@@ -186,6 +192,60 @@ def test_ruby_to_i(value, expected):
     assert ruby_to_i(value) == expected
 
 
+def test_ruby_to_i_huge_value_is_a_placeholder():
+    assert ruby_to_i("9" * 4300) == int("9" * 4300)
+    assert ruby_to_i("-000" + "9" * 5000 + "x") == too_long_int(5000)
+
+
+def _doubling_patterns(levels):
+    patterns = {'P0': '[a-z]' * 200}
+    for level in range(1, levels + 1):
+        patterns[f'P{level}'] = f'%{{P{level - 1}}}%{{P{level - 1}}}'
+    return patterns
+
+
+def test_runaway_expansion_is_rejected_quickly():
+    start = time.monotonic()
+    with pytest.raises(GrokError, match=f'more than {MAX_EXPANDED_LENGTH} characters'):
+        Grok('%{P20}', _doubling_patterns(20))
+    assert time.monotonic() - start < 2
+
+
+def test_compile_respects_deadline():
+    with pytest.raises(TimeoutError):
+        Grok('%{P10}', _doubling_patterns(10), deadline=time.monotonic() - 1)
+
+
+def test_explain_failure_on_long_pattern_is_fast():
+    grok = Grok('%{WORD} ' * 800 + '%{INT:x}', load_patterns())
+    start = time.monotonic()
+    reason = grok.explain_failure('a ' * 800 + 'zz')
+    assert time.monotonic() - start < 2
+    assert reason.endswith("then '%{INT:x}' did not match 'zz'")
+
+
+def test_explain_failure_skips_prefixes_that_do_not_compile(monkeypatch):
+    patterns = load_patterns()
+    grok = Grok('%{WORD:a} %{WORD:b} %{INT:c}', patterns)
+    real_compile = grok_module._compile
+
+    def compile_except_first_cut(pattern, patterns, deadline=None):
+        if pattern == '%{WORD:a}':
+            raise GrokError('cannot compile')
+        return real_compile(pattern, patterns, deadline)
+
+    monkeypatch.setattr(grok_module, '_compile', compile_except_first_cut)
+    assert grok.explain_failure('x y z') == "Matched up to '%{WORD:a} %{WORD:b} ', then '%{INT:c}' did not match 'z'"
+
+
+@pytest.mark.parametrize('template', ['grok_debugger.html', 'dissect_debugger.html'])
+def test_templates_show_spinner_and_drop_repeat_submits(template):
+    import Utilities
+    content = (Path(Utilities.__file__).parent / 'templates' / template).read_text()
+    assert 'htmx-indicator hidden' not in content
+    assert 'hx-sync="this:drop"' in content
+
+
 @pytest.mark.parametrize("value,expected", [("1.5e2", 150.0), ("-", 0.0), ("1e", 1.0), ("+.5", 0.5)])
 def test_ruby_to_f(value, expected):
     assert ruby_to_f(value) == expected
@@ -245,9 +305,20 @@ class TestSimulateGrokView:
         assert '_groktimeout' in content
 
     def test_request_time_limit_skips_remaining_lines(self, request_factory, monkeypatch):
-        monkeypatch.setattr(views, 'GROK_REQUEST_TIMEOUT', 0)
-        content = self._post(request_factory, sample_data='a\nb', grok_pattern='%{WORD:w}')
-        assert content.count('Skipped: this simulation hit the 0 second limit.') == 2
+        monkeypatch.setattr(views, 'REQUEST_TIMEOUT', 0)
+        content = self._post(request_factory, sample_data='a\nb', grok_pattern='%{WORD:w}\n%{INT:n}')
+        assert content.count('Skipped: this simulation hit the 0 second limit.') == 4
+
+    def test_huge_int_returns_placeholder(self, request_factory):
+        content = self._post(request_factory, sample_data='9' * 5000, grok_pattern='%{NOTSPACE:n:int}')
+        assert 'integer with 5000 digits, too large to display' in content
+
+    def test_runaway_custom_pattern_is_a_compile_error(self, request_factory):
+        custom = '\n'.join(f'{name} {value}' for name, value in _doubling_patterns(20).items())
+        start = time.monotonic()
+        content = self._post(request_factory, sample_data='a', grok_pattern='%{P20}', custom_patterns=custom)
+        assert 'too large for the debugger to compile' in content
+        assert time.monotonic() - start < 2
 
     def test_crlf_is_normalized(self, request_factory):
         content = self._post(request_factory, sample_data='a 1\r\nb 2', grok_pattern='%{WORD:w} %{INT:n}$\r\n')

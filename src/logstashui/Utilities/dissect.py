@@ -27,8 +27,36 @@ _SUFFIX_ONLY_RE = re.compile(_SUFFIX + "?")
 _SUFFIX_RE = re.compile(r"(.+?)" + _SUFFIX + "?")
 _FIELD_REFERENCE_RE = re.compile(r"^(\[[^\[\]]+\])+$")
 # The number formats java.math.BigDecimal accepts.
-_BIG_DECIMAL_RE = re.compile(r"[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?")
-_CONVERTERS = {"int": lambda value: int(Decimal(value)), "float": lambda value: float(Decimal(value))}
+_BIG_DECIMAL_RE = re.compile(r"[+-]?(\d+(\.\d*)?|\.\d+)([eE]([+-]?\d+))?")
+# Python refuses to print integers longer than this (sys.int_info.default_max_str_digits),
+# and building one from 1e999999 takes many seconds.
+MAX_INT_DIGITS = 4300
+
+
+def too_long_int(digits):
+    """Placeholder for an integer Logstash would produce but the debugger can't display.
+
+    Example:
+        >>> too_long_int(5000)
+        '(integer with 5000 digits, too large to display)'
+    """
+    return f"(integer with {digits} digits, too large to display)"
+
+
+def _to_int(value):
+    match = _BIG_DECIMAL_RE.fullmatch(value)
+    whole, _, fraction = match.group(1).partition(".")
+    exponent = int(match.group(4) or 0)
+    if whole.lstrip("0"):
+        digits = len(whole.lstrip("0")) + exponent
+    else:
+        digits = exponent - (len(fraction) - len(fraction.lstrip("0")))
+    if digits > MAX_INT_DIGITS:
+        return too_long_int(digits)
+    return int(Decimal(value))
+
+
+_CONVERTERS = {"int": _to_int, "float": lambda value: float(Decimal(value))}
 _ORDINALS = {"skip": 0, "normal": 1, "append": 100, "indirect": 1000}
 _GROK_REFERENCE_RE = re.compile(r"%\{[A-Z][A-Z0-9_]*:[^}]*\}")
 _REGEX_ESCAPE_RE = re.compile(r"\\[\[\]().sdwSDW]")
@@ -260,5 +288,11 @@ class Dissector:
             else:
                 tags.append(f"_dataconversionuncoercible_{name}_{datatype}")
         if tags:
-            result["tags"] = tags
+            existing = result.get("tags")
+            if existing is None:
+                result["tags"] = tags
+            elif isinstance(existing, list):
+                existing.extend(tags)
+            else:
+                result["tags"] = [existing, *tags]
         return result

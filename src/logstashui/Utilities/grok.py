@@ -10,14 +10,18 @@ import difflib
 import functools
 import os
 import re
+import time
 
 import regex
 
-from .dissect import MISSING, get_field, set_field
+from .dissect import MAX_INT_DIGITS, MISSING, get_field, set_field, too_long_int
 
 PATTERNS_DIR = os.path.join(os.path.dirname(__file__), 'data', 'grok-patterns')
 PATTERN_SETS = {'v8': 'ecs-v1', 'v1': 'ecs-v1', 'disabled': 'legacy'}
 MAX_EXPANSIONS = 10000
+# The largest bundled pattern expands to about 11k characters. regex.compile can't be
+# interrupted and takes seconds past 1M, so the debugger refuses anything bigger than this.
+MAX_EXPANDED_LENGTH = 200_000
 
 # jls-grok's Grok::PATTERN_RE, with Ruby's \g<curly> written as (?&curly).
 _PATTERN_RE = regex.compile(
@@ -47,7 +51,11 @@ def ruby_to_i(value):
         [42, 3, -7, 1000, 0]
     """
     match = _TO_I_RE.match(value)
-    return int(match.group(1).replace('_', '')) if match else 0
+    if not match:
+        return 0
+    number = match.group(1).replace('_', '')
+    digits = len(number.lstrip('+-').lstrip('0'))
+    return too_long_int(digits) if digits > MAX_INT_DIGITS else int(number)
 
 
 def ruby_to_f(value):
@@ -104,11 +112,26 @@ def load_patterns(ecs_compatibility='v8'):
     return patterns
 
 
-def _expand(pattern, patterns):
-    """Replace ``%{...}`` references until none are left (``Grok#compile``)."""
+def _check_deadline(deadline):
+    if deadline is not None and time.monotonic() > deadline:
+        raise TimeoutError('grok pattern compilation took too long')
+
+
+def _expand(pattern, patterns, deadline=None):
+    """Replace ``%{...}`` references until none are left (``Grok#compile``).
+
+    Raises:
+        GrokError: If a reference is undefined, references nest too deeply, or
+            the result is longer than ``MAX_EXPANDED_LENGTH``.
+        TimeoutError: If ``deadline`` (a ``time.monotonic()`` value) passes.
+    """
     patterns = dict(patterns)
     expanded = pattern
     for _ in range(MAX_EXPANSIONS):
+        if len(expanded) > MAX_EXPANDED_LENGTH:
+            raise GrokError(f"{pattern!r} expands to more than {MAX_EXPANDED_LENGTH} characters, "
+                            "which is too large for the debugger to compile")
+        _check_deadline(deadline)
         match = _PATTERN_RE.search(expanded)
         if not match:
             return expanded
@@ -185,8 +208,9 @@ def _translate(expanded):
     return ''.join(out), names
 
 
-def _compile(pattern, patterns):
-    python_regex, names = _translate(_expand(pattern, patterns))
+def _compile(pattern, patterns, deadline=None):
+    python_regex, names = _translate(_expand(pattern, patterns, deadline))
+    _check_deadline(deadline)
     try:
         return regex.compile(python_regex, _FLAGS), names
     except regex.error as e:
@@ -255,10 +279,12 @@ class Grok:
         pattern: Grok pattern, e.g. ``"%{IP:[client][ip]} %{WORD:verb}"``.
         patterns: Available pattern definitions, usually ``load_patterns()``
             plus custom patterns.
+        deadline: Optional ``time.monotonic()`` value to stop compiling at.
 
     Raises:
-        GrokError: If the pattern references an undefined pattern or is not a
-            valid regular expression.
+        GrokError: If the pattern references an undefined pattern, expands
+            past ``MAX_EXPANDED_LENGTH``, or is not a valid regular expression.
+        TimeoutError: If ``deadline`` passes while compiling.
 
     Example:
         >>> grok = Grok("%{IP:[client][ip]} %{NUMBER:bytes:int}", load_patterns())
@@ -266,15 +292,16 @@ class Grok:
         {'client': {'ip': '10.0.0.1'}, 'bytes': 512}
     """
 
-    def __init__(self, pattern, patterns):
+    def __init__(self, pattern, patterns, deadline=None):
         self.pattern = pattern
         self._patterns = patterns
-        self._regex, names = _compile(pattern, patterns)
+        self._regex, names = _compile(pattern, patterns, deadline)
         self._captures = []
         for name, index, first in _capture_order(names):
             field, datatype = _field_and_type(name)
             self._captures.append((f'g{index}', field, datatype if first else None))
-        self._prefixes = None
+        self._cuts = None
+        self._prefixes = {}
 
     @property
     def fields(self):
@@ -315,39 +342,53 @@ class Grok:
             del event['message']
         return event
 
-    def explain_failure(self, text, timeout=None):
+    def _prefix(self, cut, deadline):
+        if cut not in self._prefixes:
+            try:
+                self._prefixes[cut] = _compile(self.pattern[:cut], self._patterns, deadline)[0]
+            except GrokError:
+                self._prefixes[cut] = None
+        return self._prefixes[cut]
+
+    def explain_failure(self, text, timeout=None, deadline=None):
         """Describe how far the pattern got before it stopped matching.
+
+        Binary-searches the top-level cut points, compiling only the prefixes it
+        visits, so long patterns cost a handful of compiles rather than one per cut.
 
         Returns:
             A sentence naming the last part that matched and the part that did
             not, or None if the pattern can't be split into parts.
 
+        Raises:
+            TimeoutError: If a search takes longer than ``timeout`` seconds or
+                ``deadline`` passes while compiling prefixes.
+
         Example:
             >>> Grok("%{IP:ip} %{WORD:verb} %{INT:status}", load_patterns()).explain_failure("1.2.3.4 GET ok")
             "Matched up to '%{IP:ip} %{WORD:verb} ', then '%{INT:status}' did not match 'ok'"
         """
-        if self._prefixes is None:
-            self._prefixes = []
-            for cut in _cut_points(self.pattern):
-                try:
-                    self._prefixes.append((cut, _compile(self.pattern[:cut], self._patterns)[0]))
-                except GrokError:
-                    pass
-        if not self._prefixes:
-            return None
-        low, high = 0, len(self._prefixes)
+        if self._cuts is None:
+            self._cuts = _cut_points(self.pattern)
+        cuts = list(self._cuts)
+        low, high = 0, len(cuts)
         while low < high:
             middle = (low + high) // 2
-            if self._prefixes[middle][1].search(text, timeout=timeout):
+            prefix = self._prefix(cuts[middle], deadline)
+            if prefix is None:
+                del cuts[middle]
+                high -= 1
+            elif prefix.search(text, timeout=timeout):
                 low = middle + 1
             else:
                 high = middle
-        cuts = [cut for cut, _ in self._prefixes]
+        if not cuts:
+            return None
         next_cut = cuts[low] if low < len(cuts) else len(self.pattern)
         if low == 0:
             return f"{_quote(self.pattern[:next_cut])} was not found anywhere in the input"
         cut = cuts[low - 1]
-        end = self._prefixes[low - 1][1].search(text, timeout=timeout).end()
+        end = self._prefixes[cut].search(text, timeout=timeout).end()
         matched = self.pattern[:cut]
         matched = matched if len(matched) <= 40 else '…' + matched[-39:]
         rest = text[end:]

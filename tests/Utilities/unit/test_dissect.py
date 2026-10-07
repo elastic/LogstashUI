@@ -1,6 +1,9 @@
+import time
+
 import pytest
 
-from Utilities.dissect import Dissector, DissectError, DissectFailure, looks_like_grok
+from Utilities import views
+from Utilities.dissect import Dissector, DissectError, DissectFailure, looks_like_grok, too_long_int
 from Utilities.views import parse_convert_datatype, simulate_dissect, simulate_grok, split_sample_lines
 
 
@@ -98,6 +101,8 @@ class TestDissector:
         ("T16 %{a} %{b->}", "T16 x y   ", None, {"a": "x", "b": "y   "}),
         ("T18 %{&k}=%{*k}", "T18 value=key", None, {"*k": "key"}),
         ("T19 %{a->}, %{b}", "T19 x, , , y", None, {"a": "x", "b": "y"}),
+        ("%{tags} %{a}", "hello world", {"missing": "int"},
+         {"tags": ["hello", "_dataconversionnullvalue_missing_int"], "a": "world"}),
     ])
     def test_verified_against_logstash(self, pattern, text, convert, expected):
         """Outputs captured from a real Logstash run."""
@@ -132,6 +137,16 @@ class TestDissector:
     ])
     def test_conversion_accepts_big_decimal_formats(self, value, datatype, expected):
         assert Dissector("%{a}", convert_datatype={"a": datatype}).match(value)["a"] == expected
+
+    @pytest.mark.parametrize("value,digits", [("1e4300", 4301), ("1e999999", 1000000), (".5e5000", 5000), ("9" * 5000, 5000)])
+    def test_huge_int_conversion_is_a_placeholder(self, value, digits):
+        start = time.monotonic()
+        result = Dissector("%{a}", convert_datatype={"a": "int"}).match(value)
+        assert result == {"a": too_long_int(digits)}
+        assert time.monotonic() - start < 1
+
+    def test_largest_displayable_int_is_converted(self):
+        assert Dissector("%{a}", convert_datatype={"a": "int"}).match("1e4299")["a"] == 10 ** 4299
 
     @pytest.mark.parametrize("value", ["nan", "inf", "1_000", " 3", "0x10"])
     def test_conversion_rejects_what_big_decimal_rejects(self, value):
@@ -252,6 +267,24 @@ class TestSimulateDissectView:
             request_factory, sample_data="a\nb", dissect_pattern="%{msg}", multiline_mode="true"
         ).content.decode()
         assert "1 matched" in content
+
+    def test_multiline_crlf_is_normalized(self, request_factory):
+        content = self._post(
+            request_factory, sample_data="a b\r\nc d", dissect_pattern="%{x} %{y}\r\n",
+            convert_datatype="x => int\r\n", multiline_mode="true",
+        ).content.decode()
+        assert "1 matched" in content and "&quot;y&quot;: &quot;b\\nc d&quot;" in content
+        assert "\\r" not in content and "\r" not in content
+
+    def test_huge_int_returns_placeholder(self, request_factory):
+        response = self._post(request_factory, sample_data="1e999999", dissect_pattern="%{a}", convert_datatype="a => int")
+        assert response.status_code == 200
+        assert "integer with 1000000 digits, too large to display" in response.content.decode()
+
+    def test_request_time_limit_skips_lines(self, request_factory, monkeypatch):
+        monkeypatch.setattr(views, 'REQUEST_TIMEOUT', 0)
+        content = self._post(request_factory, sample_data="a\nb", dissect_pattern="%{a}").content.decode()
+        assert content.count("Skipped: this simulation hit the 0 second limit.") == 2
 
     def test_escapes_html(self, request_factory):
         content = self._post(request_factory, sample_data="<script>x</script>", dissect_pattern="%{m}").content.decode()

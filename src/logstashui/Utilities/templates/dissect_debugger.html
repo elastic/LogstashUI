@@ -16,7 +16,7 @@
         <p class="text-base-content/60 mt-2">Test and debug your Dissect patterns with sample data</p>
     </div>
 
-    <form hx-post="{% url 'simulate_dissect' %}" hx-target="#outputArea" hx-indicator="#simulateSpinner">
+    <form hx-post="{% url 'simulate_dissect' %}" hx-target="#outputArea" hx-indicator="#simulateSpinner" hx-sync="this:drop">
         {% csrf_token %}
         <div class="grid grid-cols-2 gap-4 mb-4">
             <div class="flex flex-col">
@@ -71,7 +71,7 @@
 
         <div class="mb-6 flex items-center gap-3">
             <button type="submit" class="btn btn-primary" title="Ctrl+Enter">
-                <span id="simulateSpinner" class="loading loading-spinner loading-sm htmx-indicator hidden"></span>
+                <span id="simulateSpinner" class="loading loading-spinner loading-sm htmx-indicator"></span>
                 Simulate
             </button>
             <span class="text-xs text-base-content/40">Ctrl+Enter</span>
