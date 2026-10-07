@@ -34,7 +34,7 @@ from .paths import (
     resolve_logstash_dir,
 )
 
-__PREFERRED_LS_AGENT_VERSION__ = "0.5.3"
+__PREFERRED_LS_AGENT_VERSION__ = "0.5.4-dev0"
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
