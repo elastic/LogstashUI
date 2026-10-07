@@ -32,7 +32,7 @@ _CONVERTERS = {"int": lambda value: int(Decimal(value)), "float": lambda value: 
 _ORDINALS = {"skip": 0, "normal": 1, "append": 100, "indirect": 1000}
 _GROK_REFERENCE_RE = re.compile(r"%\{[A-Z][A-Z0-9_]*:[^}]*\}")
 _REGEX_ESCAPE_RE = re.compile(r"\\[\[\]().sdwSDW]")
-_MISSING = object()
+MISSING = object()
 
 
 def _quote(text):
@@ -111,22 +111,22 @@ def _parse_field(field_id, raw, previous):
     return _Field(field_id, raw, name, kind, ordinal, previous, next_greedy="->" in suffix)
 
 
-def _path(name):
+def field_path(name):
     if _FIELD_REFERENCE_RE.match(name):
         return re.findall(r"\[([^\[\]]+)\]", name)
     return [name]
 
 
-def _get_field(target, name):
-    for part in _path(name):
+def get_field(target, name):
+    for part in field_path(name):
         if not isinstance(target, dict) or part not in target:
-            return _MISSING
+            return MISSING
         target = target[part]
     return target
 
 
-def _set_field(target, name, value):
-    parts = _path(name)
+def set_field(target, name, value):
+    parts = field_path(name)
     for part in parts[:-1]:
         if not isinstance(target.get(part), dict):
             target[part] = {}
@@ -237,26 +237,26 @@ class Dissector:
         for field in self._saveable:
             value = values[field.id]
             if field.kind == "normal":
-                _set_field(result, field.name, value)
+                set_field(result, field.name, value)
             elif field.kind == "append":
-                existing = _get_field(result, field.name)
-                if existing is _MISSING:
-                    _set_field(result, field.name, value)
+                existing = get_field(result, field.name)
+                if existing is MISSING:
+                    set_field(result, field.name, value)
                 else:
-                    _set_field(result, field.name, f"{existing}{field.previous or ' '}{value}")
+                    set_field(result, field.name, f"{existing}{field.previous or ' '}{value}")
             else:
-                key = _get_field(result, field.name)
-                key = self._other_value_by_name(field.name, values, field.id) if key is _MISSING else str(key)
+                key = get_field(result, field.name)
+                key = self._other_value_by_name(field.name, values, field.id) if key is MISSING else str(key)
                 if key:
-                    _set_field(result, key, value)
+                    set_field(result, key, value)
 
         tags = []
         for name, datatype in self.convert_datatype.items():
-            value = _get_field(result, name)
-            if value is _MISSING:
+            value = get_field(result, name)
+            if value is MISSING:
                 tags.append(f"_dataconversionnullvalue_{name}_{datatype}")
             elif _BIG_DECIMAL_RE.fullmatch(str(value)):
-                _set_field(result, name, _CONVERTERS[datatype.lower()](str(value)))
+                set_field(result, name, _CONVERTERS[datatype.lower()](str(value)))
             else:
                 tags.append(f"_dataconversionuncoercible_{name}_{datatype}")
         if tags:

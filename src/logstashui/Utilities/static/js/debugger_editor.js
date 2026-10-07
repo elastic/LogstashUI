@@ -28,7 +28,7 @@
     CodeMirror.defineMode('dissect', function () {
         return {
             token: function (stream) {
-                if (stream.match(/^%\{[^}]*\}/)) return 'dissect-field';
+                if (stream.match(/^%\{[^}]*\}/)) return 'pattern-ref';
                 const style = whitespaceToken(stream);
                 if (style) return style;
                 if (!stream.eatWhile(/[^ %]/)) stream.next();
@@ -36,6 +36,29 @@
             }
         };
     });
+
+    CodeMirror.defineMode('grok', function () {
+        return {
+            token: function (stream) {
+                if (stream.match(/^%\{[^}]*\}/) || stream.match(/^\(\?<(?![=!])[^>]*>/)) return 'pattern-ref';
+                if (stream.match(/^\\./)) return 'regex-escape';
+                const style = whitespaceToken(stream);
+                if (style) return style;
+                if (!stream.eatWhile(/[^ %(\\]/)) stream.next();
+                return null;
+            }
+        };
+    });
+
+    // Ctrl+Enter (Cmd+Enter on macOS) anywhere on the page runs the simulation. Capture phase so
+    // CodeMirror sees the event as handled and does not insert a newline.
+    document.addEventListener('keydown', function (event) {
+        if (event.key !== 'Enter' || !(event.ctrlKey || event.metaKey)) return;
+        const form = document.querySelector('.debugger-editor')?.closest('form');
+        if (!form) return;
+        event.preventDefault();
+        form.requestSubmit();
+    }, true);
 
     /**
      * Replace a textarea with a CodeMirror editor that keeps the textarea in sync,

@@ -12,8 +12,6 @@ from Utilities.views import (
     generate_results_html
 )
 import json
-import os
-from django.conf import settings
 
 
 @pytest.fixture
@@ -32,12 +30,6 @@ def custom_patterns():
     """Custom grok pattern definitions for testing"""
     return r"""CUSTOM_EMAIL [A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}
 CUSTOM_DATE \d{4}-\d{2}-\d{2}"""
-
-
-@pytest.fixture
-def grok_patterns_file_path():
-    """Path to the grok patterns file shipped with the Utilities app."""
-    return os.path.join(settings.BASE_DIR, 'Utilities', 'data', 'grok-patterns.txt')
 
 
 @pytest.mark.django_db
@@ -61,7 +53,7 @@ class TestGrokDebuggerView:
 class TestGetGrokPatternsView:
     """Tests for get_grok_patterns view"""
     
-    def test_get_grok_patterns_success(self, request_factory, grok_patterns_file_path):
+    def test_get_grok_patterns_success(self, request_factory):
         """Test successful loading of grok patterns"""
         request = request_factory.get('/Utilities/GrokDebugger/patterns/')
         response = get_grok_patterns(request)
@@ -87,9 +79,12 @@ class TestGetGrokPatternsView:
         for pattern in common_patterns:
             assert pattern in patterns, f"Pattern {pattern} should be in grok patterns"
     
-    def test_get_grok_patterns_file_exists(self, grok_patterns_file_path):
-        """Test that the grok patterns file exists"""
-        assert os.path.exists(grok_patterns_file_path), "Grok patterns file should exist"
+    def test_get_grok_patterns_by_ecs_compatibility(self, request_factory):
+        """ECS and legacy pattern sets define the same names with different fields"""
+        ecs = json.loads(get_grok_patterns(request_factory.get('/', {'ecs_compatibility': 'v8'})).content)['patterns']
+        legacy = json.loads(get_grok_patterns(request_factory.get('/', {'ecs_compatibility': 'disabled'})).content)['patterns']
+        assert '[source][address]' in ecs['HTTPD_COMMONLOG']
+        assert 'clientip' in legacy['HTTPD_COMMONLOG']
 
 
 @pytest.mark.django_db
@@ -177,7 +172,7 @@ class TestSimulateGrokView:
         assert 'test@example.com' in content
     
     def test_simulate_grok_dot_notation_fields(self, request_factory):
-        """Test field names with dots create nested dictionaries"""
+        """Dotted field names stay flat; only [a][b] references nest (as in Logstash)"""
         request = request_factory.post('/Utilities/GrokDebugger/simulate/', {
             'sample_data': '192.168.1.1',
             'grok_pattern': '%{IP:client.ip.address}',
@@ -189,9 +184,7 @@ class TestSimulateGrokView:
         assert response.status_code == 200
         
         content = response.content.decode('utf-8')
-        # Should show nested structure
-        assert 'client' in content
-        assert '192.168.1.1' in content
+        assert '&quot;client.ip.address&quot;: &quot;192.168.1.1&quot;' in content
     
     def test_simulate_grok_pattern_compilation_error(self, request_factory):
         """Test invalid grok pattern syntax"""
@@ -439,47 +432,17 @@ class TestGrokDebuggerIntegration:
 class TestGetGrokPatternsErrors:
     """Test error-handling branches in get_grok_patterns"""
 
-    def test_get_grok_patterns_file_missing_returns_500(self, request_factory):
-        """When the grok-patterns file does not exist, the view returns 500 with an error key"""
+    def test_get_grok_patterns_load_error_returns_500(self, request_factory):
+        """When the bundled patterns can't be read, the view returns 500 with an error key"""
         from unittest.mock import patch
         request = request_factory.get('/Utilities/GrokDebugger/patterns/')
 
-        with patch('Utilities.views.open', side_effect=FileNotFoundError("no such file")):
+        with patch('Utilities.views.load_patterns', side_effect=FileNotFoundError("no such file")):
             response = get_grok_patterns(request)
 
         assert response.status_code == 500
         data = json.loads(response.content)
         assert 'error' in data
-
-    def test_get_grok_patterns_skips_comment_and_blank_lines(self, request_factory):
-        """Lines starting with # or blank lines are not included as patterns"""
-        from unittest.mock import patch, mock_open
-        fake_content = "# This is a comment\n\nWORD \\b\\w+\\b\n"
-        request = request_factory.get('/Utilities/GrokDebugger/patterns/')
-
-        with patch('builtins.open', mock_open(read_data=fake_content)):
-            response = get_grok_patterns(request)
-
-        data = json.loads(response.content)
-        patterns = data['patterns']
-        # Only WORD should be loaded; the comment and blank line must be absent
-        assert 'WORD' in patterns
-        for key in patterns:
-            assert not key.startswith('#')
-
-    def test_get_grok_patterns_skips_lines_without_space(self, request_factory):
-        """Lines with no whitespace (can't be split into name + definition) are silently skipped"""
-        from unittest.mock import patch, mock_open
-        fake_content = "BADLINE\nGOOD pattern_def\n"
-        request = request_factory.get('/Utilities/GrokDebugger/patterns/')
-
-        with patch('builtins.open', mock_open(read_data=fake_content)):
-            response = get_grok_patterns(request)
-
-        data = json.loads(response.content)
-        patterns = data['patterns']
-        assert 'GOOD' in patterns
-        assert 'BADLINE' not in patterns
 
 
 @pytest.mark.django_db
