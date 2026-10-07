@@ -44,6 +44,7 @@ Configure polling, traps, and discovery through a web interface.
 - **[Compatibility](/docs/docs/logstashui/compatibility.md)** - Logstash version compatibility and requirements
 - **[Configuration](/docs/docs/logstashui/configuration/index.md)** - Configuration options and settings for LogstashUI
 - **[Database](/docs/docs/logstashui/database/index.md)** - SQLite, PostgreSQL, MySQL/MariaDB, and migration
+- **[Utilities](/docs/docs/logstashui/utilities/index.md)** - Grok and Dissect debuggers for testing patterns against sample logs
 - **[Kubernetes](/docs/docs/logstashui/kubernetes/index.md)** - StatefulSet, PVC, Ingress, Envoy Gateway, CloudNativePG
 - **[SNMP Monitoring](/docs/docs/logstashui/SNMP/index.md)** - Network monitoring with SNMP polling, traps, and discovery
 - **[General](/docs/docs/logstashui/general/index.md)** - Build, update, and deployment guides

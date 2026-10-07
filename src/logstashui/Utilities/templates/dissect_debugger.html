@@ -12,11 +12,11 @@
 <link rel="stylesheet" href="{% static 'css/debugger_editor.css' %}">
 <div class="container mx-auto max-w-7xl">
     <div class="mb-6">
-        <h1 class="text-3xl font-bold text-base-content">Grok Debugger</h1>
-        <p class="text-base-content/60 mt-2">Test and debug your Grok patterns with sample data</p>
+        <h1 class="text-3xl font-bold text-base-content">Dissect Debugger</h1>
+        <p class="text-base-content/60 mt-2">Test and debug your Dissect patterns with sample data</p>
     </div>
 
-    <form hx-post="{% url 'simulate_grok' %}" hx-target="#outputArea" hx-indicator="#simulateSpinner" hx-sync="this:drop">
+    <form hx-post="{% url 'simulate_dissect' %}" hx-target="#outputArea" hx-indicator="#simulateSpinner" hx-sync="this:drop">
         {% csrf_token %}
         <div class="grid grid-cols-2 gap-4 mb-4">
             <div class="flex flex-col">
@@ -36,12 +36,12 @@
             </div>
 
             <div class="flex flex-col">
-                <label for="grokPatternInput" class="text-sm font-semibold text-base-content mb-2">Grok Pattern</label>
+                <label for="dissectPatternInput" class="text-sm font-semibold text-base-content mb-2">Dissect Pattern</label>
                 <div class="debugger-editor">
                     <textarea
-                        id="grokPatternInput"
-                        name="grok_pattern"
-                        placeholder="Enter one Grok pattern per line (e.g., %{IP:[client][ip]} %{WORD:verb}). Type %{ to search patterns."></textarea>
+                        id="dissectPatternInput"
+                        name="dissect_pattern"
+                        placeholder="Enter one Dissect pattern per line (e.g., %{clientip} %{} %{user} [%{timestamp}])"></textarea>
                 </div>
             </div>
         </div>
@@ -52,25 +52,18 @@
                     Options
                 </summary>
                 <div class="collapse-content">
-                    <label for="ecsCompatibilityInput" class="text-xs font-semibold text-base-content block mb-1">ecs_compatibility</label>
-                    <p class="text-xs text-base-content/60 mb-2">Chooses the built-in pattern set. Logstash 8 and later default to v8 (ECS field names); disabled uses the legacy names like clientip and verb.</p>
-                    <select id="ecsCompatibilityInput" name="ecs_compatibility" class="select select-sm bg-base-300 mb-4">
-                        <option value="v8" selected>v8 (default)</option>
-                        <option value="v1">v1</option>
-                        <option value="disabled">disabled (legacy patterns)</option>
-                    </select>
-
-                    <label for="customPatternsInput" class="text-xs font-semibold text-base-content block mb-1">Custom patterns</label>
-                    <p class="text-xs text-base-content/60 mb-2">Same format as a patterns_dir file: one <code class="font-mono">NAME regex</code> per line. These override built-in patterns with the same name.</p>
-                    <div class="debugger-editor">
-                        <textarea
-                            id="customPatternsInput"
-                            name="custom_patterns"
-                            placeholder="POSTFIX_QUEUEID [0-9A-F]{10,11}"></textarea>
-                    </div>
+                    <label for="convertDatatypeInput" class="text-xs font-semibold text-base-content block mb-1">convert_datatype</label>
+                    <p class="text-xs text-base-content/60 mb-2">One conversion per line, int or float. For example: <code class="font-mono">bytes => int</code></p>
+                    <textarea
+                        id="convertDatatypeInput"
+                        name="convert_datatype"
+                        class="w-full bg-base-300 rounded-lg border border-base-300 text-base-content p-3 font-mono text-sm resize-none focus:outline-none"
+                        placeholder="field => int"
+                        rows="3"
+                        spellcheck="false"></textarea>
                     <div class="bg-info/10 border border-info/30 rounded p-2 mt-3 text-xs font-mono text-base-content/80">
-                        %{PATTERN} match only &nbsp; %{PATTERN:field} capture &nbsp; %{PATTERN:[a][b]} nested &nbsp; %{NUMBER:n:int} or :float convert<br>
-                        (?&lt;field&gt;regex) inline capture &nbsp; %{NAME:field=regex} define and use a pattern inline
+                        %{field} capture &nbsp; %{} or %{?name} skip &nbsp; %{field->} skip repeated delimiters<br>
+                        %{+field} or %{+field/2} append (joined with the text before each piece) &nbsp; %{?key}=%{&amp;key} key/value &nbsp; %{[a][b]} nested
                     </div>
                 </div>
             </details>
@@ -95,5 +88,8 @@
 
 <script src="{% static 'js/codemirror.min.js' %}"></script>
 <script src="{% static 'js/debugger_editor.js' %}"></script>
-<script src="{% static 'js/grok_debugger.js' %}" data-patterns-url="{% url 'get_grok_patterns' %}"></script>
+<script>
+    initDebuggerEditor(document.getElementById('sampleDataInput'));
+    initDebuggerEditor(document.getElementById('dissectPatternInput'), { mode: 'dissect' });
+</script>
 {% endblock %}
