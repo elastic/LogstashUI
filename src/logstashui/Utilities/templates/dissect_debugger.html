@@ -5,8 +5,11 @@
 -->
 
 {% extends 'base.html' %}
+{% load static %}
 
 {% block content %}
+<link rel="stylesheet" href="{% static 'css/codemirror.min.css' %}">
+<link rel="stylesheet" href="{% static 'css/debugger_editor.css' %}">
 <div class="container mx-auto max-w-7xl">
     <div class="mb-6">
         <h1 class="text-3xl font-bold text-base-content">Dissect Debugger</h1>
@@ -24,24 +27,22 @@
                         <span class="text-xs text-base-content/70">Multiline Input</span>
                     </label>
                 </div>
-                <textarea
-                    id="sampleDataInput"
-                    name="sample_data"
-                    class="flex-1 bg-base-200 rounded-lg border border-base-300 text-base-content p-3 font-mono text-sm resize-none focus:outline-none overflow-auto"
-                    placeholder="Enter your sample log data here. Each line is tested separately unless Multiline Input is checked."
-                    rows="8"
-                    spellcheck="false"></textarea>
+                <div class="debugger-editor">
+                    <textarea
+                        id="sampleDataInput"
+                        name="sample_data"
+                        placeholder="Enter your sample log data here. Each line is tested separately unless Multiline Input is checked."></textarea>
+                </div>
             </div>
 
             <div class="flex flex-col">
                 <label for="dissectPatternInput" class="text-sm font-semibold text-base-content mb-2">Dissect Pattern</label>
-                <textarea
-                    id="dissectPatternInput"
-                    name="dissect_pattern"
-                    class="flex-1 bg-base-200 rounded-lg border border-base-300 text-base-content p-3 font-mono text-sm resize-none focus:outline-none overflow-auto"
-                    placeholder="Enter one Dissect pattern per line (e.g., %{clientip} %{} %{user} [%{timestamp}])"
-                    rows="8"
-                    spellcheck="false"></textarea>
+                <div class="debugger-editor">
+                    <textarea
+                        id="dissectPatternInput"
+                        name="dissect_pattern"
+                        placeholder="Enter one Dissect pattern per line (e.g., %{clientip} %{} %{user} [%{timestamp}])"></textarea>
+                </div>
             </div>
         </div>
 
@@ -90,4 +91,11 @@
         </div>
     </div>
 </div>
+
+<script src="{% static 'js/codemirror.min.js' %}"></script>
+<script src="{% static 'js/debugger_editor.js' %}"></script>
+<script>
+    initDebuggerEditor(document.getElementById('sampleDataInput'));
+    initDebuggerEditor(document.getElementById('dissectPatternInput'), { mode: 'dissect' });
+</script>
 {% endblock %}

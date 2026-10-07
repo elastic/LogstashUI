@@ -133,3 +133,5 @@ class TestSimulateDissectView:
         response = authenticated_client.get('/Utilities/DissectDebugger/')
         assert response.status_code == 200
         assert b"Dissect Debugger" in response.content
+        assert b"codemirror.min.js" in response.content
+        assert b"debugger_editor.js" in response.content
