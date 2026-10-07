@@ -1,13 +1,14 @@
-"""Pure-Python implementation of the Logstash dissect filter syntax.
+"""Pure-Python port of the Logstash dissect filter.
 
 Lets the Dissect Debugger preview ``logstash-filter-dissect`` results without
-a running Logstash. Supported syntax:
+a running Logstash. It follows the plugin's Java implementation
+(``org.logstash.dissect``), including its quirks. Supported syntax:
 
 * ``%{field}`` capture up to the next delimiter (the last field takes the rest)
 * ``%{}`` / ``%{?name}`` skip a value
 * ``%{field->}`` skip repeated delimiters after the field (right padding)
 * ``%{+field}`` / ``%{+field/N}`` append values, optionally ordered by ``N``
-* ``%{*key}`` or ``%{?key}`` with ``%{&key}`` use one value as another's field name
+* ``%{?key}`` (or any field named ``key``) with ``%{&key}`` use one value as another's field name
 * ``[a][b]`` field references produce nested objects
 
 Example:
@@ -17,12 +18,44 @@ Example:
 
 import re
 from dataclasses import dataclass
+from decimal import Decimal
 
-_FIELD_RE = re.compile(r"%\{([^}]*)\}")
+_DELIMITER_FIELD_RE = re.compile(r"(.*?)%\{([^}]*?)}", re.DOTALL)
+_FINAL_DELIMITER_RE = re.compile(r"[^}]+$")
+_SUFFIX = r"(/\d{1,2}|->|/\d{1,2}->|->/\d{1,2})"
+_SUFFIX_ONLY_RE = re.compile(_SUFFIX + "?")
+_SUFFIX_RE = re.compile(r"(.+?)" + _SUFFIX + "?")
 _FIELD_REFERENCE_RE = re.compile(r"^(\[[^\[\]]+\])+$")
-_ORDINAL_RE = re.compile(r"^(.*)/(\d+)$")
-_PREFIX_KINDS = {"+": "append", "?": "key", "*": "key", "&": "value"}
-_CONVERTERS = {"int": int, "float": float}
+# The number formats java.math.BigDecimal accepts.
+_BIG_DECIMAL_RE = re.compile(r"[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?")
+_CONVERTERS = {"int": lambda value: int(Decimal(value)), "float": lambda value: float(Decimal(value))}
+_ORDINALS = {"skip": 0, "normal": 1, "append": 100, "indirect": 1000}
+_GROK_REFERENCE_RE = re.compile(r"%\{[A-Z][A-Z0-9_]*:[^}]*\}")
+_REGEX_ESCAPE_RE = re.compile(r"\\[\[\]().sdwSDW]")
+_MISSING = object()
+
+
+def _quote(text):
+    return "'" + text.replace("\t", "\\t").replace("\n", "\\n").replace("\r", "\\r") + "'"
+
+
+def looks_like_grok(pattern):
+    """Guess whether a pattern was written for grok rather than dissect.
+
+    Args:
+        pattern: A pattern entered in the Dissect Debugger.
+
+    Returns:
+        True if it contains a grok reference like ``%{WORD:name}`` or a regex
+        escape like ``\\[`` or ``\\s``.
+
+    Example:
+        >>> looks_like_grok("%{DATA:program}\\\\[%{POSINT:pid}\\\\]")
+        True
+        >>> looks_like_grok("%{IP} [%{ts}]")
+        False
+    """
+    return bool(_GROK_REFERENCE_RE.search(pattern) or _REGEX_ESCAPE_RE.search(pattern))
 
 
 class DissectError(ValueError):
@@ -35,44 +68,65 @@ class DissectFailure(Exception):
 
 @dataclass
 class _Field:
+    id: int
     raw: str
     name: str
-    kind: str  # normal, skip, append, key, value
-    right_pad: bool
+    kind: str  # skip, normal, append, indirect
     ordinal: int
-    delimiter: str = ""
+    previous: str
+    next: str = None
+    previous_greedy: bool = False
+    next_greedy: bool = False
 
 
-def _parse_field(raw, position):
-    spec = raw
-    right_pad = spec.endswith("->")
-    if right_pad:
-        spec = spec[:-2]
+def _name_suffix(spec):
+    if _SUFFIX_ONLY_RE.fullmatch(spec):
+        return "", spec
+    match = _SUFFIX_RE.fullmatch(spec)
+    if match:
+        return match.group(1), match.group(2) or ""
+    return spec, ""
 
-    kind = "normal"
-    if spec[:1] in _PREFIX_KINDS:
-        kind = _PREFIX_KINDS[spec[0]]
-        spec = spec[1:]
 
-    ordinal = position
-    if kind == "append":
-        ordinal_match = _ORDINAL_RE.match(spec)
-        if ordinal_match:
-            spec, ordinal = ordinal_match.group(1), int(ordinal_match.group(2))
-
-    if not spec:
-        if kind not in ("normal", "key"):
+def _parse_field(field_id, raw, previous):
+    if not raw or raw[0] == "?":
+        kind, (name, suffix) = "skip", _name_suffix(raw[1:])
+    elif raw.startswith(("+&", "&+")):
+        raise DissectError(f"%{{{raw}}} cannot combine the append (+) and indirect (&) prefixes")
+    elif raw[0] in "+&":
+        if len(raw) == 1:
+            raise DissectError(f"%{{{raw}}} is a prefix without a field name")
+        kind = "append" if raw[0] == "+" else "indirect"
+        name, suffix = _name_suffix(raw[1:])
+        if not name:
             raise DissectError(f"%{{{raw}}} is missing a field name")
-        kind = "skip"
+    else:
+        kind, (name, suffix) = "normal", _name_suffix(raw)
 
-    return _Field(raw=raw, name=spec, kind=kind, right_pad=right_pad, ordinal=ordinal)
+    ordinal = _ORDINALS[kind]
+    if kind == "append":
+        digits = re.search(r"\d+", suffix)
+        if digits:
+            ordinal += int(digits.group())
+    return _Field(field_id, raw, name, kind, ordinal, previous, next_greedy="->" in suffix)
+
+
+def _path(name):
+    if _FIELD_REFERENCE_RE.match(name):
+        return re.findall(r"\[([^\[\]]+)\]", name)
+    return [name]
+
+
+def _get_field(target, name):
+    for part in _path(name):
+        if not isinstance(target, dict) or part not in target:
+            return _MISSING
+        target = target[part]
+    return target
 
 
 def _set_field(target, name, value):
-    if _FIELD_REFERENCE_RE.match(name):
-        parts = re.findall(r"\[([^\[\]]+)\]", name)
-    else:
-        parts = [name]
+    parts = _path(name)
     for part in parts[:-1]:
         if not isinstance(target.get(part), dict):
             target[part] = {}
@@ -85,47 +139,77 @@ class Dissector:
 
     Args:
         pattern: Dissect mapping, e.g. ``"%{clientip} - %{user} [%{ts}]"``.
-        append_separator: String placed between appended values (Logstash default ``" "``).
         convert_datatype: Optional ``{field: "int" | "float"}`` conversions.
 
     Raises:
         DissectError: If the pattern or conversions are invalid.
 
     Example:
-        >>> Dissector("%{*k}=%{&k}").match("user=alice")
+        >>> Dissector("%{?k}=%{&k}").match("user=alice")
         {'user': 'alice'}
     """
 
-    def __init__(self, pattern, append_separator=" ", convert_datatype=None):
-        self.append_separator = append_separator
+    def __init__(self, pattern, convert_datatype=None):
         self.convert_datatype = dict(convert_datatype or {})
         for field_name, datatype in self.convert_datatype.items():
-            if datatype not in _CONVERTERS:
+            if datatype.lower() not in _CONVERTERS:
                 raise DissectError(f"Unsupported datatype '{datatype}' for '{field_name}' (use int or float)")
 
-        matches = list(_FIELD_RE.finditer(pattern))
-        if not matches:
+        self._fields = []
+        for match in _DELIMITER_FIELD_RE.finditer(pattern):
+            field = _parse_field(len(self._fields), match.group(2), match.group(1))
+            if self._fields:
+                self._fields[-1].next = field.previous
+                field.previous_greedy = self._fields[-1].next_greedy
+            self._fields.append(field)
+        if not self._fields:
             raise DissectError("Pattern contains no %{} fields")
 
-        self._prefix = pattern[:matches[0].start()]
-        self._fields = []
-        for position, match in enumerate(matches):
-            field = _parse_field(match.group(1), position)
-            next_start = matches[position + 1].start() if position + 1 < len(matches) else len(pattern)
-            field.delimiter = pattern[match.end():next_start]
-            if not field.delimiter and position + 1 < len(matches):
-                raise DissectError(f"%{{{field.raw}}} must be followed by a delimiter before the next field")
-            self._fields.append(field)
+        final = _FINAL_DELIMITER_RE.search(pattern)
+        if final:
+            skip = _parse_field(len(self._fields), "?auto_added_skip", final.group())
+            self._fields[-1].next = skip.previous
+            skip.previous_greedy = self._fields[-1].next_greedy
+            self._fields.append(skip)
 
-        append_names = {f.name for f in self._fields if f.kind == "append"}
-        for field in self._fields:
-            if field.kind == "normal" and field.name in append_names:
-                field.kind = "append"
+        self._prefix_length = len(self._fields[0].previous)
+        self._saveable = sorted((f for f in self._fields if f.kind != "skip"), key=lambda f: f.ordinal)
 
-        key_names = {f.name for f in self._fields if f.kind == "key"}
+    def _capture(self, text):
+        left = 0
+        values = []
+        last = len(self._fields) - 1
         for field in self._fields:
-            if field.kind == "value" and field.name not in key_names:
-                raise DissectError(f"%{{&{field.name}}} has no matching %{{*{field.name}}} or %{{?{field.name}}} field")
+            if field.previous_greedy:
+                while field.previous and text.startswith(field.previous, left):
+                    left += len(field.previous)
+            elif left == 0 and self._prefix_length > 0:
+                if not text.startswith(field.previous):
+                    raise DissectFailure(f"Input does not start with {_quote(field.previous)}")
+                left = len(field.previous)
+            start = left
+
+            if field.id == last:
+                values.append(text[start:])
+                break
+            if not field.next:
+                raise DissectFailure(f"%{{{field.raw}}} has no delimiter before the next field, so it never matches")
+            position = text.find(field.next, left)
+            if position == -1:
+                raise DissectFailure(f"Delimiter {_quote(field.next)} after %{{{field.raw}}} was not found")
+            length = 0
+            # Logstash only advances when the delimiter is found past the first character.
+            if position > 0:
+                length = position - left
+                left = position + len(field.next)
+            values.append(text[start:start + length])
+        return values
+
+    def _other_value_by_name(self, name, values, field_id):
+        for field in self._fields:
+            if field.id != field_id and field.name == name:
+                return values[field.id]
+        return ""
 
     def match(self, text):
         """Dissect ``text`` into fields.
@@ -134,57 +218,47 @@ class Dissector:
             text: A single event message.
 
         Returns:
-            Dict of extracted fields, nested for ``[a][b]`` references.
+            Dict of extracted fields, nested for ``[a][b]`` references. Failed
+            ``convert_datatype`` conversions add ``_dataconversion*`` entries to
+            ``tags``, as Logstash does.
 
         Raises:
-            DissectFailure: If a delimiter cannot be found.
+            DissectFailure: If the input is empty or a delimiter cannot be found.
 
         Example:
-            >>> Dissector("%{a} %{+a/2} %{+a/1}").match("x y z")
-            {'a': 'x z y'}
+            >>> Dissector("%{+a/2} %{+a/1} %{+a/4} %{+a/3}").match("1 2 3 go")
+            {'a': '2 1 go 3'}
         """
-        if not text.startswith(self._prefix):
-            raise DissectFailure(f"Input does not start with {self._prefix!r}")
-
-        position = len(self._prefix)
-        captured = []
-        for field in self._fields:
-            if field.delimiter:
-                end = text.find(field.delimiter, position)
-                if end == -1:
-                    raise DissectFailure(f"Delimiter {field.delimiter!r} after %{{{field.raw}}} was not found")
-                value = text[position:end]
-                position = end + len(field.delimiter)
-                if field.right_pad:
-                    while text.startswith(field.delimiter, position):
-                        position += len(field.delimiter)
-            else:
-                value = text[position:]
-                position = len(text)
-            captured.append((field, value))
-
-        keys = {field.name: value for field, value in captured if field.kind == "key"}
-        appended = {}
-        flat = {}
-        for field, value in captured:
-            if field.kind == "normal":
-                flat[field.name] = value
-            elif field.kind == "append":
-                flat.setdefault(field.name, None)
-                appended.setdefault(field.name, []).append((field.ordinal, value))
-            elif field.kind == "value":
-                flat[keys[field.name]] = value
-        for name, parts in appended.items():
-            flat[name] = self.append_separator.join(value for _, value in sorted(parts, key=lambda p: p[0]))
-
-        for name, datatype in self.convert_datatype.items():
-            if name in flat:
-                try:
-                    flat[name] = _CONVERTERS[datatype](flat[name])
-                except ValueError:
-                    pass
+        if not text:
+            raise DissectFailure("Input is empty")
+        values = self._capture(text)
 
         result = {}
-        for name, value in flat.items():
-            _set_field(result, name, value)
+        for field in self._saveable:
+            value = values[field.id]
+            if field.kind == "normal":
+                _set_field(result, field.name, value)
+            elif field.kind == "append":
+                existing = _get_field(result, field.name)
+                if existing is _MISSING:
+                    _set_field(result, field.name, value)
+                else:
+                    _set_field(result, field.name, f"{existing}{field.previous or ' '}{value}")
+            else:
+                key = _get_field(result, field.name)
+                key = self._other_value_by_name(field.name, values, field.id) if key is _MISSING else str(key)
+                if key:
+                    _set_field(result, key, value)
+
+        tags = []
+        for name, datatype in self.convert_datatype.items():
+            value = _get_field(result, name)
+            if value is _MISSING:
+                tags.append(f"_dataconversionnullvalue_{name}_{datatype}")
+            elif _BIG_DECIMAL_RE.fullmatch(str(value)):
+                _set_field(result, name, _CONVERTERS[datatype.lower()](str(value)))
+            else:
+                tags.append(f"_dataconversionuncoercible_{name}_{datatype}")
+        if tags:
+            result["tags"] = tags
         return result

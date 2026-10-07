@@ -52,13 +52,6 @@
                     Options
                 </summary>
                 <div class="collapse-content">
-                    <label for="appendSeparatorInput" class="text-xs font-semibold text-base-content block mb-1">append_separator</label>
-                    <input
-                        id="appendSeparatorInput"
-                        name="append_separator"
-                        type="text"
-                        value=" "
-                        class="input input-sm font-mono w-48 mb-3" />
                     <label for="convertDatatypeInput" class="text-xs font-semibold text-base-content block mb-1">convert_datatype</label>
                     <p class="text-xs text-base-content/60 mb-2">One conversion per line, int or float. For example: <code class="font-mono">bytes => int</code></p>
                     <textarea
@@ -70,7 +63,7 @@
                         spellcheck="false"></textarea>
                     <div class="bg-info/10 border border-info/30 rounded p-2 mt-3 text-xs font-mono text-base-content/80">
                         %{field} capture &nbsp; %{} or %{?name} skip &nbsp; %{field->} skip repeated delimiters<br>
-                        %{+field} or %{+field/2} append &nbsp; %{*key}=%{&amp;key} or %{?key}=%{&amp;key} key/value &nbsp; %{[a][b]} nested
+                        %{+field} or %{+field/2} append (joined with the text before each piece) &nbsp; %{?key}=%{&amp;key} key/value &nbsp; %{[a][b]} nested
                     </div>
                 </div>
             </details>

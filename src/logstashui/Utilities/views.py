@@ -9,7 +9,7 @@ from django.http import JsonResponse, HttpResponse
 
 from pygrok import Grok
 
-from .dissect import Dissector, DissectError, DissectFailure
+from .dissect import Dissector, DissectError, DissectFailure, looks_like_grok
 
 import json
 import os
@@ -20,6 +20,37 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
+def split_sample_lines(sample_data, multiline_mode):
+    """Split debugger sample data into numbered events.
+
+    Args:
+        sample_data: Raw text from the Sample Data editor.
+        multiline_mode: If True, the whole text is a single event.
+
+    Returns:
+        List of ``(line_number, text)`` tuples. Blank lines are skipped but keep
+        their place in the numbering, so numbers match the editor's gutter.
+
+    Example:
+        >>> split_sample_lines("a\\n\\nb", False)
+        [(1, 'a'), (3, 'b')]
+    """
+    if multiline_mode:
+        return [(1, sample_data)] if sample_data.strip() else []
+    return [(number, line) for number, line in enumerate(sample_data.split('\n'), 1) if line.strip()]
+
+def message_html(message, css_class='text-base-content/60'):
+    """Render a one-line message for the results area."""
+    return f'<p class="text-sm italic {css_class}">{html.escape(message)}</p>'
+
+def missing_input_html(sample_lines, pattern_lines, pattern_label):
+    """Return a hint if sample data or patterns are missing, otherwise None."""
+    if not pattern_lines:
+        return message_html(f'Enter at least one {pattern_label} to simulate.')
+    if not sample_lines:
+        return message_html('Enter some sample data to simulate.')
+    return None
 
 def GrokDebugger(request):
     """Render the grok debugger page."""
@@ -111,13 +142,11 @@ def simulate_grok(request):
                     result[key] = value
             return result
         
-        # Parse inputs into lines
-        # In multiline mode, treat entire sample_data as a single input
-        if multiline_mode:
-            sample_lines = [sample_data] if sample_data.strip() else []
-        else:
-            sample_lines = [line for line in sample_data.split('\n') if line.strip()]
+        sample_lines = split_sample_lines(sample_data, multiline_mode)
         pattern_lines = [line for line in grok_pattern.split('\n') if line.strip()]
+        missing = missing_input_html(sample_lines, pattern_lines, 'grok pattern')
+        if missing:
+            return HttpResponse(missing)
         
         # Parse custom patterns into a dictionary
         custom_patterns_dict = {}
@@ -151,7 +180,7 @@ def simulate_grok(request):
                 logger.warning(f"Grok pattern compilation failed: {pattern[:100]}... - Error: {str(e)}")
                 pattern_result['pattern_error'] = str(e)
                 # Add entries for each sample line showing the pattern error
-                for line_idx, sample_line in enumerate(sample_lines, 1):
+                for line_idx, sample_line in sample_lines:
                     pattern_result['matches'].append({
                         'line_number': line_idx,
                         'sample': sample_line,
@@ -163,7 +192,7 @@ def simulate_grok(request):
                 continue
             
             # Test each sample data line against this pattern
-            for line_idx, sample_line in enumerate(sample_lines, 1):
+            for line_idx, sample_line in sample_lines:
                 try:
                     match = grok.match(sample_line)
                     
@@ -225,6 +254,9 @@ def parse_convert_datatype(text):
     Returns:
         Dict mapping field name to datatype.
 
+    Raises:
+        DissectError: If a line is malformed or names a type other than int or float.
+
     Example:
         >>> parse_convert_datatype("bytes => int\\nduration float")
         {'bytes': 'int', 'duration': 'float'}
@@ -233,16 +265,19 @@ def parse_convert_datatype(text):
     for line in text.splitlines():
         parts = line.replace('=>', ' ').split()
         if len(parts) == 2:
-            conversions[parts[0].strip('"\'')] = parts[1].strip('"\'')
+            field_name, datatype = parts[0].strip('"\''), parts[1].strip('"\'')
+            if datatype.lower() not in ('int', 'float'):
+                raise DissectError(f"Unsupported datatype '{datatype}' for '{field_name}' (use int or float)")
+            conversions[field_name] = datatype
         elif parts:
-            raise DissectError(f"Invalid convert_datatype line: {line.strip()}")
+            raise DissectError(f"Invalid line: {line.strip()}")
     return conversions
 
 def simulate_dissect(request):
     """Run dissect patterns against sample lines and return an HTML fragment.
 
     POST fields: ``sample_data``, ``dissect_pattern`` (one pattern per line),
-    ``append_separator``, ``convert_datatype``, ``multiline_mode``.
+    ``convert_datatype``, ``multiline_mode``.
 
     Note:
         Response is HTML for htmx, not JSON.
@@ -252,23 +287,31 @@ def simulate_dissect(request):
 
     sample_data = request.POST.get('sample_data', '')
     dissect_pattern = request.POST.get('dissect_pattern', '')
-    append_separator = request.POST.get('append_separator', ' ')
     convert_datatype = request.POST.get('convert_datatype', '')
     multiline_mode = request.POST.get('multiline_mode', 'false').lower() == 'true'
 
-    if multiline_mode:
-        sample_lines = [sample_data] if sample_data.strip() else []
-    else:
-        sample_lines = [line for line in sample_data.split('\n') if line.strip()]
+    sample_lines = split_sample_lines(sample_data, multiline_mode)
     pattern_lines = [line.rstrip('\r') for line in dissect_pattern.split('\n') if line.strip()]
+    missing = missing_input_html(sample_lines, pattern_lines, 'dissect pattern')
+    if missing:
+        return HttpResponse(missing)
+    try:
+        conversions = parse_convert_datatype(convert_datatype)
+    except DissectError as e:
+        return HttpResponse(message_html(f'Options > convert_datatype: {e}', 'text-error'))
 
     results = []
     for pattern_idx, pattern in enumerate(pattern_lines, 1):
         pattern_result = {'pattern': pattern, 'pattern_number': pattern_idx, 'matches': []}
+        if looks_like_grok(pattern):
+            pattern_result['warning'] = (
+                'This looks like a grok pattern. Dissect matches literal text only, '
+                'so grok pattern names and regex escapes are not supported.'
+            )
         try:
-            dissector = Dissector(pattern, append_separator, parse_convert_datatype(convert_datatype))
+            dissector = Dissector(pattern, conversions)
         except DissectError as e:
-            for line_idx, sample_line in enumerate(sample_lines, 1):
+            for line_idx, sample_line in sample_lines:
                 pattern_result['matches'].append({
                     'line_number': line_idx,
                     'sample': sample_line,
@@ -278,7 +321,7 @@ def simulate_dissect(request):
             results.append(pattern_result)
             continue
 
-        for line_idx, sample_line in enumerate(sample_lines, 1):
+        for line_idx, sample_line in sample_lines:
             match = {'line_number': line_idx, 'sample': sample_line}
             try:
                 match.update(success=True, parsed_data=dissector.match(sample_line.rstrip('\r')))
@@ -323,6 +366,10 @@ def generate_results_html(results):
                 <code class="text-sm font-mono text-base-content">{html.escape(pattern)}</code>
             </div>
         ''')
+        if result.get('warning'):
+            html_parts.append(
+                f'<div class="alert alert-warning py-2 mb-4 text-sm">{html.escape(result["warning"])}</div>'
+            )
         
         # Results for each sample line
         for match in matches:
@@ -340,7 +387,7 @@ def generate_results_html(results):
                         </svg>
                         <div class="flex-1">
                             <p class="text-xs font-semibold text-success mb-1">Line {line_num} - Match Found</p>
-                            <p class="text-xs text-base-content/70 mb-2 font-mono bg-base-200 p-2 rounded">{html.escape(sample)}</p>
+                            <p class="text-xs text-base-content/70 mb-2 font-mono bg-base-200 p-2 rounded whitespace-pre-wrap break-all">{html.escape(sample)}</p>
                             <div class="bg-base-200 rounded p-2">
                                 <p class="text-xs font-semibold mb-1">Extracted Fields:</p>
                                 <pre class="text-xs font-mono overflow-auto">{html.escape(json.dumps(parsed_data, indent=2))}</pre>
@@ -359,7 +406,7 @@ def generate_results_html(results):
                         </svg>
                         <div class="flex-1">
                             <p class="text-xs font-semibold text-error mb-1">Line {line_num} - No Match</p>
-                            <p class="text-xs text-base-content/70 mb-2 font-mono bg-base-200 p-2 rounded">{html.escape(sample)}</p>
+                            <p class="text-xs text-base-content/70 mb-2 font-mono bg-base-200 p-2 rounded whitespace-pre-wrap break-all">{html.escape(sample)}</p>
                             <p class="text-xs text-error/80"><strong>Reason:</strong> {html.escape(error)}</p>
                         </div>
                     </div>
