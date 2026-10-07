@@ -9,6 +9,8 @@ from django.http import JsonResponse, HttpResponse
 
 from pygrok import Grok
 
+from .dissect import Dissector, DissectError, DissectFailure
+
 import json
 import os
 import re
@@ -209,6 +211,83 @@ def simulate_grok(request):
         return HttpResponse(html_response)
     
     return HttpResponse('<p class="text-error">Invalid request method</p>')
+
+def DissectDebugger(request):
+    """Render the dissect debugger page."""
+    return render(request, 'dissect_debugger.html')
+
+def parse_convert_datatype(text):
+    """Parse ``convert_datatype`` lines into a dict.
+
+    Args:
+        text: One conversion per line, ``field => int`` or ``field float``.
+
+    Returns:
+        Dict mapping field name to datatype.
+
+    Example:
+        >>> parse_convert_datatype("bytes => int\\nduration float")
+        {'bytes': 'int', 'duration': 'float'}
+    """
+    conversions = {}
+    for line in text.splitlines():
+        parts = line.replace('=>', ' ').split()
+        if len(parts) == 2:
+            conversions[parts[0].strip('"\'')] = parts[1].strip('"\'')
+        elif parts:
+            raise DissectError(f"Invalid convert_datatype line: {line.strip()}")
+    return conversions
+
+def simulate_dissect(request):
+    """Run dissect patterns against sample lines and return an HTML fragment.
+
+    POST fields: ``sample_data``, ``dissect_pattern`` (one pattern per line),
+    ``append_separator``, ``convert_datatype``, ``multiline_mode``.
+
+    Note:
+        Response is HTML for htmx, not JSON.
+    """
+    if request.method != 'POST':
+        return HttpResponse('<p class="text-error">Invalid request method</p>')
+
+    sample_data = request.POST.get('sample_data', '')
+    dissect_pattern = request.POST.get('dissect_pattern', '')
+    append_separator = request.POST.get('append_separator', ' ')
+    convert_datatype = request.POST.get('convert_datatype', '')
+    multiline_mode = request.POST.get('multiline_mode', 'false').lower() == 'true'
+
+    if multiline_mode:
+        sample_lines = [sample_data] if sample_data.strip() else []
+    else:
+        sample_lines = [line for line in sample_data.split('\n') if line.strip()]
+    pattern_lines = [line.rstrip('\r') for line in dissect_pattern.split('\n') if line.strip()]
+
+    results = []
+    for pattern_idx, pattern in enumerate(pattern_lines, 1):
+        pattern_result = {'pattern': pattern, 'pattern_number': pattern_idx, 'matches': []}
+        try:
+            dissector = Dissector(pattern, append_separator, parse_convert_datatype(convert_datatype))
+        except DissectError as e:
+            for line_idx, sample_line in enumerate(sample_lines, 1):
+                pattern_result['matches'].append({
+                    'line_number': line_idx,
+                    'sample': sample_line,
+                    'success': False,
+                    'error': f'Pattern compilation error: {e}',
+                })
+            results.append(pattern_result)
+            continue
+
+        for line_idx, sample_line in enumerate(sample_lines, 1):
+            match = {'line_number': line_idx, 'sample': sample_line}
+            try:
+                match.update(success=True, parsed_data=dissector.match(sample_line.rstrip('\r')))
+            except DissectFailure as e:
+                match.update(success=False, error=f'_dissectfailure: {e}')
+            pattern_result['matches'].append(match)
+        results.append(pattern_result)
+
+    return HttpResponse(generate_results_html(results))
 
 def generate_results_html(results):
     """Render match/fail cards for each pattern and sample line.
