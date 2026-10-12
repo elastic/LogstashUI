@@ -195,6 +195,7 @@ curl -X POST https://logstashui.example.com/api/connections/ \
 | `port` | no | `9200` for URL, `443` for Cloud |
 | `username` / `password` | no | Basic auth |
 | `api_key` | no | Elasticsearch API key |
+| `allow_self_signed_certs` | no | `true` to skip TLS certificate verification for Elasticsearch and Kibana calls. Defaults to `false` on create; omitted on update keeps the stored value |
 
 ---
 

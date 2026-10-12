@@ -66,6 +66,7 @@ class ConnectionForm(ModelForm):
             'host', 'port', 'username', 'password', 'ssh_key',
             # Centralized fields
             'cloud_id', 'cloud_url', 'api_key',
+            'allow_self_signed_certs',
         ]
         widgets = {
             'name': forms.TextInput(attrs={
@@ -97,6 +98,9 @@ class ConnectionForm(ModelForm):
                 'placeholder': 'https://my-deployment.es.us-central1.gcp.cloud.es.io:9243',
                 'required': False,
             }),
+            'allow_self_signed_certs': forms.CheckboxInput(attrs={
+                'class': 'checkbox checkbox-primary',
+            }),
         }
         help_texts = {
             'password': 'Leave empty to keep current password',
@@ -104,6 +108,7 @@ class ConnectionForm(ModelForm):
             'ssh_key': 'Paste your private key in PEM format',
             'username': 'Elasticsearch username (usually "elastic")',
             'port': 'Elasticsearch API port (usually 9200)',
+            'allow_self_signed_certs': 'Skip TLS certificate verification (required for self-signed or private CA certs)',
         }
 
     def __init__(self, *args, **kwargs):
@@ -130,10 +135,14 @@ class ConnectionForm(ModelForm):
             # For existing instances, don't require password/API key to be re-entered
             self.fields['password'].required = False
             self.fields['api_key'].required = False
+        else:
+            # The model default is True (so migrated rows keep working), but a
+            # brand-new connection should start strict: unchecked in the UI.
+            self.initial['allow_self_signed_certs'] = False
 
         # Add DaisyUI classes to all fields
         for field_name, field in self.fields.items():
-            if field_name != 'connection_type':  # Skip connection_type as it's handled separately
+            if field_name in ('connection_type', 'allow_self_signed_certs'):  # Skip separately handled fields
                 if 'class' in field.widget.attrs:
                     if 'input' not in field.widget.attrs['class'] and 'textarea' not in field.widget.attrs['class']:
                         if isinstance(field.widget, (forms.TextInput, forms.NumberInput, forms.PasswordInput, forms.URLInput)):

@@ -51,7 +51,7 @@ class TestGetCreds:
 
     def test_get_creds_with_host_and_password(self, mock_connection):
         """Test getting credentials with host and password auth"""
-        creds = _get_creds(mock_connection.id)
+        creds, connection = _get_creds(mock_connection.id)
         
         assert 'hosts' in creds
         assert creds['hosts'] == 'https://localhost:9200'
@@ -60,7 +60,7 @@ class TestGetCreds:
 
     def test_get_creds_with_cloud_id_and_api_key(self, mock_cloud_connection):
         """Test getting credentials with cloud_id and api_key"""
-        creds = _get_creds(mock_cloud_connection.id)
+        creds, connection = _get_creds(mock_cloud_connection.id)
         
         assert 'cloud_id' in creds
         assert creds['cloud_id'] == 'test-cloud-id:dGVzdA=='
@@ -84,6 +84,52 @@ class TestGetElasticConnection:
         mock_es_class.assert_called_once()
         call_kwargs = mock_es_class.call_args[1]
         assert 'hosts' in call_kwargs or 'cloud_id' in call_kwargs
+
+
+class TestSelfSignedCertFlag:
+    """``allow_self_signed_certs`` must map to the *opposite* of ``verify_certs``."""
+
+    @pytest.mark.parametrize("allow, expected_verify", [(True, False), (False, True)])
+    @patch('Common.elastic_utils.Elasticsearch')
+    def test_es_client_verify_certs_is_inverse_of_allow(
+        self, mock_es_class, mock_connection, allow, expected_verify
+    ):
+        mock_connection.allow_self_signed_certs = allow
+        mock_connection.save()
+
+        get_elastic_connection(mock_connection.id)
+
+        assert mock_es_class.call_args[1]['verify_certs'] is expected_verify
+
+    @pytest.mark.parametrize("allow, expected_verify", [(True, False), (False, True)])
+    @patch('Common.elastic_utils.get_kibana_url', return_value='https://kibana.example.com')
+    @patch('requests.delete')
+    def test_kibana_delete_verify_is_inverse_of_allow(
+        self, mock_delete, _mock_url, mock_connection, allow, expected_verify
+    ):
+        from Common.elastic_utils import delete_kibana_dashboard
+
+        mock_connection.allow_self_signed_certs = allow
+        mock_connection.save()
+        mock_delete.return_value.content = b''
+
+        delete_kibana_dashboard(mock_connection.id, 'abc')
+
+        assert mock_delete.call_args[1]['verify'] is expected_verify
+
+    def test_new_connection_form_defaults_to_not_allowing(self, db):
+        from PipelineManager.forms import ConnectionForm
+
+        form = ConnectionForm()
+        assert form['allow_self_signed_certs'].value() is False
+
+    def test_existing_connection_form_reflects_stored_value(self, mock_connection):
+        from PipelineManager.forms import ConnectionForm
+
+        # Rows created before the field existed pick up the model default (True).
+        assert mock_connection.allow_self_signed_certs is True
+        form = ConnectionForm(instance=mock_connection)
+        assert form['allow_self_signed_certs'].value() is True
 
 
 class TestGetElasticConnectionsFromList:

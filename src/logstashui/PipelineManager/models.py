@@ -340,6 +340,13 @@ class Connection(models.Model):
         default=False,
         help_text="If true, instructs the agent to restart Logstash on its next check-in"
     )
+    allow_self_signed_certs = models.BooleanField(
+        default=True,
+        help_text=(
+            "Allow self-signed TLS certificates when connecting to Elasticsearch/Kibana. "
+            "Defaults to True so existing connections keep working after migration."
+        ),
+    )
     desired_agent_version = models.CharField(
         max_length=20,
         blank=True,
