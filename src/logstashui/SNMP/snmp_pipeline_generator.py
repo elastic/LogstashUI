@@ -938,6 +938,32 @@ def _generate_filters(oid_mappings, network, normalizers=None, input_data=None):
     return filter_components
 
 
+def _es_connection_uses_tls(connection):
+    """Return True when the Elasticsearch output will talk TLS to the cluster.
+
+    A Cloud ID always resolves to HTTPS. A host is TLS only when it carries an
+    explicit ``https://`` scheme; a bare host or ``http://`` is plain HTTP in
+    Logstash, where an ``ssl_*`` setting is meaningless (and could be rejected).
+
+    Args:
+        connection: ``Connection`` row (CENTRALIZED).
+
+    Returns:
+        bool
+
+    Examples:
+        >>> _es_connection_uses_tls(Connection(cloud_id="dep:abc"))
+        True
+        >>> _es_connection_uses_tls(Connection(host="https://es.example.com"))
+        True
+        >>> _es_connection_uses_tls(Connection(host="http://localhost"))
+        False
+    """
+    if connection.cloud_id:
+        return True
+    return (connection.host or "").strip().lower().startswith("https://")
+
+
 def _generate_output(network_db_object, snmp_type="polling", device_template=None):
     """Build the Elasticsearch output with data-stream settings.
 
@@ -1008,6 +1034,14 @@ def _generate_output(network_db_object, snmp_type="polling", device_template=Non
         elif connection.username and connection.password:
             config["user"] = connection.username
             config["password"] = connection.get_password()
+
+    # Mirror the connection's TLS setting in the pipeline itself. LogstashUI
+    # skips verification for this connection (allow_self_signed_certs), so the
+    # Logstash node running the pipeline must too, or it will reject the same
+    # self-signed certificate at runtime. Omitted otherwise so the plugin's
+    # default (full verification) applies.
+    if connection.allow_self_signed_certs and _es_connection_uses_tls(connection):
+        config["ssl_verification_mode"] = "none"
 
     output_components.append(
         {

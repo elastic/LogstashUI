@@ -38,6 +38,8 @@ from SNMP.snmp_pipeline_generator import (
     _ruby_avg_post_loop,
     _generate_table_split_filters,
     _generate_snmp_error_cleanup_filter,
+    _generate_output,
+    _es_connection_uses_tls,
 )
 
 
@@ -471,6 +473,76 @@ class TestEsConnectionKeystoreKeyNames:
         conn = self._conn(3, api_key=None, username='', password='')
         names = es_connection_keystore_key_names(conn)
         assert names == set()
+
+
+# ===========================================================================
+# _generate_output  --  ssl_verification_mode follows allow_self_signed_certs
+# ===========================================================================
+
+class TestGenerateOutputTlsVerification:
+
+    def _network(self, **conn_kwargs):
+        conn = MagicMock()
+        conn.id = 7
+        conn.cloud_id = None
+        conn.host = "https://es.example.com"
+        conn.port = 9200
+        conn.api_key = None
+        conn.username = "elastic"
+        conn.password = "x"
+        conn.allow_self_signed_certs = False
+        for k, v in conn_kwargs.items():
+            setattr(conn, k, v)
+        net = MagicMock()
+        net.id = 1
+        net.connection = conn
+        net.namespace = "default"
+        net.deployment_mode = "CENTRALIZED"
+        net.credential_mode = "KEYSTORE"
+        return net
+
+    def _config(self, net):
+        return _generate_output(net)[0]["config"]
+
+    def test_self_signed_allowed_https_sets_mode_none(self):
+        cfg = self._config(self._network(allow_self_signed_certs=True))
+        assert cfg["ssl_verification_mode"] == "none"
+
+    def test_self_signed_allowed_cloud_id_sets_mode_none(self):
+        net = self._network(allow_self_signed_certs=True, cloud_id="dep:abc", host=None)
+        assert self._config(net)["ssl_verification_mode"] == "none"
+
+    def test_strict_connection_omits_setting(self):
+        cfg = self._config(self._network(allow_self_signed_certs=False))
+        assert "ssl_verification_mode" not in cfg
+
+    @pytest.mark.parametrize("host", ["http://localhost", "localhost"])
+    def test_plain_http_host_omits_setting_even_when_allowed(self, host):
+        cfg = self._config(self._network(allow_self_signed_certs=True, host=host))
+        assert "ssl_verification_mode" not in cfg
+
+    @pytest.mark.parametrize("snmp_type", ["polling", "traps", "discovery"])
+    def test_applies_to_every_snmp_output_type(self, snmp_type):
+        net = self._network(allow_self_signed_certs=True)
+        cfg = _generate_output(net, snmp_type=snmp_type)[0]["config"]
+        assert cfg["ssl_verification_mode"] == "none"
+
+
+class TestEsConnectionUsesTls:
+
+    @pytest.mark.parametrize("cloud_id, host, expected", [
+        ("dep:abc", None, True),
+        (None, "https://es.example.com", True),
+        (None, "HTTPS://ES.EXAMPLE.COM", True),
+        (None, "http://es.example.com", False),
+        (None, "es.example.com", False),
+        (None, None, False),
+    ])
+    def test_cases(self, cloud_id, host, expected):
+        c = MagicMock()
+        c.cloud_id = cloud_id
+        c.host = host
+        assert _es_connection_uses_tls(c) is expected
 
 
 # ===========================================================================
