@@ -188,9 +188,11 @@ function buildConnectionRow(conn) {
     </td>
 
     <!-- Host -->
-    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300"
-        title="${escapeHtml(conn.host || conn.cloud_id)}">
-      ${escapeHtml(conn.host ? conn.host.substring(0, 20) : (conn.cloud_id || '').substring(0, 12))}
+    <td class="px-6 py-4 text-sm text-gray-300">
+      <span class="block max-w-xs truncate cursor-help"
+            title="${escapeHtml(conn.host || conn.cloud_id)}">
+        ${escapeHtml(conn.host || conn.cloud_id || '')}
+      </span>
     </td>
 
     <!-- Policy -->
