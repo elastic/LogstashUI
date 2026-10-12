@@ -168,14 +168,20 @@ def TestConnectivity(request):
         
         if is_serverless:
             response['HX-Trigger'] = json.dumps({"serverlessDetected": {"connectionId": test_id}})
-        
+
+        response['X-Connection-Test'] = 'ok'
         return response
     else:
-        return HttpResponse("""
+        # Stay on HTTP 200 so htmx still swaps the error toast into the page
+        # (it drops 4xx/5xx bodies). The header carries the real outcome for
+        # the status pill, which can't tell the two cases apart from the status.
+        response = HttpResponse("""
             <div class="p-4 mb-4 text-sm text-red-700 bg-red-100 rounded-lg">
                 <p>Connection failed: {0}</p>
             </div>
         """.format(escape(str(message))))
+        response['X-Connection-Test'] = 'failed'
+        return response
 
 
 
