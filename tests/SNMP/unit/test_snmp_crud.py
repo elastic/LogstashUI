@@ -378,6 +378,62 @@ class TestNetworkCRUD:
         assert test_network.network_range == '192.168.2.0/24'
         assert test_network.interval == 120
 
+    def test_add_network_saves_ssl_certificate_authorities(
+        self, authenticated_client, test_connection, test_credential_v2c
+    ):
+        response = authenticated_client.post('/SNMP/AddNetwork/', {
+            'name': 'CA Network',
+            'network_range': '10.1.0.0/24',
+            'connection': test_connection.id,
+            'discovery_credential': test_credential_v2c.id,
+            'ssl_certificate_authorities': '  /etc/ca1.crt, /etc/ca2.pem  ',
+        })
+        assert response.status_code == 200
+        network = Network.objects.get(name='CA Network')
+        assert network.ssl_certificate_authorities == '/etc/ca1.crt, /etc/ca2.pem'
+
+    def test_network_ssl_certificate_authorities_defaults_blank(self, test_network):
+        assert test_network.ssl_certificate_authorities == ''
+
+    def test_update_network_sets_and_clears_ssl_certificate_authorities(
+        self, authenticated_client, test_network
+    ):
+        url = f'/SNMP/UpdateNetwork/{test_network.id}/'
+        base = {'name': test_network.name, 'network_range': test_network.network_range}
+
+        authenticated_client.post(url, {**base, 'ssl_certificate_authorities': '/etc/ca.crt'})
+        test_network.refresh_from_db()
+        assert test_network.ssl_certificate_authorities == '/etc/ca.crt'
+
+        # Submitting the (cleared) field empties it
+        authenticated_client.post(url, {**base, 'ssl_certificate_authorities': ''})
+        test_network.refresh_from_db()
+        assert test_network.ssl_certificate_authorities == ''
+
+    def test_update_network_keeps_ssl_certificate_authorities_when_field_absent(
+        self, authenticated_client, test_network
+    ):
+        test_network.ssl_certificate_authorities = '/etc/ca.crt'
+        test_network.save()
+
+        authenticated_client.post(f'/SNMP/UpdateNetwork/{test_network.id}/', {
+            'name': test_network.name,
+            'network_range': test_network.network_range,
+        })
+        test_network.refresh_from_db()
+        assert test_network.ssl_certificate_authorities == '/etc/ca.crt'
+
+    def test_get_network_returns_ssl_certificate_authorities(
+        self, authenticated_client, test_network
+    ):
+        test_network.ssl_certificate_authorities = '/etc/ca.crt, /etc/other.pem'
+        test_network.save()
+
+        data = json.loads(
+            authenticated_client.get(f'/SNMP/GetNetwork/{test_network.id}/').content
+        )
+        assert data['ssl_certificate_authorities'] == '/etc/ca.crt, /etc/other.pem'
+
     def test_delete_network_requires_admin(self, readonly_client, test_network):
         """Test that deleting a network requires admin role"""
         response = readonly_client.post(f'/SNMP/DeleteNetwork/{test_network.id}/')

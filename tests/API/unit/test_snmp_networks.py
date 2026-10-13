@@ -150,6 +150,22 @@ class TestNetworkCreate:
         })
         assert Network.objects.filter(name='PersistNet').exists()
 
+    def test_create_with_ssl_certificate_authorities(self, authenticated_client):
+        r = _post(authenticated_client, '/api/snmp/networks/', {
+            'name': 'CANet', 'network_range': '10.5.0.0/24',
+            'ssl_certificate_authorities': ' /etc/ca1.crt, /etc/ca2.pem ',
+        })
+        assert r.status_code == 201
+        assert Network.objects.get(name='CANet').ssl_certificate_authorities == '/etc/ca1.crt, /etc/ca2.pem'
+
+    def test_create_ssl_certificate_authorities_accepts_list(self, authenticated_client):
+        r = _post(authenticated_client, '/api/snmp/networks/', {
+            'name': 'CAListNet', 'network_range': '10.6.0.0/24',
+            'ssl_certificate_authorities': ['/etc/ca1.crt', '/etc/ca2.pem'],
+        })
+        assert r.status_code == 201
+        assert Network.objects.get(name='CAListNet').ssl_certificate_authorities == '/etc/ca1.crt, /etc/ca2.pem'
+
     def test_create_missing_name_400(self, authenticated_client):
         r = _post(authenticated_client, '/api/snmp/networks/', {'network_range': '10.0.0.0/24'})
         assert r.status_code == 400
@@ -205,6 +221,27 @@ class TestNetworkUpdate:
         _put(authenticated_client, f'/api/snmp/networks/{network.id}/', {'interval': 120})
         network.refresh_from_db()
         assert network.interval == 120
+
+    def test_update_ssl_certificate_authorities_set_keep_and_clear(self, authenticated_client, network):
+        url = f'/api/snmp/networks/{network.id}/'
+        _put(authenticated_client, url, {'ssl_certificate_authorities': '/etc/ca.crt'})
+        network.refresh_from_db()
+        assert network.ssl_certificate_authorities == '/etc/ca.crt'
+
+        # Omitted on a partial update -> unchanged
+        _put(authenticated_client, url, {'name': 'Renamed'})
+        network.refresh_from_db()
+        assert network.ssl_certificate_authorities == '/etc/ca.crt'
+
+        _put(authenticated_client, url, {'ssl_certificate_authorities': ''})
+        network.refresh_from_db()
+        assert network.ssl_certificate_authorities == ''
+
+    def test_get_includes_ssl_certificate_authorities(self, authenticated_client, network):
+        network.ssl_certificate_authorities = '/etc/ca.crt'
+        network.save()
+        r = authenticated_client.get(f'/api/snmp/networks/{network.id}/')
+        assert r.json()['network']['ssl_certificate_authorities'] == '/etc/ca.crt'
 
     def test_update_clear_connection_null(self, authenticated_client, network, es_connection):
         assert network.connection == es_connection

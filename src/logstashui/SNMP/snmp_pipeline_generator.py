@@ -938,6 +938,29 @@ def _generate_filters(oid_mappings, network, normalizers=None, input_data=None):
     return filter_components
 
 
+def _parse_ssl_certificate_authorities(value):
+    """Split a comma-separated CA path string into a clean list.
+
+    Whitespace around each path is stripped and empty entries (from trailing or
+    doubled commas) are dropped. Order is preserved.
+
+    Args:
+        value: Raw ``Network.ssl_certificate_authorities`` text, or None.
+
+    Returns:
+        List of path strings; empty when nothing usable was entered.
+
+    Examples:
+        >>> _parse_ssl_certificate_authorities("/a/ca.crt, /b/ca.pem ,")
+        ['/a/ca.crt', '/b/ca.pem']
+        >>> _parse_ssl_certificate_authorities("")
+        []
+    """
+    if not isinstance(value, str):
+        return []
+    return [part.strip() for part in value.split(",") if part.strip()]
+
+
 def _es_connection_uses_tls(connection):
     """Return True when the Elasticsearch output will talk TLS to the cluster.
 
@@ -1035,13 +1058,27 @@ def _generate_output(network_db_object, snmp_type="polling", device_template=Non
             config["user"] = connection.username
             config["password"] = connection.get_password()
 
-    # Mirror the connection's TLS setting in the pipeline itself. LogstashUI
-    # skips verification for this connection (allow_self_signed_certs), so the
-    # Logstash node running the pipeline must too, or it will reject the same
-    # self-signed certificate at runtime. Omitted otherwise so the plugin's
-    # default (full verification) applies.
-    if connection.allow_self_signed_certs and _es_connection_uses_tls(connection):
-        config["ssl_verification_mode"] = "none"
+    # TLS trust for the Logstash node running the pipeline.
+    #
+    # Explicit CAs win: verification stays on and is checked against them, so
+    # ``ssl_verification_mode => none`` is deliberately not emitted (it would
+    # skip the check and make the CAs pointless).
+    #
+    # Otherwise mirror the connection's setting. LogstashUI skips verification
+    # for this connection (allow_self_signed_certs), so the Logstash node must
+    # too, or it will reject the same self-signed certificate at runtime.
+    # Omitted when neither applies so the plugin default (full) is used.
+    #
+    # Both settings are TLS-only: on a plain ``http://`` connection they are
+    # skipped entirely, since the plugin may warn or reject SSL options there.
+    if _es_connection_uses_tls(connection):
+        certificate_authorities = _parse_ssl_certificate_authorities(
+            getattr(network_db_object, 'ssl_certificate_authorities', '')
+        )
+        if certificate_authorities:
+            config["ssl_certificate_authorities"] = certificate_authorities
+        elif connection.allow_self_signed_certs:
+            config["ssl_verification_mode"] = "none"
 
     output_components.append(
         {

@@ -66,6 +66,11 @@ function openNetworkModal(networkData = null) {
       document.getElementById('pollingInterval').value = networkData.interval;
     }
 
+    // Restore advanced settings; expand the section when a value is set so it isn't hidden
+    const sslCas = networkData.ssl_certificate_authorities || '';
+    document.getElementById('networkSslCertificateAuthorities').value = sslCas;
+    document.getElementById('networkAdvancedSection').open = sslCas !== '';
+
     // Restore deployment mode
     const deploymentMode = networkData.deployment_mode || 'CENTRALIZED';
     const deploymentModeRadio = document.querySelector(`input[name="deployment_mode"][value="${deploymentMode}"]`);
@@ -92,6 +97,7 @@ function openNetworkModal(networkData = null) {
     // Add mode — reset toggle to off
     modalTitle.textContent = 'Add SNMP Network';
     document.getElementById('networkId').value = '';
+    document.getElementById('networkAdvancedSection').open = false;
     document.getElementById('namespaceFromTemplate').checked = false;
     toggleNamespaceFromTemplate(false);
     document.querySelector('input[name="deployment_mode"][value="CENTRALIZED"]').checked = true;

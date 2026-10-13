@@ -367,7 +367,8 @@ Content-Type: application/json
   "traps_enabled": false,
   "interval": 30,
   "namespace": "default",
-  "namespace_from_device_template": false
+  "namespace_from_device_template": false,
+  "ssl_certificate_authorities": ""
 }
 
 ###
