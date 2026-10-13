@@ -37,6 +37,7 @@ CUSTOM_DEPENDENCIES = {
     "markedjs": "https://github.com/markedjs/marked/blob/master/LICENSE",
     "psycopg": "https://github.com/psycopg/psycopg/blob/master/LICENSE.txt",
     "PyMySQL": "https://github.com/PyMySQL/PyMySQL/blob/main/LICENSE",
+    "logstash-patterns-core": "https://github.com/logstash-plugins/logstash-patterns-core/blob/main/LICENSE",
 }
 
 # Repository mappings for dependencies (fallback when automatic lookup fails)
