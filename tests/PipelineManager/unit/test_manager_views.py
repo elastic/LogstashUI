@@ -644,7 +644,9 @@ class TestPipelineManagerPage:
             policy=policy,
             logstash_version_resolved="9.4.3",
             status_blob={
-                "agent_version": "0.5.3",
+                # Deliberately far ahead so the test doesn't break each time
+                # __PREFERRED_LS_AGENT_VERSION__ is bumped.
+                "agent_version": "99.0.0",
                 "logstash_api": {"version": "9.4.3"},
             },
         )
