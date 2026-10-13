@@ -251,3 +251,6 @@ graphify-out/
 # LogstashAgent (cloned from GitHub in host mode)
 /LogstashAgent/
 /src/logstashui/logstashui_data/
+
+# Test and env related
+.config
