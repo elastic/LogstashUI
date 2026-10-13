@@ -142,7 +142,7 @@ class ConnectionForm(ModelForm):
 
         # Add DaisyUI classes to all fields
         for field_name, field in self.fields.items():
-            if field_name in ('connection_type', 'allow_self_signed_certs'):  # Skip separately handled fields
+            if field_name not in ('connection_type', 'allow_self_signed_certs'):  # Skip separately handled fields
                 if 'class' in field.widget.attrs:
                     if 'input' not in field.widget.attrs['class'] and 'textarea' not in field.widget.attrs['class']:
                         if isinstance(field.widget, (forms.TextInput, forms.NumberInput, forms.PasswordInput, forms.URLInput)):

@@ -510,9 +510,10 @@ class TestGenerateOutputTlsVerification:
         cfg = self._config(self._network(allow_self_signed_certs=True))
         assert cfg["ssl_verification_mode"] == "none"
 
-    def test_self_signed_allowed_cloud_id_sets_mode_none(self):
+    def test_self_signed_allowed_cloud_id_omits_setting(self):
+        """Cloud ID connections keep full verification even when the flag is on."""
         net = self._network(allow_self_signed_certs=True, cloud_id="dep:abc", host=None)
-        assert self._config(net)["ssl_verification_mode"] == "none"
+        assert "ssl_verification_mode" not in self._config(net)
 
     def test_strict_connection_omits_setting(self):
         cfg = self._config(self._network(allow_self_signed_certs=False))

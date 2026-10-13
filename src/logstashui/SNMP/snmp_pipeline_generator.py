@@ -1069,6 +1069,10 @@ def _generate_output(network_db_object, snmp_type="polling", device_template=Non
     # too, or it will reject the same self-signed certificate at runtime.
     # Omitted when neither applies so the plugin default (full) is used.
     #
+    # Cloud ID connections never get ``ssl_verification_mode => none``: Elastic
+    # Cloud serves publicly trusted certificates, so disabling verification
+    # there would only weaken the pipeline. Explicit CAs are still honoured.
+    #
     # Both settings are TLS-only: on a plain ``http://`` connection they are
     # skipped entirely, since the plugin may warn or reject SSL options there.
     if _es_connection_uses_tls(connection):
@@ -1077,7 +1081,7 @@ def _generate_output(network_db_object, snmp_type="polling", device_template=Non
         )
         if certificate_authorities:
             config["ssl_certificate_authorities"] = certificate_authorities
-        elif connection.allow_self_signed_certs:
+        elif connection.allow_self_signed_certs and not connection.cloud_id:
             config["ssl_verification_mode"] = "none"
 
     output_components.append(
