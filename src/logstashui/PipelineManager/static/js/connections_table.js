@@ -24,12 +24,23 @@ const CURSOR_ICON_SVG = `<svg class="w-3 h-3 opacity-60" fill="none" viewBox="0 
 
 window._connTestClick = function (el) {
   el.innerHTML = 'Testing...';
-  el.classList.remove('bg-blue-100', 'text-blue-800', 'hover:bg-blue-200');
+  // Clear any previous result (blue idle, green pass, red fail) so a re-test
+  // doesn't stack conflicting colour classes.
+  el.classList.remove(
+    'bg-blue-100', 'text-blue-800', 'hover:bg-blue-200',
+    'bg-green-100', 'text-green-800', 'hover:bg-green-200',
+    'bg-red-100', 'text-red-800', 'hover:bg-red-200',
+  );
   el.classList.add('bg-yellow-100', 'text-yellow-800', 'animate-pulse');
 };
 
 window._connTestAfterRequest = function (el, event) {
-  const result = event.detail.successful
+  // The view returns HTTP 200 even when the cluster test fails (so the error
+  // toast gets swapped in); the real outcome is in X-Connection-Test.
+  const xhr = event.detail.xhr;
+  const passed = event.detail.successful
+    && xhr && xhr.getResponseHeader('X-Connection-Test') === 'ok';
+  const result = passed
     ? { text: 'Connected',        bg: 'bg-green-100', textColor: 'text-green-800', hover: 'hover:bg-green-200' }
     : { text: 'Connection Failed', bg: 'bg-red-100',   textColor: 'text-red-800',   hover: 'hover:bg-red-200'   };
   el.innerHTML = result.text + ' ' + CURSOR_ICON_SVG;
@@ -177,9 +188,11 @@ function buildConnectionRow(conn) {
     </td>
 
     <!-- Host -->
-    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300"
-        title="${escapeHtml(conn.host || conn.cloud_id)}">
-      ${escapeHtml(conn.host ? conn.host.substring(0, 20) : (conn.cloud_id || '').substring(0, 12))}
+    <td class="px-6 py-4 text-sm text-gray-300">
+      <span class="block max-w-xs truncate cursor-help"
+            title="${escapeHtml(conn.host || conn.cloud_id)}">
+        ${escapeHtml(conn.host || conn.cloud_id || '')}
+      </span>
     </td>
 
     <!-- Policy -->

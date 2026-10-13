@@ -384,6 +384,7 @@ def GetConnection(request, connection_id):
             'port': connection.port or '',
             'auth_type': auth_type,
             'username': connection.username or '',
+            'allow_self_signed_certs': connection.allow_self_signed_certs,
         }
     })
 

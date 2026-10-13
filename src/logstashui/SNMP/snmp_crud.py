@@ -1244,6 +1244,8 @@ def AddNetwork(request):
         namespace_from_device_template: Use normalized template name as namespace.
         deployment_mode: ``CENTRALIZED`` or ``AGENT``.
         credential_mode: ``KEYSTORE`` or ``PLAINTEXT`` (centralized only).
+        ssl_certificate_authorities: Comma-separated CA file paths for the
+            generated Elasticsearch output (optional).
 
     Returns:
         JSON `{id, message}` on success.
@@ -1277,6 +1279,7 @@ def AddNetwork(request):
         namespace_from_device_template = request.POST.get('namespace_from_device_template', 'false') == 'true'
         deployment_mode = request.POST.get('deployment_mode', 'CENTRALIZED')
         credential_mode = request.POST.get('credential_mode', 'KEYSTORE')
+        ssl_certificate_authorities = request.POST.get('ssl_certificate_authorities', '').strip()
 
         if not namespace_from_device_template:
             ns_valid, ns_error = validate_namespace(namespace)
@@ -1294,6 +1297,7 @@ def AddNetwork(request):
             namespace_from_device_template=namespace_from_device_template,
             deployment_mode=deployment_mode,
             credential_mode=credential_mode,
+            ssl_certificate_authorities=ssl_certificate_authorities,
         )
 
         # Set connection if provided
@@ -1370,6 +1374,9 @@ def UpdateNetwork(request, network_id):
         network.traps_enabled = request.POST.get('traps_enabled', 'false') == 'true'
         network.deployment_mode = request.POST.get('deployment_mode', network.deployment_mode)
         network.credential_mode = request.POST.get('credential_mode', network.credential_mode)
+        network.ssl_certificate_authorities = request.POST.get(
+            'ssl_certificate_authorities', network.ssl_certificate_authorities
+        ).strip()
 
         # Update interval (convert to int)
         interval = request.POST.get('interval')
@@ -1440,6 +1447,7 @@ def GetNetwork(request, network_id):
             'namespace_from_device_template': network.namespace_from_device_template,
             'deployment_mode': network.deployment_mode,
             'credential_mode': network.credential_mode,
+            'ssl_certificate_authorities': network.ssl_certificate_authorities,
             'connection': network.connection_id if network.connection else None,
             'agent_connection': network.agent_connection_id if network.agent_connection else None,
             'discovery_credential': network.discovery_credential_id if network.discovery_credential else None,

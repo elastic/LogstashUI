@@ -938,6 +938,55 @@ def _generate_filters(oid_mappings, network, normalizers=None, input_data=None):
     return filter_components
 
 
+def _parse_ssl_certificate_authorities(value):
+    """Split a comma-separated CA path string into a clean list.
+
+    Whitespace around each path is stripped and empty entries (from trailing or
+    doubled commas) are dropped. Order is preserved.
+
+    Args:
+        value: Raw ``Network.ssl_certificate_authorities`` text, or None.
+
+    Returns:
+        List of path strings; empty when nothing usable was entered.
+
+    Examples:
+        >>> _parse_ssl_certificate_authorities("/a/ca.crt, /b/ca.pem ,")
+        ['/a/ca.crt', '/b/ca.pem']
+        >>> _parse_ssl_certificate_authorities("")
+        []
+    """
+    if not isinstance(value, str):
+        return []
+    return [part.strip() for part in value.split(",") if part.strip()]
+
+
+def _es_connection_uses_tls(connection):
+    """Return True when the Elasticsearch output will talk TLS to the cluster.
+
+    A Cloud ID always resolves to HTTPS. A host is TLS only when it carries an
+    explicit ``https://`` scheme; a bare host or ``http://`` is plain HTTP in
+    Logstash, where an ``ssl_*`` setting is meaningless (and could be rejected).
+
+    Args:
+        connection: ``Connection`` row (CENTRALIZED).
+
+    Returns:
+        bool
+
+    Examples:
+        >>> _es_connection_uses_tls(Connection(cloud_id="dep:abc"))
+        True
+        >>> _es_connection_uses_tls(Connection(host="https://es.example.com"))
+        True
+        >>> _es_connection_uses_tls(Connection(host="http://localhost"))
+        False
+    """
+    if connection.cloud_id:
+        return True
+    return (connection.host or "").strip().lower().startswith("https://")
+
+
 def _generate_output(network_db_object, snmp_type="polling", device_template=None):
     """Build the Elasticsearch output with data-stream settings.
 
@@ -1008,6 +1057,32 @@ def _generate_output(network_db_object, snmp_type="polling", device_template=Non
         elif connection.username and connection.password:
             config["user"] = connection.username
             config["password"] = connection.get_password()
+
+    # TLS trust for the Logstash node running the pipeline.
+    #
+    # Explicit CAs win: verification stays on and is checked against them, so
+    # ``ssl_verification_mode => none`` is deliberately not emitted (it would
+    # skip the check and make the CAs pointless).
+    #
+    # Otherwise mirror the connection's setting. LogstashUI skips verification
+    # for this connection (allow_self_signed_certs), so the Logstash node must
+    # too, or it will reject the same self-signed certificate at runtime.
+    # Omitted when neither applies so the plugin default (full) is used.
+    #
+    # Cloud ID connections never get ``ssl_verification_mode => none``: Elastic
+    # Cloud serves publicly trusted certificates, so disabling verification
+    # there would only weaken the pipeline. Explicit CAs are still honoured.
+    #
+    # Both settings are TLS-only: on a plain ``http://`` connection they are
+    # skipped entirely, since the plugin may warn or reject SSL options there.
+    if _es_connection_uses_tls(connection):
+        certificate_authorities = _parse_ssl_certificate_authorities(
+            getattr(network_db_object, 'ssl_certificate_authorities', '')
+        )
+        if certificate_authorities:
+            config["ssl_certificate_authorities"] = certificate_authorities
+        elif connection.allow_self_signed_certs and not connection.cloud_id:
+            config["ssl_verification_mode"] = "none"
 
     output_components.append(
         {

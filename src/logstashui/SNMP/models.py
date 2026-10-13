@@ -119,6 +119,16 @@ class Network(models.Model):
         help_text="When enabled, the normalized device template name is used as the data stream namespace instead of the fixed namespace value."
     )
 
+    ssl_certificate_authorities = models.TextField(
+        blank=True,
+        default='',
+        help_text=(
+            "Comma-separated file paths of CA certificates (.pem/.crt) that the Logstash "
+            "Elasticsearch output should trust, e.g. /etc/logstash/certs/ca.crt. "
+            "Paths are read on the Logstash host, not by LogstashUI."
+        ),
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

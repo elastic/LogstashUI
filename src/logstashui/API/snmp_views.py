@@ -623,10 +623,28 @@ def _network_data(net, device_count=None):
         'interval': net.interval,
         'namespace': net.namespace,
         'namespace_from_device_template': net.namespace_from_device_template,
+        'ssl_certificate_authorities': net.ssl_certificate_authorities,
         'device_count': device_count,
         'created_at': net.created_at.isoformat(),
         'updated_at': net.updated_at.isoformat(),
     }
+
+
+def _ssl_certificate_authorities_value(raw):
+    """Normalize an API value to the stored comma-separated string.
+
+    Accepts a comma-separated string or a list of paths, so an API client that
+    sends a JSON array does not cause a 500.
+
+    Examples:
+        >>> _ssl_certificate_authorities_value(["/a.crt", "/b.crt"])
+        '/a.crt, /b.crt'
+        >>> _ssl_certificate_authorities_value(None)
+        ''
+    """
+    if isinstance(raw, (list, tuple)):
+        raw = ", ".join(str(p) for p in raw)
+    return (raw or '').strip()
 
 
 def _validate_network_cidr(network_range):
@@ -669,6 +687,10 @@ def _apply_network_fields(data, net):
         net.namespace = data['namespace'] or 'default'
     if 'namespace_from_device_template' in data:
         net.namespace_from_device_template = bool(data['namespace_from_device_template'])
+    if 'ssl_certificate_authorities' in data:
+        net.ssl_certificate_authorities = _ssl_certificate_authorities_value(
+            data['ssl_certificate_authorities']
+        )
 
     # FK fields — explicit None/null clears the relationship
     for attr, field in (
@@ -737,6 +759,9 @@ def _create_network(request):
         namespace_from_device_template=use_template_ns,
         deployment_mode=data.get('deployment_mode', 'CENTRALIZED') or 'CENTRALIZED',
         credential_mode=data.get('credential_mode', 'KEYSTORE') or 'KEYSTORE',
+        ssl_certificate_authorities=_ssl_certificate_authorities_value(
+            data.get('ssl_certificate_authorities')
+        ),
     )
     for attr, field in (
         ('connection', 'connection_id'),

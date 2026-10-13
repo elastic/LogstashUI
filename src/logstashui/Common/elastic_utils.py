@@ -57,7 +57,8 @@ def get_elastic_connections_from_list():
 def get_elastic_connection(connection_id):
     """Return an Elasticsearch client for a LogstashUI Connection pk.
 
-    TLS verification is off and the request timeout is 30s.
+    TLS verification is controlled by ``Connection.allow_self_signed_certs``.
+    The request timeout is 30 s.
 
     Args:
         connection_id: Primary key of ``PipelineManager.Connection``.
@@ -72,11 +73,25 @@ def get_elastic_connection(connection_id):
         es = get_elastic_connection(connection.pk)
         es.ping()
     """
-    elastic_creds = _get_creds(connection_id)
-    return Elasticsearch(**elastic_creds, verify_certs=False, request_timeout=30)
+    elastic_creds, connection = _get_creds(connection_id)
+    return Elasticsearch(
+        **elastic_creds,
+        verify_certs=not connection.allow_self_signed_certs,
+        request_timeout=30,
+    )
 
 def _get_creds(connection_id):
+    """Return ``(credentials_dict, connection)`` for a Connection pk.
 
+    Args:
+        connection_id: Primary key of ``PipelineManager.Connection``.
+
+    Returns:
+        A two-tuple of ``(dict, Connection)``.  The dict is suitable for
+        unpacking into ``Elasticsearch(**creds)`` or ``requests`` auth
+        helpers; the ``Connection`` object lets callers inspect fields such
+        as ``allow_self_signed_certs`` without a second DB hit.
+    """
     connection = ConnectionTable.objects.get(id=connection_id)
     connection_data = {}
 
@@ -96,7 +111,7 @@ def _get_creds(connection_id):
         # This is how we allow user to use a username/password instead of an API key
         connection_data['http_auth'] = (connection.username, connection.get_password())
 
-    return connection_data
+    return connection_data, connection
 
 def get_elasticsearch_indices(connection_id, pattern="*"):
     """List index names matching ``pattern``, capped at 50.
@@ -844,7 +859,7 @@ def get_kibana_url(connection_id):
     """
     import base64
     
-    creds = _get_creds(connection_id)
+    creds, _ = _get_creds(connection_id)
     
     # Check if cloud_id is present
     if 'cloud_id' in creds:
@@ -890,7 +905,7 @@ def create_kibana_dashboard(connection_id, dashboard_definition):
 
     try:
         kibana_url = get_kibana_url(connection_id)
-        creds = _get_creds(connection_id)
+        creds, connection = _get_creds(connection_id)
 
         # Prepare authentication
         auth = None
@@ -917,7 +932,7 @@ def create_kibana_dashboard(connection_id, dashboard_definition):
                 json=dashboard_definition,
                 headers=headers,
                 auth=auth,
-                verify=False
+                verify=not connection.allow_self_signed_certs,
             )
 
             if not response.ok:
@@ -953,7 +968,7 @@ def create_kibana_dashboard(connection_id, dashboard_definition):
                 json=payload,
                 headers=headers,
                 auth=auth,
-                verify=False
+                verify=not connection.allow_self_signed_certs,
             )
             response.raise_for_status()
 
@@ -1056,7 +1071,7 @@ def install_fleet_integration(connection_id, integration_name, version):
             raise ValueError("Kibana URL not found in connection credentials")
         
         # Get credentials for auth
-        creds = _get_creds(connection_id)
+        creds, connection = _get_creds(connection_id)
         
         # Fleet EPM API endpoint
         api_url = f"{kibana_url}/api/fleet/epm/packages/{integration_name}/{version}"
@@ -1075,7 +1090,7 @@ def install_fleet_integration(connection_id, integration_name, version):
             api_url,
             headers=headers,
             auth=auth,
-            verify=False
+            verify=not connection.allow_self_signed_certs,
         )
         response.raise_for_status()
         
@@ -1106,7 +1121,7 @@ def delete_kibana_dashboard(connection_id, dashboard_id):
 
     try:
         kibana_url = get_kibana_url(connection_id)
-        creds = _get_creds(connection_id)
+        creds, connection = _get_creds(connection_id)
 
         auth = None
         headers = {
@@ -1124,7 +1139,7 @@ def delete_kibana_dashboard(connection_id, dashboard_id):
             f"{kibana_url}/api/dashboards/{dashboard_id}",
             headers=headers,
             auth=auth,
-            verify=False
+            verify=not connection.allow_self_signed_certs,
         )
         response.raise_for_status()
 

@@ -310,6 +310,17 @@ sudo systemctl start logstash-agent</code></pre>
                 </div>
               </div>
 
+              <!-- Allow Self-Signed Certificates (centralized connections only) -->
+              <div id="allowSelfSignedField" class="mb-4">
+                <label class="flex items-center gap-3 cursor-pointer">
+                  {{ form.allow_self_signed_certs }}
+                  <span class="text-sm font-medium text-gray-300">Allow self-signed certificates</span>
+                </label>
+                <p class="text-gray-400 text-xs mt-1 ml-6">
+                  Skip TLS certificate verification (required for self-signed or private CA certs)
+                </p>
+              </div>
+
               <div class="form-actions pt-6 mt-6 border-t border-gray-700">
                   <button type="button" onclick="closeFlyout()" class="btn btn-secondary">
                       Cancel
@@ -456,6 +467,10 @@ sudo systemctl start logstash-agent</code></pre>
                 const apiKeyInput = document.querySelector('[name="api_key"]');
                 if (apiKeyInput) apiKeyInput.value = '';
             }
+
+            // -- Pre-fill allow_self_signed_certs --
+            const selfSignedCheckbox = document.querySelector('[name="allow_self_signed_certs"]');
+            if (selfSignedCheckbox) selfSignedCheckbox.checked = !!conn.allow_self_signed_certs;
 
             openFlyout();
         } catch (err) {

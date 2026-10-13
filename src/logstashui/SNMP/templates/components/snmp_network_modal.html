@@ -346,6 +346,25 @@
             <p class="text-gray-400 text-xs mt-1">Select the SNMP credential to use for trap reception</p>
           </div>
 
+          <!-- Advanced (collapsed unless a value is set) -->
+          <details id="networkAdvancedSection" class="mb-4">
+            <summary class="cursor-pointer select-none text-sm font-medium text-gray-300">Advanced</summary>
+            <div class="mt-3">
+              <label for="networkSslCertificateAuthorities" class="block text-sm font-medium text-gray-300 mb-2">
+                SSL Certificate Authorities
+              </label>
+              <input type="text" id="networkSslCertificateAuthorities" name="ssl_certificate_authorities"
+                     class="input input-bordered w-full font-mono" autocomplete="off" spellcheck="false"
+                     placeholder="/etc/logstash/certs/ca.crt, /etc/logstash/certs/other-ca.pem">
+              <p class="text-gray-400 text-xs mt-1">
+                Comma-separated file paths of CA certificates for the generated Elasticsearch output to trust.
+                Paths are read on the Logstash host, not by LogstashUI. When set, the pipeline verifies the
+                server certificate against these CAs. Only applies to HTTPS (or Cloud ID) connections; it is
+                ignored for plain HTTP.
+              </p>
+            </div>
+          </details>
+
           <div class="form-actions pt-6 mt-6 border-t border-gray-700">
             <button type="button" onclick="closeNetworkModal()" class="btn btn-secondary">
               Cancel

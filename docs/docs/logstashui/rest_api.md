@@ -195,6 +195,7 @@ curl -X POST https://logstashui.example.com/api/connections/ \
 | `port` | no | `9200` for URL, `443` for Cloud |
 | `username` / `password` | no | Basic auth |
 | `api_key` | no | Elasticsearch API key |
+| `allow_self_signed_certs` | no | `true` to skip TLS certificate verification for Elasticsearch and Kibana calls. Defaults to `false` on create; omitted on update keeps the stored value |
 
 ---
 
@@ -1010,6 +1011,7 @@ curl -H "Authorization: ApiKey $KEY" \
       "interval": 60,
       "namespace": "default",
       "namespace_from_device_template": false,
+      "ssl_certificate_authorities": "",
       "device_count": 12,
       "created_at": "2026-01-01T12:00:00Z",
       "updated_at": "2026-01-01T12:00:00Z"
@@ -1081,6 +1083,7 @@ curl -X POST https://logstashui.example.com/api/snmp/networks/ \
 | `interval` | no | Poll interval in seconds, default `30` |
 | `namespace` | no | Data-stream namespace, default `"default"` |
 | `namespace_from_device_template` | no | Derive namespace from device template name |
+| `ssl_certificate_authorities` | no | Comma-separated CA file paths (or a JSON array) for the generated Elasticsearch output to trust, e.g. `/etc/logstash/certs/ca.crt`. Paths are read on the Logstash host. Ignored for plain `http://` connections. When set, the pipeline verifies the server certificate against these CAs and does not disable verification |
 
 ---
 

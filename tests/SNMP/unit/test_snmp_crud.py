@@ -378,6 +378,62 @@ class TestNetworkCRUD:
         assert test_network.network_range == '192.168.2.0/24'
         assert test_network.interval == 120
 
+    def test_add_network_saves_ssl_certificate_authorities(
+        self, authenticated_client, test_connection, test_credential_v2c
+    ):
+        response = authenticated_client.post('/SNMP/AddNetwork/', {
+            'name': 'CA Network',
+            'network_range': '10.1.0.0/24',
+            'connection': test_connection.id,
+            'discovery_credential': test_credential_v2c.id,
+            'ssl_certificate_authorities': '  /etc/ca1.crt, /etc/ca2.pem  ',
+        })
+        assert response.status_code == 200
+        network = Network.objects.get(name='CA Network')
+        assert network.ssl_certificate_authorities == '/etc/ca1.crt, /etc/ca2.pem'
+
+    def test_network_ssl_certificate_authorities_defaults_blank(self, test_network):
+        assert test_network.ssl_certificate_authorities == ''
+
+    def test_update_network_sets_and_clears_ssl_certificate_authorities(
+        self, authenticated_client, test_network
+    ):
+        url = f'/SNMP/UpdateNetwork/{test_network.id}/'
+        base = {'name': test_network.name, 'network_range': test_network.network_range}
+
+        authenticated_client.post(url, {**base, 'ssl_certificate_authorities': '/etc/ca.crt'})
+        test_network.refresh_from_db()
+        assert test_network.ssl_certificate_authorities == '/etc/ca.crt'
+
+        # Submitting the (cleared) field empties it
+        authenticated_client.post(url, {**base, 'ssl_certificate_authorities': ''})
+        test_network.refresh_from_db()
+        assert test_network.ssl_certificate_authorities == ''
+
+    def test_update_network_keeps_ssl_certificate_authorities_when_field_absent(
+        self, authenticated_client, test_network
+    ):
+        test_network.ssl_certificate_authorities = '/etc/ca.crt'
+        test_network.save()
+
+        authenticated_client.post(f'/SNMP/UpdateNetwork/{test_network.id}/', {
+            'name': test_network.name,
+            'network_range': test_network.network_range,
+        })
+        test_network.refresh_from_db()
+        assert test_network.ssl_certificate_authorities == '/etc/ca.crt'
+
+    def test_get_network_returns_ssl_certificate_authorities(
+        self, authenticated_client, test_network
+    ):
+        test_network.ssl_certificate_authorities = '/etc/ca.crt, /etc/other.pem'
+        test_network.save()
+
+        data = json.loads(
+            authenticated_client.get(f'/SNMP/GetNetwork/{test_network.id}/').content
+        )
+        assert data['ssl_certificate_authorities'] == '/etc/ca.crt, /etc/other.pem'
+
     def test_delete_network_requires_admin(self, readonly_client, test_network):
         """Test that deleting a network requires admin role"""
         response = readonly_client.post(f'/SNMP/DeleteNetwork/{test_network.id}/')
@@ -2409,14 +2465,19 @@ class TestDeviceVisualizationData:
                     '@timestamp': '2026-08-04T01:00:00Z',
                     'system': {'cpu': {'total': {'norm': {'pct': 0.25}}}},
                 }}]}}
-            # The aggregation asks for the lowest hrStorageIndex per poll, so the
-            # physical row is what comes back — cache/buffers rows are ranked out
-            # by the sort, which is the behaviour being pinned here.
-            return {'aggregations': {'by_poll': {'buckets': [
-                {'key': 1, 'physical': {'hits': {'hits': [{'_source': {
+            # Each poll returns several RAM rows (physical, buffers, cache), in
+            # arbitrary order. The physical row has the lowest hrStorageIndex.
+            def ram_row(index, pct):
+                return {'_source': {
                     '@timestamp': '2026-08-04T01:00:00Z',
-                    'system': {'filesystem': {'used': {'pct': 0.98}}},
-                }}]}}},
+                    'system': {'filesystem': {'index': index, 'used': {'pct': pct}}},
+                }}
+            return {'aggregations': {'by_poll': {'buckets': [
+                {'key': 1, 'physical': {'hits': {'hits': [
+                    ram_row(3, 0.50),
+                    ram_row(1, 0.98),
+                    ram_row(2, 0.70),
+                ]}}},
             ]}}}
 
         mock_es = MagicMock()
@@ -2443,12 +2504,16 @@ class TestDeviceVisualizationData:
         assert all(list(c['term'].values())[0] == '1.3.6.1.2.1.25.2.1.2' for c in shoulds[0])
         assert not any('mount_point' in str(f) for f in fs_filters[0])
 
-        # All RAM rows report the same total, so the row must be disambiguated by
-        # lowest hrStorageIndex — ranking by total silently picks an arbitrary row.
+        # All RAM rows report the same total, so the row is disambiguated by
+        # lowest hrStorageIndex. That ordering is applied in Python (the mocked
+        # hits above are returned out of order and 0.98 is the index-1 row), and
+        # the query fetches several rows per poll with no ES-side sort, since
+        # system.filesystem.index may not be mapped in every index.
         agg = mock_es.search.call_args_list[-1].kwargs['aggregations']
         top_hits = agg['by_poll']['aggregations']['physical']['top_hits']
-        assert top_hits['sort'] == [{'system.filesystem.index': {'order': 'asc'}}]
-        assert top_hits['size'] == 1
+        assert 'sort' not in top_hits
+        assert top_hits['size'] > 1
+        assert 'system.filesystem.index' in top_hits['_source']
 
     def test_metrics_queries_are_scoped_to_the_device(self, test_device):
         """Every metrics query must filter to this device, not the whole fleet."""

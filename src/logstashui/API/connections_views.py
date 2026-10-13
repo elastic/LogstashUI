@@ -204,6 +204,9 @@ def _connection_form_defaults(conn):
         'username':        conn.username or '',
         'cloud_id':        conn.cloud_id or '',
         'cloud_url':       conn.cloud_url or '',
+        # Checkbox: an omitted key would be read as False and silently flip an
+        # existing connection to strict TLS verification on a partial PUT.
+        'allow_self_signed_certs': conn.allow_self_signed_certs,
         # Include radio-button values so the form's clean() zeros the correct
         # opposing fields and does NOT zero the credential field we're keeping.
         'connection_mode': connection_mode,

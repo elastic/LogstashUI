@@ -30,10 +30,17 @@ if [ "$(id -u)" = "0" ]; then
     else
         TARGET_GID="$(id -g appuser)"
     fi
-    if ! setpriv --reuid="$TARGET_UID" --regid="$TARGET_GID" --clear-groups -- test -w "$DATA_DIR"; then
-        echo "DATA_DIR $DATA_DIR not writable by uid $TARGET_UID — chowning bind-mount"
-        chown -R "$TARGET_UID:$TARGET_GID" "$DATA_DIR"
-    fi
+    # Check ownership, not just test -w: Docker Desktop bind mounts on Windows report a
+    # world-writable root:root DATA_DIR, so tls/ and logs/ created above stay root-owned
+    # and test -w can pass even though writes into them fail.
+    for dir in "$DATA_DIR" "$DATA_DIR/tls" "$DATA_DIR/logs"; do
+        if [ "$(stat -c %u "$dir")" != "$TARGET_UID" ] || \
+           ! setpriv --reuid="$TARGET_UID" --regid="$TARGET_GID" --clear-groups -- test -w "$dir"; then
+            echo "$dir not owned/writable by uid $TARGET_UID — chowning bind-mount"
+            chown -R "$TARGET_UID:$TARGET_GID" "$DATA_DIR"
+            break
+        fi
+    done
     if ! setpriv --reuid="$TARGET_UID" --regid="$TARGET_GID" --clear-groups -- test -w "$DATA_DIR"; then
         _data_dir_not_writable_msg
         exit 1

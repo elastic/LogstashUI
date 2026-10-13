@@ -531,6 +531,23 @@ class TestTestConnectivityView:
         content = response.content.decode()
         assert "green" in content
         assert "All good!" in content
+        assert response["X-Connection-Test"] == "ok"
+
+    @patch(
+        "PipelineManager.manager_views.test_connectivity",
+        return_value=(False, "Connection refused"),
+    )
+    def test_failure_is_flagged_for_status_pill(
+        self, mock_tc, authenticated_client, test_connection
+    ):
+        """A failed test stays HTTP 200 (so htmx swaps the toast) but is flagged
+        failed, so the pill doesn't turn green."""
+        response = authenticated_client.get(
+            f"/ConnectionManager/TestConnectivity?test={test_connection.id}"
+        )
+        assert response.status_code == 200
+        assert response["X-Connection-Test"] == "failed"
+        assert "Connection failed" in response.content.decode()
 
 
 # ============================================================================
@@ -627,7 +644,9 @@ class TestPipelineManagerPage:
             policy=policy,
             logstash_version_resolved="9.4.3",
             status_blob={
-                "agent_version": "0.5.3",
+                # Deliberately far ahead so the test doesn't break each time
+                # __PREFERRED_LS_AGENT_VERSION__ is bumped.
+                "agent_version": "99.0.0",
                 "logstash_api": {"version": "9.4.3"},
             },
         )

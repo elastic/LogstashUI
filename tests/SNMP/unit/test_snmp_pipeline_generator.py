@@ -38,6 +38,9 @@ from SNMP.snmp_pipeline_generator import (
     _ruby_avg_post_loop,
     _generate_table_split_filters,
     _generate_snmp_error_cleanup_filter,
+    _generate_output,
+    _es_connection_uses_tls,
+    _parse_ssl_certificate_authorities,
 )
 
 
@@ -471,6 +474,167 @@ class TestEsConnectionKeystoreKeyNames:
         conn = self._conn(3, api_key=None, username='', password='')
         names = es_connection_keystore_key_names(conn)
         assert names == set()
+
+
+# ===========================================================================
+# _generate_output  --  ssl_verification_mode follows allow_self_signed_certs
+# ===========================================================================
+
+class TestGenerateOutputTlsVerification:
+
+    def _network(self, **conn_kwargs):
+        conn = MagicMock()
+        conn.id = 7
+        conn.cloud_id = None
+        conn.host = "https://es.example.com"
+        conn.port = 9200
+        conn.api_key = None
+        conn.username = "elastic"
+        conn.password = "x"
+        conn.allow_self_signed_certs = False
+        for k, v in conn_kwargs.items():
+            setattr(conn, k, v)
+        net = MagicMock()
+        net.id = 1
+        net.connection = conn
+        net.namespace = "default"
+        net.deployment_mode = "CENTRALIZED"
+        net.credential_mode = "KEYSTORE"
+        net.ssl_certificate_authorities = ""
+        return net
+
+    def _config(self, net):
+        return _generate_output(net)[0]["config"]
+
+    def test_self_signed_allowed_https_sets_mode_none(self):
+        cfg = self._config(self._network(allow_self_signed_certs=True))
+        assert cfg["ssl_verification_mode"] == "none"
+
+    def test_self_signed_allowed_cloud_id_omits_setting(self):
+        """Cloud ID connections keep full verification even when the flag is on."""
+        net = self._network(allow_self_signed_certs=True, cloud_id="dep:abc", host=None)
+        assert "ssl_verification_mode" not in self._config(net)
+
+    def test_strict_connection_omits_setting(self):
+        cfg = self._config(self._network(allow_self_signed_certs=False))
+        assert "ssl_verification_mode" not in cfg
+
+    @pytest.mark.parametrize("host", ["http://localhost", "localhost"])
+    def test_plain_http_host_omits_setting_even_when_allowed(self, host):
+        cfg = self._config(self._network(allow_self_signed_certs=True, host=host))
+        assert "ssl_verification_mode" not in cfg
+
+    @pytest.mark.parametrize("snmp_type", ["polling", "traps", "discovery"])
+    def test_applies_to_every_snmp_output_type(self, snmp_type):
+        net = self._network(allow_self_signed_certs=True)
+        cfg = _generate_output(net, snmp_type=snmp_type)[0]["config"]
+        assert cfg["ssl_verification_mode"] == "none"
+
+
+class TestGenerateOutputCertificateAuthorities:
+    """``Network.ssl_certificate_authorities`` -> ``ssl_certificate_authorities``."""
+
+    def _net(self, cas, allow_self_signed=False, host="https://es.example.com"):
+        conn = MagicMock()
+        conn.id = 7
+        conn.cloud_id = None
+        conn.host = host
+        conn.port = 9200
+        conn.api_key = None
+        conn.username = "elastic"
+        conn.password = "x"
+        conn.allow_self_signed_certs = allow_self_signed
+        net = MagicMock()
+        net.id = 1
+        net.connection = conn
+        net.namespace = "default"
+        net.deployment_mode = "CENTRALIZED"
+        net.credential_mode = "KEYSTORE"
+        net.ssl_certificate_authorities = cas
+        return net
+
+    def _config(self, net):
+        return _generate_output(net)[0]["config"]
+
+    def test_single_path_becomes_one_element_list(self):
+        cfg = self._config(self._net("/etc/logstash/ca.crt"))
+        assert cfg["ssl_certificate_authorities"] == ["/etc/logstash/ca.crt"]
+
+    def test_comma_separated_paths_are_split_and_trimmed(self):
+        cfg = self._config(self._net(" /a/ca.crt ,/b/ca.pem,  /c/ca.cer "))
+        assert cfg["ssl_certificate_authorities"] == ["/a/ca.crt", "/b/ca.pem", "/c/ca.cer"]
+
+    def test_empty_entries_are_dropped(self):
+        cfg = self._config(self._net("/a/ca.crt,, ,/b/ca.pem,"))
+        assert cfg["ssl_certificate_authorities"] == ["/a/ca.crt", "/b/ca.pem"]
+
+    @pytest.mark.parametrize("blank", ["", "   ", ",", " , ,"])
+    def test_blank_value_omits_setting(self, blank):
+        assert "ssl_certificate_authorities" not in self._config(self._net(blank))
+
+    def test_cas_replace_verification_none_when_self_signed_allowed(self):
+        """CAs mean 'verify against these', so verification must not be disabled."""
+        cfg = self._config(self._net("/a/ca.crt", allow_self_signed=True))
+        assert cfg["ssl_certificate_authorities"] == ["/a/ca.crt"]
+        assert "ssl_verification_mode" not in cfg
+
+    def test_without_cas_self_signed_still_sets_verification_none(self):
+        cfg = self._config(self._net("", allow_self_signed=True))
+        assert cfg["ssl_verification_mode"] == "none"
+        assert "ssl_certificate_authorities" not in cfg
+
+    def test_cas_omitted_for_plain_http_connection(self):
+        cfg = self._config(self._net("/a/ca.crt", host="http://es.example.com"))
+        assert "ssl_certificate_authorities" not in cfg
+        assert "ssl_verification_mode" not in cfg
+
+    def test_cas_emitted_for_cloud_id_connection(self):
+        net = self._net("/a/ca.crt", host="")
+        net.connection.cloud_id = "name:abc123"
+        assert self._config(net)["ssl_certificate_authorities"] == ["/a/ca.crt"]
+
+    def test_rendered_pipeline_contains_cas_array(self):
+        """The generated component converts to valid LSCL with a quoted array."""
+        from Common.logstash_config_parse import ComponentToPipeline
+
+        net = self._net("/etc/logstash/ca one.crt, /etc/logstash/ca2.pem")
+        lscl = ComponentToPipeline(
+            {"output": _generate_output(net)}, test=False
+        ).components_to_logstash_config()
+        assert 'ssl_certificate_authorities => ["/etc/logstash/ca one.crt", "/etc/logstash/ca2.pem"]' in lscl
+        assert "ssl_verification_mode" not in lscl
+
+
+class TestParseSslCertificateAuthorities:
+
+    @pytest.mark.parametrize("value, expected", [
+        ("/a.crt", ["/a.crt"]),
+        ("/a.crt,/b.crt", ["/a.crt", "/b.crt"]),
+        (" /a.crt , /b.crt ", ["/a.crt", "/b.crt"]),
+        ("/a.crt,,/b.crt,", ["/a.crt", "/b.crt"]),
+        ("", []),
+        (None, []),
+        (123, []),
+    ])
+    def test_cases(self, value, expected):
+        assert _parse_ssl_certificate_authorities(value) == expected
+
+
+class TestEsConnectionUsesTls:
+
+    @pytest.mark.parametrize("cloud_id, host, expected", [
+        ("dep:abc", None, True),
+        (None, "https://es.example.com", True),
+        (None, "HTTPS://ES.EXAMPLE.COM", True),
+        (None, "http://es.example.com", False),
+        (None, "es.example.com", False),
+        (None, None, False),
+    ])
+    def test_cases(self, cloud_id, host, expected):
+        c = MagicMock()
+        c.cloud_id = cloud_id
+        c.host = host
+        assert _es_connection_uses_tls(c) is expected
 
 
 # ===========================================================================

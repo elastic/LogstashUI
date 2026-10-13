@@ -201,7 +201,7 @@ class AgentBuilder:
                 "Supply at least connection_id or kibana_url_override"
             )
 
-        self._creds = _get_creds(connection_id) if connection_id else {}
+        self._creds, _conn = _get_creds(connection_id) if connection_id else ({}, None)
         self._connection_id = connection_id
 
         raw_url = (kibana_url_override or '').strip()
@@ -221,7 +221,9 @@ class AgentBuilder:
         self._auth = self._creds.get('http_auth')  # (username, password) or None
 
         self._session = requests.Session()
-        self._session.verify = False
+        # Honour the connection's TLS setting when one is bound; fall back to
+        # strict verification when only kibana_url_override is given (no record).
+        self._session.verify = (not _conn.allow_self_signed_certs) if _conn is not None else True
         self._session.auth = self._auth
         self._session.headers.update(self._read_headers)
 
