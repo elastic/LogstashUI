@@ -2750,7 +2750,7 @@ def GetDevices(request):
             'site', 'building', 'room',
             'credential__id', 'credential__name',
             'network__id', 'network__name', 'network__deployment_mode',
-            'device_template__id', 'device_template__name'
+            'device_template__id', 'device_template__name', 'device_template__vendor', 'device_template__product'
         )
 
         # Apply search filter (name, IP address, or hostname)
@@ -2835,6 +2835,8 @@ def GetDevices(request):
                 'device_template_id': device.device_template.id if device.device_template else None,
                 'device_template_name': device.device_template.name if device.device_template else None,
                 'device_template_display_name': format_display_name(device.device_template.name) if device.device_template else None,
+                'device_template_vendor': device.device_template.vendor if device.device_template else None,
+                'device_template_product': device.device_template.product if device.device_template else None,
                 'site': device.site,
                 'building': device.building,
                 'room': device.room,

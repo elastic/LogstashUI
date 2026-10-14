@@ -257,7 +257,7 @@
   // ── Wizard template dropdown — exact copy of snmp_devices_modal.js pattern ───
   // Accepts suffix 'Match' or 'Manual' so both picker instances share one code path.
 
-  function _setWizardTemplateValue(suffix, id, displayName, vendor) {
+  function _setWizardTemplateValue(suffix, id, displayName, vendor, product) {
     const hiddenInput = document.getElementById(`wizardTemplate${suffix}Value`);
     const img         = document.getElementById(`wizardTemplate${suffix}SelectedImg`);
     const text        = document.getElementById(`wizardTemplate${suffix}SelectedText`);
@@ -267,7 +267,7 @@
     if (hiddenInput) hiddenInput.value = id || '';
 
     if (id) {
-      if (img) { img.src = imagesUrl + getVendorLogoFilename(vendor); img.alt = vendor || ''; img.classList.remove('hidden'); }
+      if (img) { img.src = imagesUrl + getVendorLogoFilename(vendor, product); img.alt = vendor || ''; img.classList.remove('hidden'); }
       if (text) { text.textContent = displayName; text.classList.remove('text-gray-400'); text.classList.add('text-white'); }
     } else {
       if (img) { img.src = ''; img.classList.add('hidden'); }
@@ -275,8 +275,8 @@
     }
   }
 
-  function selectWizardTemplateOption(suffix, id, displayName, vendor) {
-    _setWizardTemplateValue(suffix, id, displayName, vendor);
+  function selectWizardTemplateOption(suffix, id, displayName, vendor, product) {
+    _setWizardTemplateValue(suffix, id, displayName, vendor, product);
     closeWizardTemplateDropdown(suffix);
   }
 
@@ -330,7 +330,7 @@
 
         const templates = data.templates || [];
         templates.forEach(template => {
-          const logoSrc   = imagesUrl + getVendorLogoFilename(template.vendor);
+          const logoSrc   = imagesUrl + getVendorLogoFilename(template.vendor, template.product);
           const displayName = template.display_name || template.name;
           const row = document.createElement('div');
           row.className = 'flex items-center gap-2 px-3 py-2 text-sm text-white hover:bg-gray-700 cursor-pointer wizard-template-option-row';
@@ -340,11 +340,11 @@
                  class="w-5 h-5 object-contain flex-shrink-0 rounded bg-white p-0.5">
             <span class="truncate">${displayName}</span>
           `;
-          row.onclick = () => selectWizardTemplateOption(suffix, template.id, displayName, template.vendor);
+          row.onclick = () => selectWizardTemplateOption(suffix, template.id, displayName, template.vendor, template.product);
           optionsList.appendChild(row);
 
           if (selectedTemplateId && template.id == selectedTemplateId) {
-            _setWizardTemplateValue(suffix, template.id, displayName, template.vendor);
+            _setWizardTemplateValue(suffix, template.id, displayName, template.vendor, template.product);
           }
         });
       })

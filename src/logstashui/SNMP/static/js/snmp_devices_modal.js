@@ -336,12 +336,14 @@ function refreshNetworks() {
   loadNetworksForDevice(currentValue);
 }
 
-// Map vendor to logo filename (mirrors DeviceTemplates.html logic)
-function getVendorLogoFilename(vendor) {
+// Map vendor (and optionally product) to logo filename (mirrors DeviceTemplates.html logic).
+// Product is only consulted for templates with no real vendor (e.g. vendor "Any", product "Linux").
+function getVendorLogoFilename(vendor, product) {
+  if ((product || '').toLowerCase() === 'linux') return 'linux.png';
   if (!vendor) return 'unknown.png';
   const v = vendor.toLowerCase();
   if (v === 'cisco') return 'cisco.png';
-  if (v === 'dell') return 'dell.png';
+  if (v === 'dell' || v === 'dell emc') return 'dell.png';
   if (v === 'brocade') return 'brocade.png';
   if (v === 'hpe' || v === 'hpe nimble') return 'hpe.png';
   if (v === 'epson') return 'epson.png';
@@ -349,10 +351,23 @@ function getVendorLogoFilename(vendor) {
   if (v === 'hp') return 'hp.png';
   if (v === 'mellanox') return 'mellanox.png';
   if (v === 'palo alto') return 'paloalto.png';
+  if (v === 'apc') return 'apc.png';
+  if (v === 'd-link') return 'dlink.png';
+  if (v === 'eaton') return 'eaton.png';
+  if (v === 'versa networks') return 'versa.png';
+  if (v === 'arista' || v === 'arista networks') return 'arista.png';
+  if (v === 'aruba') return 'aruba.png';
+  if (v === 'juniper networks') return 'hpe.png';
+  if (v === 'vertiv' || v === 'geist' || v === 'emerson') return 'vertiv.png';
+  if (v === 'netapp') return 'netapp.png';
+  if (v === 'eastpower') return 'east.png';
+  if (v === 'ingrasys') return 'ingrasys.png';
+  if (v === 'huawei') return 'hauwei.png';
+  if (v === 'phoenixtec') return 'phoenixtec.png';
   return 'unknown.png';
 }
 
-function _setTemplateValue(id, displayName, vendor) {
+function _setTemplateValue(id, displayName, vendor, product) {
   const hiddenInput = document.getElementById('deviceTemplateSelect');
   const img = document.getElementById('deviceTemplateSelectedImg');
   const text = document.getElementById('deviceTemplateSelectedText');
@@ -362,7 +377,7 @@ function _setTemplateValue(id, displayName, vendor) {
   hiddenInput.value = id || '';
 
   if (id) {
-    img.src = imagesUrl + getVendorLogoFilename(vendor);
+    img.src = imagesUrl + getVendorLogoFilename(vendor, product);
     img.alt = vendor || '';
     img.classList.remove('hidden');
     text.textContent = displayName;
@@ -378,8 +393,8 @@ function _setTemplateValue(id, displayName, vendor) {
 }
 
 // Apply a selection to the custom template dropdown
-function selectTemplateOption(id, displayName, vendor) {
-  _setTemplateValue(id, displayName, vendor);
+function selectTemplateOption(id, displayName, vendor, product) {
+  _setTemplateValue(id, displayName, vendor, product);
   closeTemplateDropdown();
 }
 
@@ -441,7 +456,7 @@ function loadDeviceTemplatesForDevice(selectedTemplateId = null) {
 
       const templates = data.templates || [];
       templates.forEach(template => {
-        const logoSrc = imagesUrl + getVendorLogoFilename(template.vendor);
+        const logoSrc = imagesUrl + getVendorLogoFilename(template.vendor, template.product);
         const displayName = template.display_name || template.name;
 
         const row = document.createElement('div');
@@ -452,11 +467,11 @@ function loadDeviceTemplatesForDevice(selectedTemplateId = null) {
                class="w-5 h-5 object-contain flex-shrink-0 rounded bg-white p-0.5">
           <span class="truncate">${displayName}</span>
         `;
-        row.onclick = () => selectTemplateOption(template.id, displayName, template.vendor);
+        row.onclick = () => selectTemplateOption(template.id, displayName, template.vendor, template.product);
         optionsList.appendChild(row);
 
         if (selectedTemplateId && template.id == selectedTemplateId) {
-          _setTemplateValue(template.id, displayName, template.vendor);
+          _setTemplateValue(template.id, displayName, template.vendor, template.product);
         }
       });
     })
