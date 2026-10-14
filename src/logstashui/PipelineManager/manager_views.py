@@ -186,6 +186,47 @@ def TestConnectivity(request):
 
 
 
+def compute_policy_revision_state(status_blob, current_revision):
+    """Compare an agent's applied policy revision with its policy's current one.
+
+    The applied revision comes from ``status_blob['last_policy_apply']``. A
+    failed apply still records a revision, so it only counts as applied when
+    ``success`` is truthy.
+
+    Args:
+        status_blob: Agent ``status_blob`` dict (or None / non-dict).
+        current_revision: ``Policy.current_revision_number``, or None when the
+            connection has no policy.
+
+    Returns:
+        ``None`` when there is no policy, otherwise a dict
+        ``{'state': 'current' | 'pending', 'applied': int | None,
+        'current': int}``.
+
+    Examples:
+        >>> compute_policy_revision_state(
+        ...     {'last_policy_apply': {'success': True, 'revision': 3}}, 3)
+        {'state': 'current', 'applied': 3, 'current': 3}
+        >>> compute_policy_revision_state({}, 2)['state']
+        'pending'
+        >>> compute_policy_revision_state({}, 0)['state']
+        'current'
+    """
+    if current_revision is None:
+        return None
+    last = status_blob.get('last_policy_apply') if isinstance(status_blob, dict) else None
+    applied = None
+    if isinstance(last, dict) and last.get('success') and last.get('revision') is not None:
+        applied = last['revision']
+    # Revision 0 means nothing has been deployed yet, so there is nothing to apply.
+    is_current = (applied == current_revision) if applied is not None else current_revision == 0
+    return {
+        'state': 'current' if is_current else 'pending',
+        'applied': applied,
+        'current': current_revision,
+    }
+
+
 def _normalize_status_blob_api_status(blob):
     """Surface the authoritative Logstash status on a status blob.
 
@@ -337,9 +378,10 @@ def agent_status_stream(request):
     """Stream agent status for all agent connections every 5 seconds (SSE).
 
     Each event is a JSON array of objects ``{id, name, status,
-    logstash_version}`` where status is one of ``restarting``,
-    ``unhealthy``, ``healthy``, or ``offline``, and ``logstash_version`` is
-    the running Logstash version or null.
+    logstash_version, revision}`` where status is one of ``restarting``,
+    ``unhealthy``, ``healthy``, or ``offline``, ``logstash_version`` is
+    the running Logstash version or null, and ``revision`` is the result of
+    ``compute_policy_revision_state`` (null when no policy is assigned).
 
     This mirrors the priority logic in ``pipeline_manager.html`` so the JS
     can update badges without a full page reload.
@@ -398,7 +440,8 @@ def agent_status_stream(request):
                     for conn in ConnectionTable.objects
                     .filter(connection_type=ConnectionTable.ConnectionType.AGENT)
                     .values('pk', 'name', 'last_check_in', 'status_blob', 'agent_id',
-                            'policy__policy_type', 'logstash_version_resolved')
+                            'policy__policy_type', 'logstash_version_resolved',
+                            'policy__current_revision_number')
                     if not is_embedded_connection(conn)
                 ]
 
@@ -420,6 +463,10 @@ def agent_status_stream(request):
                             logstash_version_resolved=conn.get('logstash_version_resolved'),
                             status_blob=conn.get('status_blob')
                             if isinstance(conn.get('status_blob'), dict) else None,
+                        ),
+                        'revision': compute_policy_revision_state(
+                            conn.get('status_blob'),
+                            conn.get('policy__current_revision_number'),
                         ),
                     }
                     for conn in connections

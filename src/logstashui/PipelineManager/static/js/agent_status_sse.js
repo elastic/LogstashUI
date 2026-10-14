@@ -78,7 +78,7 @@ function _buildVersionPill(version) {
   return span;
 }
 
-function _applyUpdate(id, name, status, logstashVersion) {
+function _applyUpdate(id, name, status, logstashVersion, revision) {
   const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.offline;
 
   // 1. Update list badge
@@ -94,6 +94,12 @@ function _applyUpdate(id, name, status, logstashVersion) {
     if (existing) {
       existing.replaceWith(_buildModalBadge(cfg));
     }
+  }
+
+  // 4. Update the policy revision indicator (defined in connections_table.js).
+  const revisionContainer = document.querySelector(`.revision-container[data-agent-id="${id}"]`);
+  if (revisionContainer && window.buildRevisionBadge) {
+    revisionContainer.innerHTML = window.buildRevisionBadge(revision);
   }
 
   // 3. Update the Logstash version pill. Only ever written for a truthy value:
@@ -116,8 +122,8 @@ function _connect() {
   source.onmessage = function (event) {
     try {
       const updates = JSON.parse(event.data);
-      updates.forEach(({ id, name, status, logstash_version }) =>
-        _applyUpdate(id, name, status, logstash_version));
+      updates.forEach(({ id, name, status, logstash_version, revision }) =>
+        _applyUpdate(id, name, status, logstash_version, revision));
     } catch (e) {
       console.error('[AgentSSE] Failed to parse event data:', e);
     }
