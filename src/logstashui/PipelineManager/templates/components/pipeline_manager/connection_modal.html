@@ -186,6 +186,18 @@
                     <p class="text-gray-400 text-xs mt-1">Base64-encoded API key for authentication</p>
                   </div>
                 </div>
+
+                <!-- Allow Self-Signed Certificates. Lives inside centralizedFields so it is
+                     hidden for agent enrollment, where TLS verification is not applicable. -->
+                <div id="allowSelfSignedField" class="mb-4">
+                  <label class="flex items-center gap-3 cursor-pointer">
+                    {{ form.allow_self_signed_certs }}
+                    <span class="text-sm font-medium text-gray-300">Allow self-signed certificates</span>
+                  </label>
+                  <p class="text-gray-400 text-xs mt-1 ml-6">
+                    Skip TLS certificate verification (required for self-signed or private CA certs)
+                  </p>
+                </div>
               </div>
 
               <!-- Logstash Agent Connection Fields -->
@@ -262,6 +274,13 @@
                     </label>
                     <p id="installLogstashHint" class="hidden text-xs text-gray-500 mt-1 ml-6"></p>
                   </div>
+
+                  <!-- Managed policies: the agent installs Logstash itself, so no manual install option -->
+                  <div id="managedLogstashNotice" class="hidden mb-3 p-3 bg-blue-900/20 border border-blue-600 rounded-lg">
+                    <p class="text-blue-300 text-sm">
+                      With this policy type the agent will install and manage Logstash for you. Please make sure that's configured in the policy.
+                    </p>
+                  </div>
                   
                   <!-- Package Manager Selection (shown when Install Logstash is checked) -->
                   <div id="packageManagerSection" class="hidden mb-3 ml-6">
@@ -308,17 +327,6 @@ sudo systemctl enable logstash-agent
 sudo systemctl start logstash-agent</code></pre>
                   </div>
                 </div>
-              </div>
-
-              <!-- Allow Self-Signed Certificates (centralized connections only) -->
-              <div id="allowSelfSignedField" class="mb-4">
-                <label class="flex items-center gap-3 cursor-pointer">
-                  {{ form.allow_self_signed_certs }}
-                  <span class="text-sm font-medium text-gray-300">Allow self-signed certificates</span>
-                </label>
-                <p class="text-gray-400 text-xs mt-1 ml-6">
-                  Skip TLS certificate verification (required for self-signed or private CA certs)
-                </p>
               </div>
 
               <div class="form-actions pt-6 mt-6 border-t border-gray-700">
@@ -864,8 +872,12 @@ sudo systemctl start logstash-agent</code></pre>
     if (pt === 'EMBEDDED') {
       return false;
     }
+    // MANAGED: the agent installs and manages its own Logstash; no manual package install
+    if (pt === 'MANAGED') {
+      return false;
+    }
     // VERSION source downloads Logstash; OS package install is not used
-    if ((pt === 'SIMULATE' || pt === 'MANAGED') && logstashSource === 'VERSION') {
+    if (pt === 'SIMULATE' && logstashSource === 'VERSION') {
       return false;
     }
     return true;
@@ -912,6 +924,11 @@ sudo systemctl start logstash-agent</code></pre>
     const pkgSection = document.getElementById('packageManagerSection');
     const hint = document.getElementById('installLogstashHint');
     const offer = shouldOfferInstallLogstash();
+    const managedNotice = document.getElementById('managedLogstashNotice');
+    if (managedNotice) {
+      const { policyType } = selectedAgentPolicyMeta();
+      managedNotice.classList.toggle('hidden', !(hasSelectedAgentPolicy() && policyType === 'MANAGED'));
+    }
     if (row) {
       if (offer) {
         row.classList.remove('hidden');
