@@ -301,6 +301,11 @@
     document.getElementById('centralizedFields').classList.add('hidden');
     document.getElementById('agentFields').classList.remove('hidden');
     document.getElementById('connectionNameField').classList.add('hidden');
+
+    // Always start with no policy selected so the token/commands stay hidden
+    if (window.resetAgentEnrollSelection) {
+      window.resetAgentEnrollSelection();
+    }
     
     // Hide Save Connection button for Agent connections
     const saveConnectionBtn = document.getElementById('saveConnectionBtn');
