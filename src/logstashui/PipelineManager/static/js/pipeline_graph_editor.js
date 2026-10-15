@@ -377,6 +377,11 @@ function renderGraphEditor() {
     setTimeout(() => {
         isInitialRender = false;
     }, 100);
+
+    // Restore graph move-mode drop zones if a move is in progress (see move_graph.js)
+    if (window.graphMove && typeof window.graphMove.onRender === 'function') {
+        window.graphMove.onRender();
+    }
 }
 
 /**
@@ -2772,6 +2777,23 @@ function createNodeElement(component, x, y, width, height, type) {
     headerFO.setAttribute('width', width);
     headerFO.setAttribute('height', baseHeight);
     
+    // Move handle (see move_graph.js): not for inputs (no ordered slots in the graph),
+    // not for pinned plugins, and for conditionals only on the "if" node, which moves
+    // the whole conditional including all of its branches.
+    const isIfNode = isConditional && !isContinue && component.plugin === 'if';
+    const canMove = type !== 'input' &&
+        !(window.isPinnedPipelineComponent && window.isPinnedPipelineComponent(component)) &&
+        (!isConditional || isIfNode);
+    const moveHandleHtml = canMove ? `
+            <button class="text-gray-400 hover:text-white p-1 graph-move-handle"
+                    data-graph-move-id="${component.id}"
+                    title="${isIfNode ? 'Move this condition' : 'Move this component'}">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16" />
+                </svg>
+            </button>
+            ` : '';
+
     const headerDiv = document.createElement('div');
     headerDiv.className = 'flex items-center justify-between p-3 graph-node-header';
     headerDiv.innerHTML = `
@@ -2783,6 +2805,7 @@ function createNodeElement(component, x, y, width, height, type) {
             <span class="font-medium text-white truncate" style="color: ${color.text}">${component.plugin || 'Unknown'}</span>
         </div>
         <div class="flex gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity graph-node-buttons">
+            ${moveHandleHtml}
             ${(isConditional && !isContinue) ? `
             <button class="text-gray-400 hover:text-white p-1 graph-edit-condition-btn" 
                     data-component-id="${component.id}"
