@@ -32,8 +32,8 @@ with isolated state under `…/state/` and systemd `EnvironmentFile=…/agent.en
 
 | Role | Paths | Units |
 |------|-------|-------|
-| **Managed N** | `/opt/logstash-agent/managed-N/` | `logstash-agent@N`, `logstash-managed@N` |
-| **Simulate N** | `/opt/logstash-agent/simulate-N/` | `lsagent-simulate@N`, `ls-simulate@N` |
+| **Managed N** | `/opt/logstash-agent/managed-N/` | `managed-agent@N`, `managed-logstash@N` |
+| **Simulate N** | `/opt/logstash-agent/simulate-N/` | `simulate-agent@N`, `simulate-logstash@N` |
 
 Packaged and multi-instance roles can **coexist** on one host. See the [roles guide](/docs/docs/logstashagent/general/roles.md#host-coexistence).
 

@@ -15,8 +15,8 @@ mode: packaged   # packaged | managed | simulate | embedded
 | Mode | Meaning |
 |------|---------|
 | **packaged** | Enrolled production agent (Packaged policy). Controller check-in; `systemctl` manages package `logstash`. Config: `/etc/logstash-agent/logstash-agent.yml`. |
-| **managed** | Enrolled multi-instance agent **N** (Managed policy). Controller + FastAPI; manages `logstash-managed@N` under `/opt/logstash-agent/managed-N/`. |
-| **simulate** | Enrolled simulation agent **N**. FastAPI + controller; manages `ls-simulate@N` with isolated paths. |
+| **managed** | Enrolled multi-instance agent **N** (Managed policy). Controller + FastAPI; manages `managed-logstash@N` under `/opt/logstash-agent/managed-N/`. |
+| **simulate** | Enrolled simulation agent **N**. FastAPI + controller; manages `simulate-logstash@N` with isolated paths. |
 | **embedded** | Docker/local sim without enrollment. FastAPI + process supervisor. |
 | **default** | Legacy alias of **packaged** (still accepted). |
 
@@ -67,7 +67,7 @@ File location on disk (host coexistence):
 `/opt/logstash-agent/managed-1/logstash-agent.yml`  
 (not under `/etc/logstash-agent/`).
 
-Units: `logstash-agent@1`, `logstash-managed@1`.
+Units: `managed-agent@1`, `managed-logstash@1`.
 
 ## Simulate-specific (usually from enrollment)
 
@@ -84,7 +84,7 @@ logstash_download_dir: /opt/logstash-agent/logstash-versions
 ```
 
 File location: `/opt/logstash-agent/simulate-1/logstash-agent.yml`.  
-Units: `lsagent-simulate@1`, `ls-simulate@1`.
+Units: `simulate-agent@1`, `simulate-logstash@1`.
 
 ## VERSION settings
 
