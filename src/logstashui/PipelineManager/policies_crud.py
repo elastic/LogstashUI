@@ -6,6 +6,7 @@
 
 from Common.decorators import require_admin_role
 from PipelineManager.models import Policy, EnrollmentToken, Pipeline, Keystore, Connection as ConnectionTable
+from PipelineManager.system_policy_defaults import set_path_logs
 from django.http import JsonResponse
 
 import json
@@ -81,6 +82,7 @@ def add_policy(request):
         binary_path = data.get('binary_path', '/usr/share/logstash/bin')
 
         # Use defaults if values are empty or not provided
+        used_default_yml = not data.get('logstash_yml')
         logstash_yml = data.get('logstash_yml') or get_default_logstash_yml()
         jvm_options = data.get('jvm_options') or get_default_jvm_options()
         log4j2_properties = data.get('log4j2_properties') or get_default_log4j2_properties()
@@ -165,6 +167,14 @@ def add_policy(request):
         elif policy_type == Policy.PolicyType.SIMULATE and uses_packaged_default_paths(policy):
             apply_simulate_path_bundle(policy)
             policy.save()
+
+        if used_default_yml:
+            # The default yml hardcodes the Packaged logs path; keep path.logs in
+            # step with the policy's final logs_path so requirements stay met.
+            synced = set_path_logs(policy.logstash_yml, policy.logs_path)
+            if synced != policy.logstash_yml:
+                policy.logstash_yml = synced
+                policy.save()
 
         from PipelineManager.agent_versions import resolve_persisted_binary_path
 

@@ -107,6 +107,9 @@ def system_policies(db):
     managed.is_system = True
     managed.agent_api_port = 9550
     managed.logstash_api_port = 9700
+    # The migration-seeded policy ships a full compliant yml; pin the flat form
+    # these assertions were written against.
+    managed.logstash_yml = 'api.http.port: 9700\n'
     managed.save()
 
     simulate, _ = Policy.objects.get_or_create(

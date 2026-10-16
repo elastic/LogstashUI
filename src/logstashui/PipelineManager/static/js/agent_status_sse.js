@@ -99,7 +99,12 @@ function _applyUpdate(id, name, status, logstashVersion, revision) {
   // 4. Update the policy revision indicator (defined in connections_table.js).
   const revisionContainer = document.querySelector(`.revision-container[data-agent-id="${id}"]`);
   if (revisionContainer && window.buildRevisionBadge) {
-    revisionContainer.innerHTML = window.buildRevisionBadge(revision);
+    // Only rewrite on change so an open tooltip isn't torn down every 5 s.
+    const html = window.buildRevisionBadge(revision);
+    if (revisionContainer.dataset.html !== html) {
+      revisionContainer.dataset.html = html;
+      revisionContainer.innerHTML = html;
+    }
   }
 
   // 3. Update the Logstash version pill. Only ever written for a truthy value:
