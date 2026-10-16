@@ -6,7 +6,7 @@
 
 from Common.decorators import require_admin_role
 from PipelineManager.models import Policy, EnrollmentToken, Pipeline, Keystore, Connection as ConnectionTable
-from PipelineManager.system_policy_defaults import set_path_logs
+from PipelineManager.system_policy_defaults import set_path_logs, strip_license_header
 from django.http import JsonResponse
 
 import json
@@ -758,8 +758,8 @@ def load_default_config(filename):
 
 
 def get_default_logstash_yml():
-    """Return the packaged default ``logstash.yml`` text."""
-    return load_default_config('default_logstash.yml')
+    """Return the packaged default ``logstash.yml`` text, without the repo license header."""
+    return strip_license_header(load_default_config('default_logstash.yml'))
 
 
 def get_default_jvm_options():

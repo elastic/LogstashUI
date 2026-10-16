@@ -21,6 +21,7 @@ from PipelineManager.system_policy_defaults import (
     build_required_logstash_yml,
     build_snapshot,
     is_untouched_seed,
+    strip_license_header,
 )
 
 SYSTEM_TYPES = ("PACKAGED", "MANAGED", "SIMULATE")
@@ -47,6 +48,9 @@ def deploy_system_policies(apps, schema_editor):
             policy.logstash_yml = build_required_logstash_yml(
                 policy.policy_type, policy.logs_path
             )
+        else:
+            # 0024/0025 seeded Packaged from data/default_logstash.yml verbatim.
+            policy.logstash_yml = strip_license_header(policy.logstash_yml)
 
         # Historical models skip Policy.save(), so refresh the agent-facing hashes here.
         policy.logstash_yml_hash = _sha256(policy.logstash_yml)

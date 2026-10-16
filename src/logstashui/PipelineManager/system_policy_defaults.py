@@ -24,6 +24,39 @@ _ORIGINAL_FLAT_SEED_KEYS = {
 
 _HEADER = "# Policy default logstash.yml (LogstashAgent requirements satisfied)\n"
 
+# Repo license header that pre-commit adds to data/default_logstash.yml. It must
+# not be copied into customer policies.
+_LICENSE_HEADER_LINES = (
+    "#Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one",
+    "#or more contributor license agreements. Licensed under the Elastic License;",
+    "#you may not use this file except in compliance with the Elastic License.",
+)
+
+
+def strip_license_header(text: str) -> str:
+    """Remove the repo license header (and the blank line after it) from the top.
+
+    Args:
+        text: File contents, possibly starting with the license header.
+
+    Returns:
+        ``text`` without the header; unchanged when the header is absent.
+
+    Examples:
+        >>> strip_license_header("\\n".join(_LICENSE_HEADER_LINES) + "\\n\\nlog.level: info\\n")
+        'log.level: info\\n'
+        >>> strip_license_header("log.level: info\\n")
+        'log.level: info\\n'
+    """
+    lines = (text or "").splitlines(keepends=True)
+    head = [line.rstrip("\r\n") for line in lines[: len(_LICENSE_HEADER_LINES)]]
+    if tuple(head) != _LICENSE_HEADER_LINES:
+        return text
+    rest = lines[len(_LICENSE_HEADER_LINES):]
+    if rest and not rest[0].strip():
+        rest = rest[1:]
+    return "".join(rest)
+
 
 def build_required_logstash_yml(policy_type: str, logs_path: str) -> str:
     """Build a ``logstash.yml`` that satisfies every policy requirement.

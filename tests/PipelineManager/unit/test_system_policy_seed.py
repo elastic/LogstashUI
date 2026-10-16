@@ -21,8 +21,11 @@ from PipelineManager.system_policy_defaults import (
     build_required_logstash_yml,
     is_untouched_seed,
     set_path_logs,
+    strip_license_header,
     unmet_requirements,
 )
+
+LICENSE_MARKER = "Elasticsearch B.V."
 
 migration = importlib.import_module("PipelineManager.migrations.0031_deploy_system_policies")
 
@@ -146,6 +149,37 @@ def test_default_logstash_yml_is_compliant():
     assert unmet_requirements(get_default_logstash_yml(), "/var/log/logstash") == []
 
 
+def test_default_logstash_yml_has_no_license_header():
+    yml = get_default_logstash_yml()
+    assert LICENSE_MARKER not in yml
+    assert yml.startswith("# ------------ LogstashAgent requirements")
+
+
+@pytest.mark.parametrize("name", SYSTEM_NAMES)
+def test_seeded_system_policies_have_no_license_header(db, name):
+    assert LICENSE_MARKER not in Policy.objects.get(name=name).logstash_yml
+
+
+def test_migration_strips_license_header_from_raw_file_seed(db):
+    from PipelineManager.policies_crud import load_default_config
+
+    raw = load_default_config("default_logstash.yml")
+    assert raw.startswith("#Copyright")
+    policy = Policy.objects.get(name="Packaged Policy")
+    _reset_to_rev0(policy, raw)
+
+    migration.deploy_system_policies(django_apps, None)
+
+    policy.refresh_from_db()
+    assert policy.logstash_yml == strip_license_header(raw)
+    assert Revision.objects.get(policy=policy).snapshot_json["logstash_yml"] == policy.logstash_yml
+
+
+def test_strip_license_header_leaves_other_text_alone():
+    assert strip_license_header("# my comment\nlog.level: info\n") == "# my comment\nlog.level: info\n"
+    assert strip_license_header("") == ""
+
+
 def test_set_path_logs_keeps_comments():
     yml = set_path_logs(get_default_logstash_yml(), "/opt/x/logs")
     assert unmet_requirements(yml, "/opt/x/logs") == []
@@ -192,3 +226,4 @@ def test_new_policy_from_default_is_compliant(admin_client, ptype):
     assert response.status_code == 200, response.content
     policy = Policy.objects.get(name=f"new-{ptype}")
     assert unmet_requirements(policy.logstash_yml, policy.logs_path) == []
+    assert LICENSE_MARKER not in policy.logstash_yml
