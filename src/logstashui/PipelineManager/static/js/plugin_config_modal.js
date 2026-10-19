@@ -1169,6 +1169,7 @@ window.PluginConfigModal = (function () {
             populateCodecValues(component);
             populateArrayOfHashesValues(component);
             populateKeyListHashValues(component);
+            checkAllFieldReferences();
         }, 10);
 
         // Focus the first input field
@@ -1653,6 +1654,117 @@ window.PluginConfigModal = (function () {
             warning.classList.add('hidden');
         }
     }
+
+    const FIELD_REFERENCE_DOCS_URL = 'https://www.elastic.co/docs/reference/logstash/event-dependent-configuration#logstash-config-field-references';
+
+    /**
+     * Converts a dotted field name to Logstash bracket syntax.
+     *
+     * Args:
+     *     value: Field name as typed by the user.
+     *
+     * Returns:
+     *     Bracketed field reference, or null if the value has no dot to convert.
+     *     Bracketed paths with a dot past the first segment are left alone, since
+     *     those usually name a real dotted key (e.g. Kubernetes labels).
+     *
+     * Example:
+     *     toFieldReference('source.ip')    // '[source][ip]'
+     *     toFieldReference('[source.ip]')  // '[source][ip]'
+     *     toFieldReference('[kubernetes][labels][app.kubernetes.io/name]')  // null
+     */
+    function toFieldReference(value) {
+        const trimmed = String(value).trim();
+        if (!trimmed.includes('.') || trimmed.includes('%{')) return null;
+        const bracketed = trimmed.match(/^\[(.+)\]$/);
+        if (bracketed) {
+            const segments = bracketed[1].split('][');
+            if (segments.length > 1 && segments.slice(1).some(s => s.includes('.'))) return null;
+        }
+        const parts = trimmed.split(/[\[\].]/).filter(Boolean);
+        if (parts.length < 2) return null;
+        return parts.map(part => `[${part}]`).join('');
+    }
+
+    // Returns the field_reference mode that applies to this specific input, or null
+    function getFieldReferenceMode(input) {
+        if (!currentComponent) return null;
+
+        if (input.dataset.codecName) {
+            return pluginData.codec?.[input.dataset.codecName]?.options?.[input.dataset.codecOption]?.field_reference || null;
+        }
+
+        const fieldGroup = input.closest('[data-field-name]');
+        if (!fieldGroup) return null;
+        const option = pluginData[currentComponent.type]?.[currentComponent.plugin]?.options?.[fieldGroup.dataset.fieldName];
+        const mode = option?.field_reference;
+        if (!mode || mode === 'No') return null;
+
+        const isKey = input.classList.contains('section-key') || (input.placeholder || '').startsWith('Key');
+        if (mode === 'both') return mode;
+        if (mode === 'key') return isKey ? mode : null;
+        if (isKey) return null;
+        if (mode === 'first') {
+            const container = input.closest('[id^="array-container-"]');
+            return container && container.querySelector('input[type="text"]') === input ? mode : null;
+        }
+        return mode;
+    }
+
+    function checkFieldReference(input) {
+        let hint = input._fieldRefHint;
+        const mode = getFieldReferenceMode(input);
+        const values = input.dataset.codecList ? input.value.split(',').map(v => v.trim()) : [input.value];
+        const converted = values.map(v => toFieldReference(v));
+
+        if (!mode || converted.every(c => c === null)) {
+            if (hint) {
+                hint.remove();
+                input._fieldRefHint = null;
+            }
+            return;
+        }
+
+        const suggestion = values.map((v, i) => converted[i] || v).join(', ');
+        if (!hint) {
+            hint = document.createElement('p');
+            hint.className = 'field-ref-hint text-xs text-gray-400 mt-1';
+            hint._input = input;
+            hint.innerHTML = `This field uses Logstash's <a href="${FIELD_REFERENCE_DOCS_URL}" target="_blank" rel="noopener" class="underline hover:text-white">field reference syntax</a>, you may be meaning to use <button type="button" class="font-mono underline decoration-dotted text-blue-300 hover:text-blue-200"></button> here.`;
+            hint.querySelector('button').addEventListener('click', () => {
+                input.value = hint._suggestion;
+                input.dispatchEvent(new Event('input', { bubbles: true }));
+                input.dispatchEvent(new Event('change', { bubbles: true }));
+                input.focus();
+            });
+            const anchor = input.parentElement.classList.contains('flex') ? input.parentElement : input;
+            anchor.insertAdjacentElement('afterend', hint);
+            input._fieldRefHint = hint;
+        }
+        hint._suggestion = suggestion;
+        hint.querySelector('button').textContent = suggestion;
+    }
+
+    // Remove hints whose input was removed (e.g. a hash row was deleted)
+    function sweepFieldReferenceHints() {
+        document.querySelectorAll('#configForm .field-ref-hint').forEach(hint => {
+            if (!hint._input || !hint._input.isConnected) hint.remove();
+        });
+    }
+
+    function checkAllFieldReferences() {
+        document.querySelectorAll('#configForm input[type="text"]').forEach(checkFieldReference);
+    }
+
+    document.addEventListener('input', (e) => {
+        if (e.target.matches?.('#configForm input[type="text"]')) checkFieldReference(e.target);
+    });
+    document.addEventListener('click', (e) => {
+        if (e.target.closest?.('#configForm')) setTimeout(sweepFieldReferenceHints, 0);
+    }, true);
+    document.addEventListener('change', (e) => {
+        if (e.target.matches?.('#configForm select[id^="codec-select-"]')) setTimeout(checkAllFieldReferences, 0);
+    });
 
     // Public API
     return {
@@ -2409,6 +2521,7 @@ window.handleCodecChange = function (containerId, fieldId, codecName) {
         } else if (optType.includes('array')) {
             inputHtml = `
         <input type="text" id="${codecFieldId}" class="${inputClasses}"
+               data-codec-name="${codecName}" data-codec-option="${optKey}" data-codec-list="true"
                value="${Array.isArray(optValue) ? optValue.join(', ') : optValue}"
                placeholder="Comma-separated values"
                onchange="updateCodecField('${containerId}', '${fieldId}', '${codecName}', '${optKey}', this.value.split(',').map(v => v.trim()).filter(v => v))">
@@ -2416,6 +2529,7 @@ window.handleCodecChange = function (containerId, fieldId, codecName) {
         } else {
             inputHtml = `
         <input type="text" id="${codecFieldId}" class="${inputClasses}"
+               data-codec-name="${codecName}" data-codec-option="${optKey}"
                value="${optValue}"
                onchange="updateCodecField('${containerId}', '${fieldId}', '${codecName}', '${optKey}', this.value)">
       `;
