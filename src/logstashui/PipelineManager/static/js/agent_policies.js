@@ -4,6 +4,9 @@
 
 // Track original content for change detection
 let originalFileContents = {};
+// The form cannot round-trip comments or key order, so logstash.yml also counts as
+// unchanged when it matches the form's own rendering of the saved file.
+let originalFormYml = null;
 let changedFiles = new Set();
 const DRAFT_POLICY_VALUE = '__draft__';
 const SYSTEM_BINARY_PATH = '/usr/share/logstash/bin';
@@ -904,6 +907,9 @@ function parseYmlToForm(ymlContent) {
         
         // console.log('Successfully parsed YAML and populated form fields');
         
+        if (ymlContent === originalFileContents['logstash.yml']) {
+            originalFormYml = formToYml();
+        }
     } catch (error) {
         console.error('Error parsing YAML:', error);
         console.error('YAML content that failed to parse:', ymlContent?.substring(0, 200));
@@ -3305,6 +3311,9 @@ function storeOriginalContent() {
     originalFileContents['logstash.yml'] = window.policyFileContents['logstash.yml'] || '';
     originalFileContents['jvm.options'] = window.policyFileContents['jvm.options'] || '';
     originalFileContents['log4j2.properties'] = window.policyFileContents['log4j2.properties'] || '';
+    const ymlFormActive = window.policyCurrentFile === 'logstash.yml'
+        && document.getElementById('formModeBtn')?.classList.contains('active');
+    originalFormYml = ymlFormActive ? formToYml() : null;
     
     // Store original Policy Config form fields (paths, simulate source, etc.)
     POLICY_CONFIG_FIELD_IDS.forEach((id) => {
@@ -3356,6 +3365,9 @@ function getCurrentContent(file) {
 function hasFileChanged(file) {
     const original = originalFileContents[file] || '';
     const current = getCurrentContent(file);
+    if (file === 'logstash.yml' && originalFormYml !== null && current === originalFormYml) {
+        return false;
+    }
     return original !== current;
 }
 

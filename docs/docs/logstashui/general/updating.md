@@ -23,10 +23,10 @@ start_logstashui.bat --update
 
 ## LogstashAgent pairing
 
-When LogstashUI is updated, upgrade enrolled agents to the **preferred agent version** shown in the UI (banner / Settings). For **0.5.3**:
+When LogstashUI is updated, upgrade enrolled agents to the **preferred agent version** shown in the UI (banner / Settings):
 
 1. Install the matching LogstashAgent package on each host.
-2. Restart the agent unit for that role (`logstash-agent`, `logstash-agent@N`, or `lsagent-simulate@N`).
+2. Restart the agent unit for that role (`logstash-agent`, `managed-agent@N`, or `simulate-agent@N`).
 3. **Production Packaged/Default agents do not need to re-enroll.**
 4. Apply DB migrations (compose entrypoint runs them; bare metal: `python manage.py migrate`).
 

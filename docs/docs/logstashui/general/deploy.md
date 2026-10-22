@@ -57,7 +57,7 @@ Browsers warn on the product default leaf until you trust the product CA or uplo
 
 ## Option 2: Host-backed Simulation (prefer enrolled Simulate agents)
 
-For frequent or heavy simulation, enroll one or more **Simulate** policy agents (`lsagent-simulate@N` / isolated `simulate-N` paths). Select them in the pipeline editor **Sim target** control.
+For frequent or heavy simulation, enroll one or more **Simulate** policy agents (`simulate-agent@N` / isolated `simulate-N` paths). Select them in the pipeline editor **Sim target** control.
 
 **Preferred:** [Simulate agents setup](/docs/docs/logstashui/configuration/host_mode.md)
 
@@ -68,7 +68,7 @@ For frequent or heavy simulation, enroll one or more **Simulate** policy agents 
 ## Option 3: pip / uv + systemd
 
 ```bash
-pip install logstashui-0.5.3-py3-none-any.whl   # or: uv pip install …
+pip install logstashui-<version>-py3-none-any.whl   # or: uv pip install …
 logstashui                                       # HTTPS :8443, data in $(pwd)/logstashui_data
 sudo logstashui systemd                          # writes /etc/default/logstashui + unit; does not enable
 sudo systemctl enable --now logstashui

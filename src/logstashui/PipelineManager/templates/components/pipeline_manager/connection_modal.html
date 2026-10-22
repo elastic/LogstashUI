@@ -186,6 +186,18 @@
                     <p class="text-gray-400 text-xs mt-1">Base64-encoded API key for authentication</p>
                   </div>
                 </div>
+
+                <!-- Allow Self-Signed Certificates. Lives inside centralizedFields so it is
+                     hidden for agent enrollment, where TLS verification is not applicable. -->
+                <div id="allowSelfSignedField" class="mb-4">
+                  <label class="flex items-center gap-3 cursor-pointer">
+                    {{ form.allow_self_signed_certs }}
+                    <span class="text-sm font-medium text-gray-300">Allow self-signed certificates</span>
+                  </label>
+                  <p class="text-gray-400 text-xs mt-1 ml-6">
+                    Skip TLS certificate verification (required for self-signed or private CA certs)
+                  </p>
+                </div>
               </div>
 
               <!-- Logstash Agent Connection Fields -->
@@ -235,11 +247,11 @@
                     <option value="">Select a policy...</option>
                     <option value="add_new" class="font-bold text-primary">+ Add Agent Policy</option>
                   </select>
-                  <p class="text-gray-400 text-xs mt-1">Select the policy to apply to this agent</p>
+                  <p class="text-gray-400 text-xs mt-1">Select the policy to apply to this agent. The enrollment token and install commands appear once a policy is chosen.</p>
                 </div>
 
-                <!-- Enrollment Token Dropdown -->
-                <div id="enrollmentTokenSection" class="mb-4">
+                <!-- Enrollment Token Dropdown (hidden until a policy is explicitly selected) -->
+                <div id="enrollmentTokenSection" class="mb-4 hidden">
                   <label for="enrollmentToken" class="block text-sm font-medium text-gray-300 mb-2">
                     Enrollment Token <span class="text-red-500">*</span>
                   </label>
@@ -261,6 +273,13 @@
                       <span class="text-sm text-gray-300">Install Logstash</span>
                     </label>
                     <p id="installLogstashHint" class="hidden text-xs text-gray-500 mt-1 ml-6"></p>
+                  </div>
+
+                  <!-- Managed policies: the agent installs Logstash itself, so no manual install option -->
+                  <div id="managedLogstashNotice" class="hidden mb-3 p-3 bg-blue-900/20 border border-blue-600 rounded-lg">
+                    <p class="text-blue-300 text-sm">
+                      With this policy type the agent will install and manage Logstash for you. Please make sure that's configured in the policy.
+                    </p>
                   </div>
                   
                   <!-- Package Manager Selection (shown when Install Logstash is checked) -->
@@ -308,17 +327,6 @@ sudo systemctl enable logstash-agent
 sudo systemctl start logstash-agent</code></pre>
                   </div>
                 </div>
-              </div>
-
-              <!-- Allow Self-Signed Certificates (centralized connections only) -->
-              <div id="allowSelfSignedField" class="mb-4">
-                <label class="flex items-center gap-3 cursor-pointer">
-                  {{ form.allow_self_signed_certs }}
-                  <span class="text-sm font-medium text-gray-300">Allow self-signed certificates</span>
-                </label>
-                <p class="text-gray-400 text-xs mt-1 ml-6">
-                  Skip TLS certificate verification (required for self-signed or private CA certs)
-                </p>
               </div>
 
               <div class="form-actions pt-6 mt-6 border-t border-gray-700">
@@ -568,16 +576,10 @@ sudo systemctl start logstash-agent</code></pre>
             agentPolicySelect.insertBefore(option, addNewOption);
           });
           
-          // Select first policy if available and load enrollment tokens
-          if (data.policies.length > 0) {
-            agentPolicySelect.value = data.policies[0].name.toLowerCase();
-            syncInstallLogstashVisibility();
-            syncEmbeddedEnrollUi();
-            
-            // Load enrollment tokens for the selected policy
-            // Always load tokens even if agent fields are hidden - they'll be ready when user switches to Agent type
-            await loadEnrollmentTokens(data.policies[0].id);
-          }
+          // Deliberately do NOT preselect a policy: the user must choose one
+          // before the enrollment token and install commands are revealed.
+          agentPolicySelect.value = '';
+          syncEnrollmentGate();
         }
       }
     } catch (error) {
@@ -633,9 +635,14 @@ sudo systemctl start logstash-agent</code></pre>
               // Reload policies to include the new one
               await loadAgentPolicies();
               
-              // Select the newly created policy
-              const newPolicyValue = trimmedName.toLowerCase().replace(/\s+/g, '_');
-              agentPolicySelect.value = newPolicyValue;
+              // Select the newly created policy (the user explicitly chose to create it)
+              const newOption = Array.from(agentPolicySelect.options)
+                .find(opt => opt.dataset.policyId === String(data.policy_id));
+              if (newOption) {
+                agentPolicySelect.value = newOption.value;
+              }
+              syncInstallLogstashVisibility();
+              syncEnrollmentGate();
               
               // Load enrollment tokens for the new policy
               await loadEnrollmentTokens(data.policy_id);
@@ -659,7 +666,7 @@ sudo systemctl start logstash-agent</code></pre>
         const selectedOption = this.options[this.selectedIndex];
         const policyId = selectedOption.dataset.policyId;
         syncInstallLogstashVisibility();
-        syncEmbeddedEnrollUi();
+        syncEnrollmentGate();
         
         if (policyId) {
           await loadEnrollmentTokens(policyId);
@@ -673,14 +680,12 @@ sudo systemctl start logstash-agent</code></pre>
           }
         }
       } else {
-        // Clear enrollment token dropdown and hide Linux commands when no policy is selected
+        // No policy selected: clear tokens and hide token + install commands
         const enrollmentTokenSelect = document.getElementById('enrollmentToken');
         if (enrollmentTokenSelect) {
           enrollmentTokenSelect.innerHTML = '<option value="">Select a token...</option>';
         }
-        if (linuxCommandsSection) {
-          linuxCommandsSection.classList.add('hidden');
-        }
+        syncEnrollmentGate();
       }
     });
     
@@ -828,7 +833,7 @@ sudo systemctl start logstash-agent</code></pre>
         const selectedOption = this.options[this.selectedIndex];
         const encodedToken = selectedOption.dataset.encodedToken;
         
-        if (encodedToken) {
+        if (encodedToken && hasSelectedAgentPolicy()) {
           // Update Linux commands with the selected enrollment token
           updateLinuxCommands(encodedToken);
           
@@ -867,30 +872,51 @@ sudo systemctl start logstash-agent</code></pre>
     if (pt === 'EMBEDDED') {
       return false;
     }
+    // MANAGED: the agent installs and manages its own Logstash; no manual package install
+    if (pt === 'MANAGED') {
+      return false;
+    }
     // VERSION source downloads Logstash; OS package install is not used
-    if ((pt === 'SIMULATE' || pt === 'MANAGED') && logstashSource === 'VERSION') {
+    if (pt === 'SIMULATE' && logstashSource === 'VERSION') {
       return false;
     }
     return true;
   }
 
-  /** Embedded is never enrolled via this modal (filtered from dropdown); keep helpers defensive. */
-  function syncEmbeddedEnrollUi() {
+  /** True once the user has explicitly picked a real policy (not the placeholder or "+ Add"). */
+  function hasSelectedAgentPolicy() {
+    const select = document.getElementById('agentPolicy');
+    return !!(select && select.value && select.value !== 'add_new');
+  }
+
+  /**
+   * Gate the enrollment token and install commands behind an explicit policy choice.
+   *
+   * Hidden until a policy is selected so users cannot copy a command block without
+   * first deciding which policy the agent will enroll into. Embedded policies are
+   * never enrolled via this modal (filtered from dropdown); handled defensively.
+   */
+  function syncEnrollmentGate() {
     const { policyType } = selectedAgentPolicyMeta();
-    const isEmbedded = policyType === 'EMBEDDED';
+    const showEnroll = hasSelectedAgentPolicy() && policyType !== 'EMBEDDED';
     const enrollmentTokenSection = document.getElementById('enrollmentTokenSection');
     const linuxCommandsSection = document.getElementById('linuxCommandsSection');
     if (enrollmentTokenSection) {
-      if (isEmbedded) {
-        enrollmentTokenSection.classList.add('hidden');
-      } else {
-        enrollmentTokenSection.classList.remove('hidden');
-      }
+      enrollmentTokenSection.classList.toggle('hidden', !showEnroll);
     }
-    if (linuxCommandsSection && isEmbedded) {
+    if (linuxCommandsSection && !showEnroll) {
       linuxCommandsSection.classList.add('hidden');
     }
   }
+
+  /** Reset the agent enrollment form to its initial "choose a policy" state. */
+  window.resetAgentEnrollSelection = function() {
+    const select = document.getElementById('agentPolicy');
+    const tokenSelect = document.getElementById('enrollmentToken');
+    if (select) select.value = '';
+    if (tokenSelect) tokenSelect.innerHTML = '<option value="">Select a token...</option><option value="add_new" class="font-bold text-primary">+ Add Token</option>';
+    syncEnrollmentGate();
+  };
 
   function syncInstallLogstashVisibility() {
     const row = document.getElementById('installLogstashRow');
@@ -898,6 +924,11 @@ sudo systemctl start logstash-agent</code></pre>
     const pkgSection = document.getElementById('packageManagerSection');
     const hint = document.getElementById('installLogstashHint');
     const offer = shouldOfferInstallLogstash();
+    const managedNotice = document.getElementById('managedLogstashNotice');
+    if (managedNotice) {
+      const { policyType } = selectedAgentPolicyMeta();
+      managedNotice.classList.toggle('hidden', !(hasSelectedAgentPolicy() && policyType === 'MANAGED'));
+    }
     if (row) {
       if (offer) {
         row.classList.remove('hidden');

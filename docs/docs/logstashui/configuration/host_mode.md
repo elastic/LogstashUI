@@ -40,13 +40,13 @@ sudo logstash-agent install \
   --logstash-ui-url 'https://your-logstashui.example'
 ```
 
-Install enables and starts `lsagent-simulate@N` (N is assigned at enroll; see install output). Logstash unit `ls-simulate@N` is enabled; the agent restarts it when ready.
+Install enables and starts `simulate-agent@N` (N is assigned at enroll; see install output). Logstash unit `simulate-logstash@N` is enabled; the agent restarts it when ready.
 
 5. In the pipeline editor, select the target under **Sim target**.
 
 ```bash
 # Day-2
-sudo systemctl status lsagent-simulate@N
+sudo systemctl status simulate-agent@N
 logstash-agent list-instances
 ```
 
@@ -64,12 +64,12 @@ For instance **N**:
 | Agent config / state | `…/logstash-agent.yml`, `…/state/` (isolated from packaged) |
 | Agent FastAPI | **9500 + N** |
 | Logstash HTTP API | **9560 + N** |
-| Agent unit | `lsagent-simulate@N` |
-| Logstash unit | `ls-simulate@N` |
+| Agent unit | `simulate-agent@N` |
+| Logstash unit | `simulate-logstash@N` |
 
 Embedded Docker remains **9500 / 9560** and does not use these paths.
 
-Managed multi-instance production trees use **9550+N / 9700+N** and `logstash-agent@N` / `logstash-managed@N` — see the [roles guide](/docs/docs/logstashagent/general/roles.md).
+Managed multi-instance production trees use **9550+N / 9700+N** and `managed-agent@N` / `managed-logstash@N` — see the [roles guide](/docs/docs/logstashagent/general/roles.md).
 
 ## Upgrade from old “host mode”
 
@@ -85,7 +85,7 @@ Managed multi-instance production trees use **9550+N / 9700+N** and `logstash-ag
 - `bin/sync_config.py` writes `mode: embedded` + `simulation_mode: host` (not enrolled `mode: simulate`)
 - Compose runs UI only; set `LOGSTASH_AGENT_URL=https://host.docker.internal:9501`
 
-This path is **legacy**. It is not the same as `lsagent-simulate@N` / isolated `/opt/logstash-agent/simulate-N/`. Use it only for quick local experiments; use enrolled Simulate agents for multi-instance or production-quality simulation.
+This path is **legacy**. It is not the same as `simulate-agent@N` / isolated `/opt/logstash-agent/simulate-N/`. Use it only for quick local experiments; use enrolled Simulate agents for multi-instance or production-quality simulation.
 
 ## Related
 

@@ -4,7 +4,7 @@
 > 
 > ⚠️ **Beta Release** - This project is under active development. Features may change.
 >
-> **Current package version: 0.5.2** — see [CHANGELOG.md](CHANGELOG.md). Pair with **LogstashAgent 0.5.2**. Operator guide: [agent roles / ports / coexistence / VERSION](docs/docs/logstashagent/general/roles.md).
+> See [CHANGELOG.md](CHANGELOG.md) for release notes and the matching LogstashAgent version. Operator guide: [agent roles / ports / coexistence / VERSION](docs/docs/logstashagent/general/roles.md).
 
 <img src="docs/images/simulate.png" width="100%">
 
@@ -100,7 +100,7 @@ start_logstashui.bat
 
 Once the containers are running, navigate to your host in your browser:
 
-https://<your_server_ip_or_hostname>
+https://<your_server_ip_or_hostname>:8443
 
 And that's it!
 
@@ -124,7 +124,7 @@ Use [this guide](https://www.elastic.co/docs/reference/logstash/monitoring-with-
 
 ## Updating
 
-LogstashUI will notify you when a new version is available via a banner in the navigation sidebar:
+LogstashUI will notify you when a new version is available via a banner in the navigation sidebar.
 
 To update LogstashUI to the latest version:
 
@@ -166,6 +166,10 @@ input {
 }
 ```
 
+
+## Support
+
+LogstashUI is an open source project. The configuration and pipelines artifacts it generates are supported by Elastic. If you have a problem using LogstashUI, need help, find a bug or issue with the UI or Agent, those should be reported via GitHub and not to Elastic support.
 
 ## Reporting Issues
 

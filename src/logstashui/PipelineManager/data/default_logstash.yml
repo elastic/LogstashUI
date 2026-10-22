@@ -2,6 +2,25 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
+# ------------ LogstashAgent requirements (active) ------------
+# These settings are required for LogstashAgent to manage and monitor Logstash.
+# They satisfy the "Requirements" check in the policy editor. path.logs must
+# match the policy's logs path; LogstashUI keeps it in sync for new policies.
+log:
+  level: info
+  format: json
+path:
+  logs: /var/log/logstash
+config:
+  reload:
+    automatic: true
+    interval: 10s
+api:
+  enabled: true
+  http:
+    host: 127.0.0.1
+    port: 9600
+
 # Settings file in YAML
 #
 # Settings can be specified either in hierarchical form, e.g.:

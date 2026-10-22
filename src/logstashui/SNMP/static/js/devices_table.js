@@ -196,7 +196,20 @@ function renderDevices(devices) {
           </div>
         </div>
       </td>
-      <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">${escapeHtml(device.name)}</td>
+      <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">
+        <div class="flex items-center gap-3">
+          <div class="flex-shrink-0 flex items-center justify-center"
+               style="width:36px;height:36px;padding:4px;box-sizing:border-box;border-radius:10px;overflow:hidden;
+                      background:radial-gradient(circle at center, #ffffff 0%, #f1f5f9 60%, #cbd5e1 100%);
+                      box-shadow:0 0 0 1px rgba(148,163,184,0.35);"
+               title="${escapeHtml(device.device_template_vendor || 'Unknown vendor')}">
+            <img src="${window.deviceImagesUrl + getVendorLogoFilename(device.device_template_vendor, device.device_template_product)}"
+                 alt="${escapeHtml(device.device_template_vendor || 'Unknown vendor')}"
+                 class="w-full h-full object-contain" />
+          </div>
+          <span>${escapeHtml(device.name)}</span>
+        </div>
+      </td>
       <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
         ${device.hostname ? `<span class="font-mono">${escapeHtml(device.hostname)}</span>` : '<span class="text-gray-500 italic">—</span>'}
       </td>

@@ -17,7 +17,11 @@ from Common.decorators import require_admin_role
 from Common.elastic_utils import get_elastic_connection
 
 from . import manager_views
-from .manager_views import _logstash_yml_cpm_enabled, _normalize_status_blob_api_status
+from .manager_views import (
+    _logstash_yml_cpm_enabled,
+    _normalize_status_blob_api_status,
+    compute_policy_revision_state,
+)
 
 from datetime import datetime, timezone
 
@@ -73,7 +77,7 @@ def GetConnectionsTable(request):
         'connection_type', 'name', 'host', 'cloud_id', 'cloud_url', 'pk',
         'policy__name', 'policy_id', 'policy__policy_type', 'agent_id',
         'last_check_in', 'status_blob', 'desired_agent_version',
-        'logstash_version_resolved',
+        'logstash_version_resolved', 'policy__current_revision_number',
     )
     if search:
         qs = qs.filter(name__icontains=search)
@@ -195,6 +199,12 @@ def GetConnectionsTable(request):
             'feature_snmp': conn['_feature_snmp'],
             'group_color': conn['_group_color'],
             'last_check_in': conn['last_check_in'].isoformat() if conn.get('last_check_in') else None,
+            'revision': (
+                compute_policy_revision_state(
+                    conn.get('status_blob'), conn.get('policy__current_revision_number')
+                )
+                if conn['connection_type'] != 'CENTRALIZED' else None
+            ),
         })
 
     # Policy list for filter dropdown. Only exclude EMBEDDED: those connections

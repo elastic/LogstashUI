@@ -45,9 +45,12 @@ function createToastContainer() {
 // Escape HTML to prevent XSS
 function escapeHtml(text) {
   if (text === null || text === undefined) return '';
-  const div = document.createElement('div');
-  div.textContent = String(text);
-  return div.innerHTML;
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 // Convert a slug-style identifier (e.g. 'dell_x1026', 'generic_interfaces.json')
