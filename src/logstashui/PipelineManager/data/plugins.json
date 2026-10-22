@@ -216,10 +216,15 @@
                 },
                 "ecs_compatibility": {
                     "setting": "ecs_compatibility",
-                    "input_type": "string",
+                    "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-inputs-beats-ecs_compatibility",
                     "important": "No",
+                    "options": [
+                        "disabled",
+                        "v1",
+                        "v8"
+                    ],
                     "field_reference": "No"
                 },
                 "enrich": {
@@ -990,10 +995,15 @@
                 },
                 "ecs_compatibility": {
                     "setting": "ecs_compatibility",
-                    "input_type": "string",
+                    "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-inputs-elastic_agent-ecs_compatibility",
                     "important": "No",
+                    "options": [
+                        "disabled",
+                        "v1",
+                        "v8"
+                    ],
                     "field_reference": "No"
                 },
                 "enrich": {
@@ -1445,10 +1455,15 @@
                 },
                 "ecs_compatibility": {
                     "setting": "ecs_compatibility",
-                    "input_type": "string",
+                    "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-inputs-elasticsearch-ecs_compatibility",
                     "important": "No",
+                    "options": [
+                        "disabled",
+                        "v1",
+                        "v8"
+                    ],
                     "field_reference": "No"
                 },
                 "hosts": {
@@ -1819,10 +1834,15 @@
                 },
                 "ecs_compatibility": {
                     "setting": "ecs_compatibility",
-                    "input_type": "string",
+                    "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-inputs-exec-ecs_compatibility",
                     "important": "No",
+                    "options": [
+                        "disabled",
+                        "v1",
+                        "v8"
+                    ],
                     "field_reference": "No"
                 },
                 "interval": {
@@ -1940,10 +1960,15 @@
                 },
                 "ecs_compatibility": {
                     "setting": "ecs_compatibility",
-                    "input_type": "string",
+                    "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-inputs-file-ecs_compatibility",
                     "important": "No",
+                    "options": [
+                        "disabled",
+                        "v1",
+                        "v8"
+                    ],
                     "field_reference": "No"
                 },
                 "exclude": {
@@ -2397,10 +2422,15 @@
                 },
                 "ecs_compatibility": {
                     "setting": "ecs_compatibility",
-                    "input_type": "string",
+                    "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-inputs-generator-ecs_compatibility",
                     "important": "No",
+                    "options": [
+                        "disabled",
+                        "v1",
+                        "v8"
+                    ],
                     "field_reference": "No"
                 },
                 "lines": {
@@ -3019,10 +3049,15 @@
                 },
                 "ecs_compatibility": {
                     "setting": "ecs_compatibility",
-                    "input_type": "string",
+                    "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-inputs-heartbeat-ecs_compatibility",
                     "important": "No",
+                    "options": [
+                        "disabled",
+                        "v1",
+                        "v8"
+                    ],
                     "field_reference": "No"
                 },
                 "interval": {
@@ -3133,10 +3168,15 @@
                 },
                 "ecs_compatibility": {
                     "setting": "ecs_compatibility",
-                    "input_type": "string",
+                    "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-inputs-http-ecs_compatibility",
                     "important": "No",
+                    "options": [
+                        "disabled",
+                        "v1",
+                        "v8"
+                    ],
                     "field_reference": "No"
                 },
                 "host": {
@@ -3430,10 +3470,15 @@
                 },
                 "ecs_compatibility": {
                     "setting": "ecs_compatibility",
-                    "input_type": "string",
+                    "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-inputs-http_poller-ecs_compatibility",
                     "important": "No",
+                    "options": [
+                        "disabled",
+                        "v1",
+                        "v8"
+                    ],
                     "field_reference": "No"
                 },
                 "follow_redirects": {
@@ -3763,10 +3808,15 @@
                 },
                 "ecs_compatibility": {
                     "setting": "ecs_compatibility",
-                    "input_type": "string",
+                    "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-inputs-imap-ecs_compatibility",
                     "important": "No",
+                    "options": [
+                        "disabled",
+                        "v1",
+                        "v8"
+                    ],
                     "field_reference": "No"
                 },
                 "expunge": {
@@ -4768,10 +4818,15 @@
                 },
                 "ecs_compatibility": {
                     "setting": "ecs_compatibility",
-                    "input_type": "string",
+                    "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-inputs-jms-ecs_compatibility",
                     "important": "No",
+                    "options": [
+                        "disabled",
+                        "v1",
+                        "v8"
+                    ],
                     "field_reference": "No"
                 },
                 "factory": {
@@ -6524,10 +6579,15 @@
                 },
                 "ecs_compatibility": {
                     "setting": "ecs_compatibility",
-                    "input_type": "string",
+                    "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-inputs-pipe-ecs_compatibility",
                     "important": "No",
+                    "options": [
+                        "disabled",
+                        "v1",
+                        "v8"
+                    ],
                     "field_reference": "No"
                 },
                 "add_field": {
@@ -7476,10 +7536,15 @@
                 },
                 "ecs_compatibility": {
                     "setting": "ecs_compatibility",
-                    "input_type": "string",
+                    "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-inputs-s3-ecs_compatibility",
                     "important": "No",
+                    "options": [
+                        "disabled",
+                        "v1",
+                        "v8"
+                    ],
                     "field_reference": "No"
                 },
                 "endpoint": {
@@ -8056,10 +8121,15 @@
             "options": {
                 "ecs_compatibility": {
                     "setting": "ecs_compatibility",
-                    "input_type": "string",
+                    "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-inputs-snmp-ecs_compatibility",
                     "important": "No",
+                    "options": [
+                        "disabled",
+                        "v1",
+                        "v8"
+                    ],
                     "field_reference": "No"
                 },
                 "get": {
@@ -8346,10 +8416,15 @@
                 },
                 "ecs_compatibility": {
                     "setting": "ecs_compatibility",
-                    "input_type": "string",
+                    "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-inputs-snmptrap-ecs_compatibility",
                     "important": "No",
+                    "options": [
+                        "disabled",
+                        "v1",
+                        "v8"
+                    ],
                     "field_reference": "No"
                 },
                 "host": {
@@ -8905,10 +8980,15 @@
             "options": {
                 "ecs_compatibility": {
                     "setting": "ecs_compatibility",
-                    "input_type": "string",
+                    "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-inputs-stdin-ecs_compatibility",
                     "important": "No",
+                    "options": [
+                        "disabled",
+                        "v1",
+                        "v8"
+                    ],
                     "field_reference": "No"
                 },
                 "add_field": {
@@ -9103,10 +9183,15 @@
             "options": {
                 "ecs_compatibility": {
                     "setting": "ecs_compatibility",
-                    "input_type": "string",
+                    "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-inputs-syslog-ecs_compatibility",
                     "important": "No",
+                    "options": [
+                        "disabled",
+                        "v1",
+                        "v8"
+                    ],
                     "field_reference": "No"
                 },
                 "facility_labels": {
@@ -9273,10 +9358,15 @@
                 },
                 "ecs_compatibility": {
                     "setting": "ecs_compatibility",
-                    "input_type": "string",
+                    "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-inputs-tcp-ecs_compatibility",
                     "important": "No",
+                    "options": [
+                        "disabled",
+                        "v1",
+                        "v8"
+                    ],
                     "field_reference": "No"
                 },
                 "host": {
@@ -9504,10 +9594,15 @@
                 },
                 "ecs_compatibility": {
                     "setting": "ecs_compatibility",
-                    "input_type": "string",
+                    "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-inputs-twitter-ecs_compatibility",
                     "important": "No",
+                    "options": [
+                        "disabled",
+                        "v1",
+                        "v8"
+                    ],
                     "field_reference": "No"
                 },
                 "follows": {
@@ -9709,10 +9804,15 @@
                 },
                 "ecs_compatibility": {
                     "setting": "ecs_compatibility",
-                    "input_type": "string",
+                    "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-inputs-udp-ecs_compatibility",
                     "important": "No",
+                    "options": [
+                        "disabled",
+                        "v1",
+                        "v8"
+                    ],
                     "field_reference": "No"
                 },
                 "host": {
@@ -9835,10 +9935,15 @@
                 },
                 "ecs_compatibility": {
                     "setting": "ecs_compatibility",
-                    "input_type": "string",
+                    "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-inputs-unix-ecs_compatibility",
                     "important": "No",
+                    "options": [
+                        "disabled",
+                        "v1",
+                        "v8"
+                    ],
                     "field_reference": "No"
                 },
                 "force_unlink": {
@@ -11481,10 +11586,15 @@
                 },
                 "ecs_compatibility": {
                     "setting": "ecs_compatibility",
-                    "input_type": "string",
+                    "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-outputs-elasticsearch-ecs_compatibility",
                     "important": "No",
+                    "options": [
+                        "disabled",
+                        "v1",
+                        "v8"
+                    ],
                     "field_reference": "No"
                 },
                 "failure_type_logging_whitelist": {
@@ -19506,10 +19616,15 @@
                 },
                 "ecs_compatibility": {
                     "setting": "ecs_compatibility",
-                    "input_type": "string",
+                    "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-filters-clone-ecs_compatibility",
                     "important": "No",
+                    "options": [
+                        "disabled",
+                        "v1",
+                        "v8"
+                    ],
                     "field_reference": "No"
                 },
                 "add_field": {
@@ -19628,10 +19743,15 @@
                 },
                 "ecs_compatibility": {
                     "setting": "ecs_compatibility",
-                    "input_type": "string",
+                    "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-filters-csv-ecs_compatibility",
                     "important": "No",
+                    "options": [
+                        "disabled",
+                        "v1",
+                        "v8"
+                    ],
                     "field_reference": "No"
                 },
                 "quote_char": {
@@ -21318,10 +21438,15 @@
                 },
                 "ecs_compatibility": {
                     "setting": "ecs_compatibility",
-                    "input_type": "string",
+                    "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-filters-fingerprint-ecs_compatibility",
                     "important": "No",
+                    "options": [
+                        "disabled",
+                        "v1",
+                        "v8"
+                    ],
                     "field_reference": "No"
                 },
                 "key": {
@@ -21469,10 +21594,15 @@
                 },
                 "ecs_compatibility": {
                     "setting": "ecs_compatibility",
-                    "input_type": "string",
+                    "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-filters-geoip-ecs_compatibility",
                     "important": "No",
+                    "options": [
+                        "disabled",
+                        "v1",
+                        "v8"
+                    ],
                     "field_reference": "No"
                 },
                 "fields": {
@@ -21596,10 +21726,15 @@
                 },
                 "ecs_compatibility": {
                     "setting": "ecs_compatibility",
-                    "input_type": "string",
+                    "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-filters-grok-ecs_compatibility",
                     "important": "No",
+                    "options": [
+                        "disabled",
+                        "v1",
+                        "v8"
+                    ],
                     "field_reference": "No"
                 },
                 "keep_empty_captures": {
@@ -21791,10 +21926,15 @@
                 },
                 "ecs_compatibility": {
                     "setting": "ecs_compatibility",
-                    "input_type": "string",
+                    "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-filters-http-ecs_compatibility",
                     "important": "No",
+                    "options": [
+                        "disabled",
+                        "v1",
+                        "v8"
+                    ],
                     "field_reference": "No"
                 },
                 "headers": {
@@ -22587,10 +22727,15 @@
             "options": {
                 "ecs_compatibility": {
                     "setting": "ecs_compatibility",
-                    "input_type": "string",
+                    "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-filters-json-ecs_compatibility",
                     "important": "No",
+                    "options": [
+                        "disabled",
+                        "v1",
+                        "v8"
+                    ],
                     "field_reference": "No"
                 },
                 "skip_on_invalid_json": {
@@ -22828,10 +22973,15 @@
                 },
                 "ecs_compatibility": {
                     "setting": "ecs_compatibility",
-                    "input_type": "string",
+                    "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-filters-kv-ecs_compatibility",
                     "important": "No",
+                    "options": [
+                        "disabled",
+                        "v1",
+                        "v8"
+                    ],
                     "field_reference": "No"
                 },
                 "exclude_keys": {
@@ -24197,10 +24347,15 @@
             "options": {
                 "ecs_compatibility": {
                     "setting": "ecs_compatibility",
-                    "input_type": "string",
+                    "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-filters-syslog_pri-ecs_compatibility",
                     "important": "No",
+                    "options": [
+                        "disabled",
+                        "v1",
+                        "v8"
+                    ],
                     "field_reference": "No"
                 },
                 "facility_labels": {
@@ -24577,10 +24732,15 @@
                 },
                 "ecs_compatibility": {
                     "setting": "ecs_compatibility",
-                    "input_type": "string",
+                    "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-filters-translate-ecs_compatibility",
                     "important": "No",
+                    "options": [
+                        "disabled",
+                        "v1",
+                        "v8"
+                    ],
                     "field_reference": "No"
                 },
                 "exact": {
@@ -25144,10 +25304,15 @@
             "options": {
                 "ecs_compatibility": {
                     "setting": "ecs_compatibility",
-                    "input_type": "string",
+                    "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-filters-useragent-ecs_compatibility",
                     "important": "No",
+                    "options": [
+                        "disabled",
+                        "v1",
+                        "v8"
+                    ],
                     "field_reference": "No"
                 },
                 "lru_cache_size": {
@@ -25746,10 +25911,15 @@
             "options": {
                 "ecs_compatibility": {
                     "setting": "ecs_compatibility",
-                    "input_type": "string",
+                    "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-codecs-avro-ecs_compatibility",
                     "important": "No",
+                    "options": [
+                        "disabled",
+                        "v1",
+                        "v8"
+                    ],
                     "field_reference": "No"
                 },
                 "encoding": {
@@ -25959,10 +26129,15 @@
                 },
                 "ecs_compatibility": {
                     "setting": "ecs_compatibility",
-                    "input_type": "string",
+                    "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-codecs-cef-ecs_compatibility",
                     "important": "No",
+                    "options": [
+                        "disabled",
+                        "v1",
+                        "v8"
+                    ],
                     "field_reference": "No"
                 },
                 "fields": {
@@ -26745,10 +26920,15 @@
                 },
                 "ecs_compatibility": {
                     "setting": "ecs_compatibility",
-                    "input_type": "string",
+                    "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-codecs-csv-ecs_compatibility",
                     "important": "No",
+                    "options": [
+                        "disabled",
+                        "v1",
+                        "v8"
+                    ],
                     "field_reference": "No"
                 },
                 "include_headers": {
@@ -26852,10 +27032,15 @@
             "options": {
                 "ecs_compatibility": {
                     "setting": "ecs_compatibility",
-                    "input_type": "string",
+                    "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-codecs-es_bulk-ecs_compatibility",
                     "important": "No",
+                    "options": [
+                        "disabled",
+                        "v1",
+                        "v8"
+                    ],
                     "field_reference": "No"
                 },
                 "target": {
@@ -27738,10 +27923,15 @@
                 },
                 "ecs_compatibility": {
                     "setting": "ecs_compatibility",
-                    "input_type": "string",
+                    "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-codecs-json-ecs_compatibility",
                     "important": "No",
+                    "options": [
+                        "disabled",
+                        "v1",
+                        "v8"
+                    ],
                     "field_reference": "No"
                 },
                 "target": {
@@ -27959,10 +28149,15 @@
                 },
                 "ecs_compatibility": {
                     "setting": "ecs_compatibility",
-                    "input_type": "string",
+                    "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-codecs-json_lines-ecs_compatibility",
                     "important": "No",
+                    "options": [
+                        "disabled",
+                        "v1",
+                        "v8"
+                    ],
                     "field_reference": "No"
                 },
                 "target": {
@@ -28402,10 +28597,15 @@
                 },
                 "ecs_compatibility": {
                     "setting": "ecs_compatibility",
-                    "input_type": "string",
+                    "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-codecs-multiline-ecs_compatibility",
                     "important": "No",
+                    "options": [
+                        "disabled",
+                        "v1",
+                        "v8"
+                    ],
                     "field_reference": "No"
                 },
                 "max_bytes": {
@@ -28789,10 +28989,15 @@
                 },
                 "ecs_compatibility": {
                     "setting": "ecs_compatibility",
-                    "input_type": "string",
+                    "input_type": "dropdown",
                     "required": "No",
                     "setting_link": "#plugins-codecs-plain-ecs_compatibility",
                     "important": "No",
+                    "options": [
+                        "disabled",
+                        "v1",
+                        "v8"
+                    ],
                     "field_reference": "No"
                 },
                 "format": {

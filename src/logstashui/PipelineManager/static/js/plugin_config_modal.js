@@ -249,8 +249,11 @@ window.PluginConfigModal = (function () {
                     inputField = `
             <select id="${fieldId}" name="${key}" class="${inputClasses}">
               <option value="">-- Select an option --</option>
+              ${value !== '' && value !== undefined && value !== null && typeof value !== 'object' && !dropdownOptions.map(String).includes(String(value)) ? `
+                <option value="${escapeHtml(value)}" selected>${escapeHtml(value)}</option>
+              ` : ''}
               ${dropdownOptions.map(opt => `
-                <option value="${escapeHtml(opt)}" ${value === opt ? 'selected' : ''}>${escapeHtml(opt)}</option>
+                <option value="${escapeHtml(opt)}" ${String(value) === String(opt) ? 'selected' : ''}>${escapeHtml(opt)}</option>
               `).join('')}
             </select>
           `;
@@ -702,8 +705,11 @@ window.PluginConfigModal = (function () {
                         inputField = `
             <select id="${fieldId}" name="${key}" class="${inputClasses}">
               <option value="">-- Select an option --</option>
+              ${value !== '' && value !== undefined && value !== null && typeof value !== 'object' && !dropdownOptions.map(String).includes(String(value)) ? `
+                <option value="${escapeHtml(value)}" selected>${escapeHtml(value)}</option>
+              ` : ''}
               ${dropdownOptions.map(opt => `
-                <option value="${escapeHtml(opt)}" ${value === opt ? 'selected' : ''}>${escapeHtml(opt)}</option>
+                <option value="${escapeHtml(opt)}" ${String(value) === String(opt) ? 'selected' : ''}>${escapeHtml(opt)}</option>
               `).join('')}
             </select>
           `;
@@ -1690,13 +1696,14 @@ window.PluginConfigModal = (function () {
     function getFieldReferenceMode(input) {
         if (!currentComponent) return null;
 
+        let option;
         if (input.dataset.codecName) {
-            return pluginData.codec?.[input.dataset.codecName]?.options?.[input.dataset.codecOption]?.field_reference || null;
+            option = pluginData.codec?.[input.dataset.codecName]?.options?.[input.dataset.codecOption];
+        } else {
+            const fieldGroup = input.closest('[data-field-name]');
+            if (!fieldGroup) return null;
+            option = pluginData[currentComponent.type]?.[currentComponent.plugin]?.options?.[fieldGroup.dataset.fieldName];
         }
-
-        const fieldGroup = input.closest('[data-field-name]');
-        if (!fieldGroup) return null;
-        const option = pluginData[currentComponent.type]?.[currentComponent.plugin]?.options?.[fieldGroup.dataset.fieldName];
         const mode = option?.field_reference;
         if (!mode || mode === 'No') return null;
 
@@ -1705,7 +1712,7 @@ window.PluginConfigModal = (function () {
         if (mode === 'key') return isKey ? mode : null;
         if (isKey) return null;
         if (mode === 'first') {
-            const container = input.closest('[id^="array-container-"]');
+            const container = input.closest('[id^="array-container-"], [data-codec-rows]');
             return container && container.querySelector('input[type="text"]') === input ? mode : null;
         }
         return mode;
@@ -1714,10 +1721,9 @@ window.PluginConfigModal = (function () {
     function checkFieldReference(input) {
         let hint = input._fieldRefHint;
         const mode = getFieldReferenceMode(input);
-        const values = input.dataset.codecList ? input.value.split(',').map(v => v.trim()) : [input.value];
-        const converted = values.map(v => toFieldReference(v));
+        const suggestion = mode ? toFieldReference(input.value) : null;
 
-        if (!mode || converted.every(c => c === null)) {
+        if (!suggestion) {
             if (hint) {
                 hint.remove();
                 input._fieldRefHint = null;
@@ -1725,7 +1731,6 @@ window.PluginConfigModal = (function () {
             return;
         }
 
-        const suggestion = values.map((v, i) => converted[i] || v).join(', ');
         if (!hint) {
             hint = document.createElement('p');
             hint.className = 'field-ref-hint text-xs text-gray-400 mt-1';
@@ -2443,35 +2448,153 @@ function populateKeyListHashValues(component) {
 }
 
 // Codec helper functions
+const CODEC_INPUT_CLASSES = 'w-full p-2 bg-gray-700 border border-gray-600 rounded text-white text-sm';
+
+function codecWidgetType(optInfo) {
+    const t = (optInfo.input_type || 'string').toLowerCase();
+    if (t.includes('boolean') || t === 'bool') return 'boolean';
+    if (t === 'dropdown') return 'dropdown';
+    if (t.includes('number') || t === 'int' || t === 'float') return 'number';
+    if (t === 'password') return 'password';
+    if (t.includes('hash')) return 'hash';
+    if (t.includes('array') || t === 'list') return 'array';
+    return 'string';
+}
+
+// Keeps values the list doesn't know about (e.g. "${ECS_MODE}") selected instead of dropping them
+function codecSelectOptions(choices, value) {
+    const current = value === undefined || value === null ? '' : String(value);
+    const known = choices.map(String);
+    const custom = current !== '' && !known.includes(current)
+        ? `<option value="${escapeHtml(current)}" selected>${escapeHtml(current)}</option>` : '';
+    return `<option value="">-- Not Set --</option>${custom}` + known.map(c =>
+        `<option value="${escapeHtml(c)}" ${c === current ? 'selected' : ''}>${escapeHtml(c)}</option>`).join('');
+}
+
+function codecRowHtml(codecName, optKey, kind, key = '', value = '') {
+    const attrs = `data-codec-name="${escapeHtml(codecName)}" data-codec-option="${escapeHtml(optKey)}"`;
+    const keyInput = kind === 'hash'
+        ? `<input type="text" class="${CODEC_INPUT_CLASSES} flex-1 min-w-0" placeholder="Key" data-codec-part="key" ${attrs} value="${escapeHtml(key)}">
+           <span class="text-gray-400">=></span>` : '';
+    return `
+      <div class="flex items-center gap-2" data-codec-row>
+        ${keyInput}
+        <input type="text" class="${CODEC_INPUT_CLASSES} flex-1 min-w-0" placeholder="Value" data-codec-part="value" ${attrs} value="${escapeHtml(value)}">
+        <button type="button" data-codec-action="remove-row" class="px-2 py-1 text-red-400 hover:bg-gray-700 rounded text-xs">Remove</button>
+      </div>`;
+}
+
+function codecWidgetHtml(codecName, optKey, optInfo, value, inputId) {
+    const type = codecWidgetType(optInfo);
+    const attrs = `data-codec-name="${escapeHtml(codecName)}" data-codec-option="${escapeHtml(optKey)}"`;
+    const text = value === undefined || value === null || typeof value === 'object' ? '' : String(value);
+    let inner;
+
+    if (type === 'boolean' || type === 'dropdown') {
+        const choices = type === 'boolean' ? ['true', 'false'] : (optInfo.options || []);
+        inner = `<select id="${inputId}" class="${CODEC_INPUT_CLASSES}" ${attrs}>${codecSelectOptions(choices, value)}</select>`;
+    } else if (type === 'hash' || type === 'array') {
+        let rows;
+        if (type === 'hash') {
+            const entries = value && typeof value === 'object' && !Array.isArray(value) ? Object.entries(value) : [];
+            rows = (entries.length ? entries : [['', '']]).map(([k, v]) => codecRowHtml(codecName, optKey, 'hash', k, v ?? '')).join('');
+        } else {
+            const items = Array.isArray(value) ? value : (text !== '' ? [text] : []);
+            rows = (items.length ? items : ['']).map(v => codecRowHtml(codecName, optKey, 'array', '', v ?? '')).join('');
+        }
+        inner = `
+          <div class="space-y-2" data-codec-rows>${rows}</div>
+          <button type="button" data-codec-action="add-row" class="mt-2 px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-xs">+ Add More</button>`;
+    } else {
+        const inputType = type === 'password' ? 'password' : 'text';
+        const inputMode = type === 'number' ? 'inputmode="decimal"' : '';
+        inner = `<input type="${inputType}" id="${inputId}" class="${CODEC_INPUT_CLASSES}" ${inputMode} ${attrs} value="${escapeHtml(text)}">`;
+    }
+
+    return `<div data-codec-widget data-codec-option="${escapeHtml(optKey)}" data-codec-type="${type}">${inner}</div>`;
+}
+
+/**
+ * Reads a codec option widget back into a config value using the option's declared type.
+ *
+ * Returns:
+ *     The value to store, or undefined to remove the option.
+ *
+ * Example:
+ *     number widget "1.50" -> 1.5, string widget "1.0" -> "1.0",
+ *     array rows ["5", "9"] -> [5, 9], array rows ["007"] -> ["007"]
+ */
+function readCodecWidget(widget) {
+    const type = widget.dataset.codecType;
+    const isDecimal = s => /^-?\d+(\.\d+)?$/.test(s);
+    const isNumberLiteral = s => isDecimal(s) && String(Number(s)) === s;
+
+    if (type === 'hash') {
+        const result = {};
+        widget.querySelectorAll('[data-codec-row]').forEach(row => {
+            const key = row.querySelector('[data-codec-part="key"]').value.trim();
+            if (key) result[key] = row.querySelector('[data-codec-part="value"]').value;
+        });
+        return Object.keys(result).length ? result : undefined;
+    }
+    if (type === 'array') {
+        const items = [...widget.querySelectorAll('[data-codec-part="value"]')]
+            .map(input => input.value.trim())
+            .filter(v => v !== '')
+            .map(v => (isNumberLiteral(v) ? Number(v) : v));
+        return items.length ? items : undefined;
+    }
+
+    const raw = widget.querySelector('input, select').value;
+    if (raw === '') return undefined;
+    if (type === 'boolean' && (raw === 'true' || raw === 'false')) return raw === 'true';
+    if (type === 'number' && isDecimal(raw.trim())) return Number(raw.trim());
+    return raw;
+}
+
+function updateCodecOption(widget, hiddenField, codecName) {
+    let current = {};
+    try {
+        current = JSON.parse(hiddenField.value) || {};
+    } catch (e) {
+        console.error('Error parsing codec value:', e);
+    }
+    const config = current[codecName] || {};
+    const value = readCodecWidget(widget);
+    if (value === undefined) {
+        delete config[widget.dataset.codecOption];
+    } else {
+        config[widget.dataset.codecOption] = value;
+    }
+    hiddenField.value = JSON.stringify({ [codecName]: config });
+}
+
 window.handleCodecChange = function (containerId, fieldId, codecName) {
     const container = document.getElementById(containerId);
     const hiddenField = document.getElementById(fieldId);
     if (!container || !hiddenField) return;
 
-    // Find the codec config container
     const codecConfigContainer = container.querySelector('[id^="codec-config-"]');
     if (!codecConfigContainer) return;
-
-    // Clear previous codec config
     codecConfigContainer.innerHTML = '';
 
     if (!codecName) {
-        // No codec selected, clear the hidden field
         hiddenField.value = JSON.stringify({});
         return;
     }
 
-    // Get codec options from pluginData
-    const codecData = window.PluginConfigModal.getPluginData();
-    const codecInfo = codecData.codec?.[codecName];
+    const codecInfo = window.PluginConfigModal.getPluginData().codec?.[codecName];
 
-    if (!codecInfo || !codecInfo.options) {
-        // Codec has no options, just store the codec name with empty config
-        hiddenField.value = JSON.stringify({ [codecName]: {} });
-        return;
+    let existingConfig = {};
+    try {
+        existingConfig = JSON.parse(hiddenField.value)[codecName] || {};
+    } catch (e) {
+        console.error('Error parsing codec value:', e);
     }
+    hiddenField.value = JSON.stringify({ [codecName]: existingConfig });
 
-    // Add codec description
+    if (!codecInfo || !codecInfo.options) return;
+
     if (codecInfo.description) {
         const desc = document.createElement('p');
         desc.className = 'text-xs text-gray-400 mb-2 italic';
@@ -2479,110 +2602,51 @@ window.handleCodecChange = function (containerId, fieldId, codecName) {
         codecConfigContainer.appendChild(desc);
     }
 
-    // Get existing codec config
-    let existingConfig = {};
-    try {
-        const currentValue = JSON.parse(hiddenField.value);
-        if (currentValue[codecName]) {
-            existingConfig = currentValue[codecName];
-        }
-    } catch (e) {
-        console.error('Error parsing codec value:', e);
-    }
-
-    // Create fields for codec options
     Object.entries(codecInfo.options).forEach(([optKey, optInfo]) => {
-        const codecFieldId = `codec-field-${codecName}-${optKey}-${Date.now()}`;
-        const optValue = existingConfig[optKey] || '';
-        const optType = (optInfo.input_type || 'text').toLowerCase();
-
+        const inputId = `codec-field-${codecName}-${optKey}-${Date.now()}`;
         const fieldDiv = document.createElement('div');
         fieldDiv.className = 'mb-3';
-
-        let inputHtml = '';
-        const inputClasses = 'w-full p-2 bg-gray-700 border border-gray-600 rounded text-white text-sm';
-
-        if (optType.includes('boolean') || optType === 'bool') {
-            inputHtml = `
-        <select id="${codecFieldId}" class="${inputClasses}"
-                onchange="updateCodecField('${containerId}', '${fieldId}', '${codecName}', '${optKey}', this.value)">
-          <option value="">-- Not Set --</option>
-          <option value="true" ${optValue === true || optValue === 'true' ? 'selected' : ''}>true</option>
-          <option value="false" ${optValue === false || optValue === 'false' ? 'selected' : ''}>false</option>
-        </select>
-      `;
-        } else if (optType.includes('number') || optType === 'int' || optType === 'float') {
-            inputHtml = `
-        <input type="number" id="${codecFieldId}" class="${inputClasses}"
-               value="${optValue}"
-               step="${optType === 'float' ? '0.1' : '1'}"
-               onchange="updateCodecField('${containerId}', '${fieldId}', '${codecName}', '${optKey}', this.value)">
-      `;
-        } else if (optType.includes('array')) {
-            inputHtml = `
-        <input type="text" id="${codecFieldId}" class="${inputClasses}"
-               data-codec-name="${codecName}" data-codec-option="${optKey}" data-codec-list="true"
-               value="${Array.isArray(optValue) ? optValue.join(', ') : optValue}"
-               placeholder="Comma-separated values"
-               onchange="updateCodecField('${containerId}', '${fieldId}', '${codecName}', '${optKey}', this.value.split(',').map(v => v.trim()).filter(v => v))">
-      `;
-        } else {
-            inputHtml = `
-        <input type="text" id="${codecFieldId}" class="${inputClasses}"
-               data-codec-name="${codecName}" data-codec-option="${optKey}"
-               value="${optValue}"
-               onchange="updateCodecField('${containerId}', '${fieldId}', '${codecName}', '${optKey}', this.value)">
-      `;
-        }
-
         fieldDiv.innerHTML = `
-      <label for="${codecFieldId}" class="block text-xs font-medium text-gray-300 mb-1">
-        ${optKey}
+      <label for="${inputId}" class="block text-xs font-medium text-gray-300 mb-1">
+        ${escapeHtml(optKey)}
         <span class="text-xs font-normal text-gray-400">
-          (${optInfo.required || 'No'})
+          (Required: ${escapeHtml(optInfo.required || 'No')}, Type: ${escapeHtml(optInfo.input_type || 'string')})
         </span>
       </label>
       ${optInfo.description ? `<p class="text-xs text-gray-400 mb-1">${optInfo.description}</p>` : ''}
-      ${inputHtml}
+      ${codecWidgetHtml(codecName, optKey, optInfo, existingConfig[optKey], inputId)}
     `;
-
         codecConfigContainer.appendChild(fieldDiv);
     });
 
-    // Initialize with empty config for the selected codec
-    const currentValue = { [codecName]: existingConfig };
-    hiddenField.value = JSON.stringify(currentValue);
-};
+    if (codecConfigContainer.dataset.codecBound) return;
+    codecConfigContainer.dataset.codecBound = 'true';
 
-window.updateCodecField = function (containerId, fieldId, codecName, optKey, value) {
-    const hiddenField = document.getElementById(fieldId);
-    if (!hiddenField) return;
-
-    try {
-        const currentValue = JSON.parse(hiddenField.value);
-
-        // Ensure codec object exists
-        if (!currentValue[codecName]) {
-            currentValue[codecName] = {};
-        }
-
-        // Update or remove the field
-        if (value === '' || value === null || value === undefined) {
-            delete currentValue[codecName][optKey];
+    const onEdit = (e) => {
+        const widget = e.target.closest('[data-codec-widget]');
+        const name = container.querySelector('select[id^="codec-select-"]')?.value;
+        if (widget && name) updateCodecOption(widget, hiddenField, name);
+    };
+    codecConfigContainer.addEventListener('input', onEdit);
+    codecConfigContainer.addEventListener('change', onEdit);
+    codecConfigContainer.addEventListener('click', (e) => {
+        const button = e.target.closest('[data-codec-action]');
+        if (!button) return;
+        const widget = button.closest('[data-codec-widget]');
+        const rows = widget.querySelector('[data-codec-rows]');
+        const name = container.querySelector('select[id^="codec-select-"]')?.value;
+        if (button.dataset.codecAction === 'add-row') {
+            const kind = widget.dataset.codecType === 'hash' ? 'hash' : 'array';
+            rows.insertAdjacentHTML('beforeend', codecRowHtml(name, widget.dataset.codecOption, kind));
         } else {
-            // Handle boolean conversion
-            if (value === 'true') value = true;
-            else if (value === 'false') value = false;
-            // Handle number conversion
-            else if (!isNaN(value) && value !== '') value = Number(value);
-
-            currentValue[codecName][optKey] = value;
+            button.closest('[data-codec-row]').remove();
+            if (!rows.querySelector('[data-codec-row]')) {
+                const kind = widget.dataset.codecType === 'hash' ? 'hash' : 'array';
+                rows.insertAdjacentHTML('beforeend', codecRowHtml(name, widget.dataset.codecOption, kind));
+            }
         }
-
-        hiddenField.value = JSON.stringify(currentValue);
-    } catch (e) {
-        console.error('Error updating codec field:', e);
-    }
+        if (name) updateCodecOption(widget, hiddenField, name);
+    });
 };
 
 // Make it globally available
