@@ -335,6 +335,51 @@ class TestLogstashConfigToComponents:
         assert 'mutate' in filter_plugins
         assert 'stdout' in output_plugins
 
+    def test_comment_inside_codec_block_moves_to_plugin(self):
+        """A standalone comment inside codec => x { } is kept as a plugin comment"""
+        config = (
+            'input {\n  tcp {\n    port => 1\n    codec => json {\n'
+            '      # where the body goes\n      target => "x"\n    }\n  }\n}\n'
+        )
+        plugin = json.loads(logstash_config_to_components(config))['input'][0]
+        assert plugin['config']['codec'] == {'json': {'target': 'x'}}
+        assert plugin['comments'] == ['where the body goes']
+
+    def test_comment_inside_hash_moves_to_plugin(self):
+        """A standalone comment inside a hash value is kept as a plugin comment"""
+        config = 'filter {\n  mutate {\n    rename => {\n      # move it\n      "a" => "b"\n    }\n  }\n}\n'
+        plugin = json.loads(logstash_config_to_components(config))['filter'][0]
+        assert plugin['config']['rename'] == {'a': 'b'}
+        assert plugin['comments'] == ['move it']
+
+    def test_hash_line_inside_multiline_ruby_code_is_kept(self):
+        """A # line in a multi-line "..." string with braces stays in the string"""
+        config = (
+            'filter {\n  ruby {\n    code => "\n      event.to_hash.each { |k, v|\n'
+            '        # ruby comment\n        event.set(k, v)\n      }\n    "\n  }\n}\n'
+        )
+        plugin = json.loads(logstash_config_to_components(config))['filter'][0]
+        assert '# ruby comment' in plugin['config']['code']
+        assert plugin['comments'] == []
+
+    def test_hash_line_inside_multiline_hash_value_is_kept(self):
+        """A # line in a multi-line "..." hash value stays in the value"""
+        config = 'filter {\n  mutate {\n    add_field => {\n      "m" => "one\n# two"\n    }\n  }\n}\n'
+        plugin = json.loads(logstash_config_to_components(config))['filter'][0]
+        assert plugin['config']['add_field'] == {'m': 'one\n# two'}
+
+    def test_quoted_non_bareword_codec_name_stays_quoted(self):
+        """codec => "${CODEC}" keeps its quotes so it regenerates as a string"""
+        config = 'input {\n  tcp {\n    port => 1\n    codec => "${CODEC}"\n  }\n}\n'
+        plugin = json.loads(logstash_config_to_components(config))['input'][0]
+        assert plugin['config']['codec'] == {'"${CODEC}"': {}}
+
+    def test_quoted_codec_name_is_unquoted(self):
+        """codec => "json" is stored as the bare codec name"""
+        config = 'input {\n  tcp {\n    port => 1\n    codec => "json_lines"\n  }\n}\n'
+        plugin = json.loads(logstash_config_to_components(config))['input'][0]
+        assert plugin['config']['codec'] == {'json_lines': {}}
+
     def test_component_has_required_keys(self):
         """Each component has id, type, plugin, and config keys"""
         result = json.loads(logstash_config_to_components(FULL_PIPELINE))

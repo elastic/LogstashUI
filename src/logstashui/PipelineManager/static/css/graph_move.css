@@ -1,0 +1,79 @@
+/* Graph editor move mode (see js/move_graph.js). Kept separate from move_mode.css,
+   which styles the inline editor's move mode. */
+
+/* Drop target pills drawn inside the graph SVG */
+.graph-move-drop-zone {
+    cursor: pointer;
+}
+
+.graph-move-drop-zone rect {
+    fill: rgba(99, 102, 241, 0.18);
+    stroke: #6366f1;
+    stroke-width: 2;
+    stroke-dasharray: 5 3;
+    transition: fill 0.15s ease, stroke 0.15s ease;
+}
+
+.graph-move-drop-zone text {
+    fill: #a5b4fc;
+    font-size: 11px;
+    font-weight: 600;
+    pointer-events: none;
+    user-select: none;
+}
+
+.graph-move-drop-zone:hover rect {
+    fill: rgba(99, 102, 241, 0.4);
+    stroke: #818cf8;
+}
+
+.graph-move-drop-zone:hover text {
+    fill: #ffffff;
+}
+
+/* Node (or whole conditional subtree) being moved */
+/* !important: the graph's fade-in animation leaves an inline opacity: 1 on nodes. */
+.graph-node.graph-node-moving {
+    opacity: 0.35 !important;
+}
+
+.graph-node.graph-node-moving rect:first-child {
+    stroke-dasharray: 6 4;
+}
+
+/* While choosing a target the other nodes are not clickable */
+.graph-move-mode #graphSvg .graph-node {
+    cursor: default;
+}
+
+/* Floating banner (above the fullscreen graph container, z-index 9999) */
+.graph-move-banner {
+    position: fixed;
+    top: 80px;
+    right: 20px;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.graph-move-banner-close {
+    border: none;
+    background: transparent;
+    color: inherit;
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+    opacity: 0.8;
+}
+
+.graph-move-banner-close:hover {
+    opacity: 1;
+}

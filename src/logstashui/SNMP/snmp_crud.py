@@ -2750,7 +2750,7 @@ def GetDevices(request):
             'site', 'building', 'room',
             'credential__id', 'credential__name',
             'network__id', 'network__name', 'network__deployment_mode',
-            'device_template__id', 'device_template__name'
+            'device_template__id', 'device_template__name', 'device_template__vendor', 'device_template__product'
         )
 
         # Apply search filter (name, IP address, or hostname)
@@ -2835,6 +2835,8 @@ def GetDevices(request):
                 'device_template_id': device.device_template.id if device.device_template else None,
                 'device_template_name': device.device_template.name if device.device_template else None,
                 'device_template_display_name': format_display_name(device.device_template.name) if device.device_template else None,
+                'device_template_vendor': device.device_template.vendor if device.device_template else None,
+                'device_template_product': device.device_template.product if device.device_template else None,
                 'site': device.site,
                 'building': device.building,
                 'room': device.room,
@@ -3523,9 +3525,21 @@ def GetDeviceVisualization(request, device_id):
             'error': 'Device not found'
         }, status=404)
     except Exception as e:
+        # Elasticsearch wraps the real reason (mapping conflict, text-field
+        # aggregation, ...) in `body.error.root_cause`; str(e) only says
+        # "search_phase_execution_exception", so surface the root cause.
+        body = getattr(e, 'body', None)
+        root_cause = body.get('error', {}).get('root_cause') if isinstance(body, dict) else None
+        logger.exception(
+            "GetDeviceVisualization failed for device %s. ES root_cause: %s",
+            device_id, root_cause,
+        )
+        detail = str(e)
+        if root_cause:
+            detail = f"{detail}: {root_cause[0].get('reason', root_cause[0])}"
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': detail
         }, status=500)
 
 
@@ -5060,7 +5074,7 @@ def _get_device_storage_capacity(device, es_connection):
         },
         aggregations={
             "vols": {
-                "terms": {"field": "storage.filesystem.index", "size": 500},
+                "terms": {"field": "tsds.index", "size": 500},
                 "aggregations": {
                     "latest": {
                         "top_hits": {
@@ -5110,7 +5124,7 @@ def _get_device_storage_capacity(device, es_connection):
         },
         aggregations={
             "aggrs": {
-                "terms": {"field": "storage.aggregate.index", "size": 100},
+                "terms": {"field": "tsds.index", "size": 100},
                 "aggregations": {
                     "latest": {
                         "top_hits": {
@@ -5185,7 +5199,7 @@ def _get_device_disks(device, es_connection):
         },
         aggregations={
             "disks": {
-                "terms": {"field": "component.disk.index", "size": 500},
+                "terms": {"field": "tsds.index", "size": 500},
                 "aggregations": {
                     "latest": {
                         "top_hits": {
@@ -5257,7 +5271,7 @@ def _get_device_raid_volumes(device, es_connection):
         },
         aggregations={
             "volumes": {
-                "terms": {"field": "storage.raid_volume.index", "size": 200},
+                "terms": {"field": "tsds.index", "size": 200},
                 "aggregations": {
                     "latest": {
                         "top_hits": {

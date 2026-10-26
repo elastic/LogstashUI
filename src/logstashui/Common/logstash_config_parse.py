@@ -7,6 +7,7 @@
 from lark import Lark, Transformer, UnexpectedToken, UnexpectedCharacters
 from typing import Dict, List, Any
 import json
+import re
 
 import logging
 logger = logging.getLogger(__name__)
@@ -256,8 +257,15 @@ class LogstashTransformer(Transformer):
         # Return as nested dict: {"codec": {"codec_name": {...}}}
         return ("codec", {codec_name: codec_config})
     def codec_pair_simple(self, items):
-        """Handle ``codec => simple_value`` as a nested dict with empty config."""
+        """Handle ``codec => simple_value`` as a nested dict with empty config.
+
+        Example:
+            ``codec => "json"`` -> ``("codec", {"json": {}})``
+        """
         codec_name = str(items[0])
+        # Only unquote plain names; the generator writes codec names back unquoted
+        if re.fullmatch(r'(["\'])[A-Za-z0-9_-]+\1', codec_name):
+            codec_name = codec_name[1:-1]
         return ("codec", {codec_name: {}})
     
     def regular_pair(self, items):
@@ -579,6 +587,42 @@ def _count_unquoted_braces(line: str):
     return open_count, close_count
 
 
+def _ends_in_open_double_quote(line: str, in_dq: bool) -> bool:
+    """Track a double-quoted string that spans lines.
+
+    Args:
+        line: One raw config line.
+        in_dq: Whether the line starts inside an open double-quoted string.
+
+    Returns:
+        Whether the line ends inside an open double-quoted string.
+
+    Example:
+        ``_ends_in_open_double_quote('code => "', False)`` -> ``True``
+        ``_ends_in_open_double_quote('  # ruby "', True)`` -> ``False``
+    """
+    in_sq = False
+    esc = False
+    for ch in line:
+        if esc:
+            esc = False
+        elif ch == '\\':
+            esc = True
+        elif in_dq:
+            if ch == '"':
+                in_dq = False
+        elif in_sq:
+            if ch == "'":
+                in_sq = False
+        elif ch == '"':
+            in_dq = True
+        elif ch == "'":
+            in_sq = True
+        elif ch == '#':
+            break
+    return in_dq
+
+
 def _strip_line_comment(line: str):
     """Strip an inline # comment from a line, ignoring # inside quoted strings.
 
@@ -655,6 +699,7 @@ def _strip_inline_comments(config_text: str) -> str:
     in_plugin = False
     plugin_brace_depth = 0       # net open braces inside the current plugin block
     pending_plugin_comments = [] # inline comments collected from the current plugin
+    in_dq_string = False         # inside a "..." string that spans lines
 
     in_multiline_string = False
 
@@ -680,9 +725,19 @@ def _strip_inline_comments(config_text: str) -> str:
         # ── INSIDE A PLUGIN BLOCK ─────────────────────────────────────────────
         if in_plugin:
             # Standalone comment lines are valid at plugin scope (grammar supports
-            # them after the grammar change) — keep them as-is.
+            # them after the grammar change) — keep them as-is. Inside nested
+            # blocks (codec => x { }, hashes) the grammar has no comment rule, so
+            # relocate them to plugin scope like inline comments. Lines inside a
+            # multi-line "..." string (e.g. ruby code) are content, not comments.
+            starts_in_dq = in_dq_string
+            in_dq_string = _ends_in_open_double_quote(line, in_dq_string)
             if stripped.startswith('#'):
-                result_lines.append(line)
+                if plugin_brace_depth > 1 and not starts_in_dq:
+                    text = stripped.lstrip('#').strip()
+                    if text:
+                        pending_plugin_comments.append(text)
+                else:
+                    result_lines.append(line)
                 continue
 
             # Strip inline comment, track multiline strings.
@@ -748,6 +803,7 @@ def _strip_inline_comments(config_text: str) -> str:
                         in_multiline_string = True
 
                     in_plugin = True
+                    in_dq_string = False
                     pending_plugin_comments = []
                     if opener_comment:
                         pending_plugin_comments.append(opener_comment)

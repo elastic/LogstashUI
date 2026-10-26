@@ -41,7 +41,7 @@ Pipeline simulation uses **LogstashAgent** targets:
 
 ### **[Simulate agents (formerly host mode)](/docs/docs/logstashui/configuration/host_mode.md)**
 
-Enroll and run dedicated simulate instances (`lsagent-simulate@N` / `ls-simulate@N`).
+Enroll and run dedicated simulate instances (`simulate-agent@N` / `simulate-logstash@N`).
 
 **Covers:**
 - Prerequisites

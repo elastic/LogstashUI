@@ -78,7 +78,7 @@ function _buildVersionPill(version) {
   return span;
 }
 
-function _applyUpdate(id, name, status, logstashVersion) {
+function _applyUpdate(id, name, status, logstashVersion, revision) {
   const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.offline;
 
   // 1. Update list badge
@@ -93,6 +93,17 @@ function _applyUpdate(id, name, status, logstashVersion) {
     const existing = document.querySelector('#agentInspectContent [data-modal-badge]');
     if (existing) {
       existing.replaceWith(_buildModalBadge(cfg));
+    }
+  }
+
+  // 4. Update the policy revision indicator (defined in connections_table.js).
+  const revisionContainer = document.querySelector(`.revision-container[data-agent-id="${id}"]`);
+  if (revisionContainer && window.buildRevisionBadge) {
+    // Only rewrite on change so an open tooltip isn't torn down every 5 s.
+    const html = window.buildRevisionBadge(revision);
+    if (revisionContainer.dataset.html !== html) {
+      revisionContainer.dataset.html = html;
+      revisionContainer.innerHTML = html;
     }
   }
 
@@ -116,8 +127,8 @@ function _connect() {
   source.onmessage = function (event) {
     try {
       const updates = JSON.parse(event.data);
-      updates.forEach(({ id, name, status, logstash_version }) =>
-        _applyUpdate(id, name, status, logstash_version));
+      updates.forEach(({ id, name, status, logstash_version, revision }) =>
+        _applyUpdate(id, name, status, logstash_version, revision));
     } catch (e) {
       console.error('[AgentSSE] Failed to parse event data:', e);
     }

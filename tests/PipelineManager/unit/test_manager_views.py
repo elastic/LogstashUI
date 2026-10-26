@@ -1067,3 +1067,29 @@ class TestAgentStatusStream:
         events = self._first_event(authenticated_client)
 
         assert events[0]["logstash_version"] is None
+
+
+@pytest.mark.parametrize(
+    "blob, current, expected_state, expected_applied",
+    [
+        ({'last_policy_apply': {'success': True, 'revision': 3}}, 3, 'current', 3),
+        ({'last_policy_apply': {'success': True, 'revision': 2}}, 3, 'pending', 2),
+        # A failed apply records the revision but must not count as applied.
+        ({'last_policy_apply': {'success': False, 'revision': 3}}, 3, 'pending', None),
+        ({}, 2, 'pending', None),
+        (None, 2, 'pending', None),
+        # Nothing deployed yet: nothing to apply.
+        ({}, 0, 'current', None),
+    ],
+)
+def test_compute_policy_revision_state(blob, current, expected_state, expected_applied):
+    from PipelineManager.manager_views import compute_policy_revision_state
+
+    result = compute_policy_revision_state(blob, current)
+    assert result == {'state': expected_state, 'applied': expected_applied, 'current': current}
+
+
+def test_compute_policy_revision_state_without_policy():
+    from PipelineManager.manager_views import compute_policy_revision_state
+
+    assert compute_policy_revision_state({'last_policy_apply': {'success': True, 'revision': 1}}, None) is None

@@ -2,7 +2,7 @@
 
 LogstashAgent and LogstashUI use **policy types** and matching **agent modes** so one Linux host can run production Logstash and one or more isolated multi-instance agents without sharing state or config.
 
-> **Paired releases:** LogstashUI **0.5.3** ↔ LogstashAgent **0.5.3** (see [Compatibility](/docs/docs/logstashui/compatibility.md) and [CHANGELOG](https://github.com/elastic/LogstashUI/blob/main/CHANGELOG.md)).
+> **Paired releases:** LogstashUI and LogstashAgent are versioned in lockstep (see [Compatibility](/docs/docs/logstashui/compatibility.md) and [CHANGELOG](https://github.com/elastic/LogstashUI/blob/main/CHANGELOG.md)).
 
 ---
 
@@ -11,8 +11,8 @@ LogstashAgent and LogstashUI use **policy types** and matching **agent modes** s
 | Policy type (UI) | Agent `mode` | What it manages | Typical unit(s) |
 |------------------|--------------|-----------------|-----------------|
 | **PACKAGED** | `packaged` (legacy: `default`) | Distro / package Logstash | `logstash-agent` + `logstash` |
-| **MANAGED** | `managed` | Agent-owned Logstash tree **N** | `logstash-agent@N` + `logstash-managed@N` |
-| **SIMULATE** | `simulate` | Isolated sim tree **N** | `lsagent-simulate@N` + `ls-simulate@N` |
+| **MANAGED** | `managed` | Agent-owned Logstash tree **N** | `managed-agent@N` + `managed-logstash@N` |
+| **SIMULATE** | `simulate` | Isolated sim tree **N** | `simulate-agent@N` + `simulate-logstash@N` |
 | **EMBEDDED** | `embedded` | Docker/local sim (no enroll) | Compose / process supervisor |
 | **DEFAULT** | — | Legacy alias of **PACKAGED** | same as Packaged |
 
@@ -24,6 +24,8 @@ LogstashAgent and LogstashUI use **policy types** and matching **agent modes** s
 | **MANAGED** | Managed Policy | Yes | Clone stays **MANAGED** |
 | **SIMULATE** | Simulate Policy | Yes | Clone stays **SIMULATE** |
 | **EMBEDDED** | Embedded Policy | **No** (Docker/auto) | Cannot clone |
+
+The Packaged, Managed, and Simulate system policies ship with a `logstash.yml` that already meets the policy Requirements (info logs, JSON format, matching `path.logs`, config reload, API enabled) and are deployed as **revision 1**. Add agents to them and they work without a save or deploy step. New policies start from the same compliant default. On upgrade, a system policy is only filled in and deployed if it is still at revision 0 and has no enrolled agents.
 
 ---
 
@@ -77,7 +79,7 @@ Same shape under `/opt/logstash-agent/simulate-N/` (includes sim harness confs u
 | `logstash-agent-ctl` | `/opt/logstash-agent/bin/logstash-agent-ctl` |
 | VERSION download cache | `/opt/logstash-agent/logstash-versions/` |
 | Install registry | `/var/lib/logstash-agent/install-registry.json` |
-| Multi-instance unit templates | `/etc/systemd/system/logstash-agent@.service`, `logstash-managed@.service`, `lsagent-simulate@.service`, `ls-simulate@.service` |
+| Multi-instance unit templates | `/etc/systemd/system/managed-agent@.service`, `managed-logstash@.service`, `simulate-agent@.service`, `simulate-logstash@.service` |
 
 ---
 
@@ -89,7 +91,7 @@ Same shape under `/opt/logstash-agent/simulate-N/` (includes sim harness confs u
 
 1. **State** — Each multi-instance unit sets `LOGSTASH_AGENT_STATE_DIR` in `agent.env`. Packaged uses `/var/lib/logstash-agent`. Agent ids and API keys are **not** shared.
 2. **Config** — Multi-instance writes `logstash-agent.yml` under the instance tree. Packaged keeps `/etc/logstash-agent/logstash-agent.yml`. Install does **not** overwrite packaged config when adding Managed/Simulate.
-3. **Units** — Distinct systemd units per role. Stopping `logstash-agent` does **not** stop `logstash-agent@N` or `lsagent-simulate@N`.
+3. **Units** — Distinct systemd units per role. Stopping `logstash-agent` does **not** stop `managed-agent@N` or `simulate-agent@N`.
 4. **Distro Logstash** — Packaged install **enables** the `logstash` unit but does **not** start/restart it at install time (live-traffic safety). Multi-instance Logstash units are enable-only until the agent restarts them after apply.
 5. **Install order** — Packaged install also ships multi-instance templates so a later Managed/Simulate enroll does not require reinstalling the binary. Multi-instance install leaves an existing packaged service alone.
 
@@ -104,13 +106,13 @@ sudo systemctl status logstash-agent
 sudo journalctl -u logstash-agent -f
 
 # Managed instance N only
-sudo systemctl status logstash-agent@N
-sudo systemctl status logstash-managed@N
-# or: sudo logstash-agent-ctl status logstash-agent@N
+sudo systemctl status managed-agent@N
+sudo systemctl status managed-logstash@N
+# or: sudo logstash-agent-ctl status managed-agent@N
 
 # Simulate instance N only
-sudo systemctl status lsagent-simulate@N
-sudo systemctl status ls-simulate@N
+sudo systemctl status simulate-agent@N
+sudo systemctl status simulate-logstash@N
 ```
 
 ### Uninstall (registry-aware)
@@ -196,14 +198,14 @@ sudo logstash-agent install \
 
 1. Use **Managed Policy**, or **clone Packaged → Managed**.
 2. Install with a Managed token (same `install --enroll` command).
-3. Instance **N**, units `logstash-agent@N` / `logstash-managed@N`, paths under `managed-N/`.
+3. Instance **N**, units `managed-agent@N` / `managed-logstash@N`, paths under `managed-N/`.
 4. Optional: pin Logstash with **VERSION** on the policy.
 
 ### Simulate
 
 1. **Simulate Policy** (or clone).
 2. Enroll as above (or non-root enroll + `sudo logstash-agent setup-simulate`).
-3. Units `lsagent-simulate@N` / `ls-simulate@N`.
+3. Units `simulate-agent@N` / `simulate-logstash@N`.
 4. Pick the instance in the pipeline editor **Sim target** list.
 
 See also [Simulate agents](/docs/docs/logstashui/configuration/host_mode.md).
@@ -226,10 +228,10 @@ sudo logstash-agent-ctl start|stop|restart|status|enable|disable <unit>
 Allowed units include:
 
 - `logstash`, `logstash-agent`
-- `logstash-agent@N`, `logstash-managed@N`
-- `lsagent-simulate@N`, `ls-simulate@N`
+- `managed-agent@N`, `managed-logstash@N`
+- `simulate-agent@N`, `simulate-logstash@N`
 
-(Numeric instance ids only.)
+(Numeric instance ids only.) The pre-0.5.3 names (`logstash-agent@N`, `logstash-managed@N`, `lsagent-simulate@N`, `ls-simulate@N`) are still accepted with a deprecation notice.
 
 ---
 

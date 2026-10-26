@@ -40,6 +40,7 @@ from PipelineManager.policies_crud import (
     get_default_logstash_yml,
 )
 from PipelineManager.agent_policies import _strip_nonuser_from_snapshot
+from PipelineManager.system_policy_defaults import set_path_logs
 
 from API.auth import api_require_admin, parse_request_body
 
@@ -216,6 +217,7 @@ def _create_policy(request):
     else:
         agent_port_default, ls_port_default = PACKAGED_AGENT_API_PORT, PACKAGED_LOGSTASH_API_PORT
 
+    used_default_yml = not data.get('logstash_yml')
     logstash_yml = data.get('logstash_yml') or get_default_logstash_yml()
     jvm_options = data.get('jvm_options') or get_default_jvm_options()
     log4j2_properties = data.get('log4j2_properties') or get_default_log4j2_properties()
@@ -257,6 +259,13 @@ def _create_policy(request):
     elif policy_type == Policy.PolicyType.SIMULATE and uses_packaged_default_paths(policy):
         apply_simulate_path_bundle(policy)
         policy.save()
+
+    if used_default_yml:
+        # Keep path.logs in step with the policy's final logs_path (requirements).
+        synced = set_path_logs(policy.logstash_yml, policy.logs_path)
+        if synced != policy.logstash_yml:
+            policy.logstash_yml = synced
+            policy.save()
 
     resolved_binary = resolve_persisted_binary_path(
         source=policy.logstash_source,

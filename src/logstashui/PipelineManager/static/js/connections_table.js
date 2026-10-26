@@ -287,10 +287,16 @@ function buildPolicyCell(conn) {
     return `<span class="italic text-gray-400">Centralized</span>`;
   }
   if (conn.policy_id) {
-    return `<a href="/ConnectionManager/AgentPolicies?policy_id=${conn.policy_id}"
-      class="text-gray-300 hover:text-purple-400 hover:underline transition-colors">
-      ${escapeHtml(conn.policy_name)}
-    </a>`;
+    // Revision badge sits under the policy name; SSE refreshes .revision-container.
+    return `<div class="flex flex-col items-start gap-1">
+      <a href="/ConnectionManager/AgentPolicies?policy_id=${conn.policy_id}"
+        class="text-gray-300 hover:text-purple-400 hover:underline transition-colors">
+        ${escapeHtml(conn.policy_name)}
+      </a>
+      <div class="revision-container inline-flex" data-agent-id="${conn.pk}">
+        ${buildRevisionBadge(conn.revision)}
+      </div>
+    </div>`;
   }
   return `<span class="italic text-gray-500">No Policy</span>`;
 }
@@ -319,6 +325,31 @@ function buildStatusCell(conn) {
     ${badgeHtml}
   </div>`;
 }
+
+/**
+ * Build the policy revision indicator shown beside the agent health badge.
+ *
+ * @param {{state: 'current'|'pending', applied: number|null, current: number}|null} rev
+ *   Revision state from the server; null when the agent has no policy.
+ * @returns {string} Badge HTML, or '' when there is nothing to show.
+ */
+function buildRevisionBadge(rev) {
+  if (!rev) return '';
+  const applied = rev.applied === null || rev.applied === undefined ? 'none' : `#${rev.applied}`;
+  if (rev.state === 'current') {
+    return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-500/15 text-green-300 border border-green-500/30"
+      title="Latest policy revision (#${escapeHtml(rev.current)}) is applied">
+      <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
+      Rev #${escapeHtml(rev.current)}
+    </span>`;
+  }
+  return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30"
+    title="Applied revision: ${escapeHtml(applied)}. Latest revision: #${escapeHtml(rev.current)}. Waiting for the agent to apply it.">
+    <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+    Pending #${escapeHtml(rev.current)}
+  </span>`;
+}
+window.buildRevisionBadge = buildRevisionBadge;
 
 function buildAgentStatusBadge(conn) {
   // JSON.stringify produces double-quoted strings; escapeHtml turns them into

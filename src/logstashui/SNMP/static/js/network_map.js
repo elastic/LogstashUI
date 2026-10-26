@@ -13,6 +13,13 @@ let currentNetworkTransform = null;
 let networkTopologyData = null;       // full adjacency_table from last API response
 let networkMapIsDragging = false;
 
+// Active force simulation (stopped before each re-render so stale 'end' events
+// can't trigger a fit), and auto-fit guards. The graph auto-fits at most once
+// per render, and never after the user has zoomed, panned, or dragged.
+let networkMapSimulation = null;
+let _nmUserInteracted = false;
+let _nmInitialFitDone = false;
+
 // Network filter state — set of selected network IDs (integers); empty = show all
 let _selectedNetworkIds = new Set();
 // All available networks fetched from GetNetworksList
@@ -408,6 +415,12 @@ function renderNetworkMap(graphData) {
         </div>
     `;
 
+    // New render: stop any previous simulation and re-arm the one-time auto-fit
+    if (networkMapSimulation) networkMapSimulation.stop();
+    networkMapSimulation = null;
+    _nmUserInteracted = false;
+    _nmInitialFitDone = false;
+
     const svg     = document.getElementById('networkMapSvg');
     const svgRect = svg.getBoundingClientRect();
     const width   = svgRect.width;
@@ -434,6 +447,7 @@ function renderNetworkMap(graphData) {
         .force('charge', d3.forceManyBody().strength(chargeStr))
         .force('center', d3.forceCenter(0, 0))
         .force('collision', d3.forceCollide().radius(55));
+    networkMapSimulation = simulation;
 
     const g = d3.select('#networkMapGroup');
 
@@ -567,14 +581,19 @@ function renderNetworkMap(graphData) {
         _drawNetworkHulls(hullGroup, graphData.nodes);
     });
 
-    // Auto-fit once the simulation settles
+    // Auto-fit once, the first time the simulation settles. Later restarts
+    // (e.g. from clicking/dragging a node) and user zoom/pan must not re-fit.
     simulation.on('end', () => {
+        if (_nmInitialFitDone) return;
+        _nmInitialFitDone = true;
+        if (_nmUserInteracted) return;
         _fitGraphToView(svg, graphData.nodes);
     });
 
     // ── Drag helpers ──
     function dragStarted(event, d) {
         networkMapIsDragging = false;
+        _nmUserInteracted = true;
         if (!event.active) simulation.alphaTarget(0.3).restart();
         d.fx = d.x; d.fy = d.y;
     }
@@ -694,6 +713,9 @@ function initializeNetworkMapZoom(svg, nodeCount) {
         .on('zoom', event => {
             svgEl.select('g').attr('transform', event.transform);
             currentNetworkTransform = event.transform;
+            // sourceEvent is null for programmatic transforms (auto-fit, reset);
+            // it is set for real wheel / drag-pan / touch input.
+            if (event.sourceEvent) _nmUserInteracted = true;
         });
 
     svgEl.call(networkMapZoomBehavior);

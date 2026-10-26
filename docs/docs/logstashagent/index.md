@@ -19,7 +19,7 @@ See **[Agent roles, ports, coexistence, and VERSION](/docs/docs/logstashagent/ge
 Enroll with LogstashUI and continuously reconcile desired state to the local Logstash instance.
 
 - **Install and enroll**: `sudo ./logstash-agent/logstash-agent install --enroll <TOKEN> --logstash-ui-url <URL>`
-- **Controller mode**: systemd — `logstash-agent` (Packaged), `logstash-agent@N` (Managed), or `lsagent-simulate@N` (Simulate)
+- **Controller mode**: systemd — `logstash-agent` (Packaged), `managed-agent@N` (Managed), or `simulate-agent@N` (Simulate)
 - Agent state includes enrollment identity, policy assignment, and revision tracking (per-instance paths when multi-instance)
 
 ### Pipeline Management API
@@ -105,8 +105,8 @@ sudo systemctl status logstash-agent
 sudo journalctl -u logstash-agent -f
 
 # Or multi-instance (N from install output / UI connection)
-sudo systemctl status logstash-agent@N          # managed
-sudo systemctl status lsagent-simulate@N       # simulate
+sudo systemctl status managed-agent@N          # managed
+sudo systemctl status simulate-agent@N       # simulate
 
 # Host map (all roles on this machine)
 logstash-agent list-instances

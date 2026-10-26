@@ -9,6 +9,7 @@ from __future__ import annotations
 from django.db.models import Max, Q
 
 from PipelineManager.models import Connection, Policy
+from PipelineManager.system_policy_defaults import retarget_path_logs
 
 # Port scheme: packaged as-is; simulate-N / managed-N = policy base + N (N >= 1)
 PACKAGED_AGENT_API_PORT = 9550
@@ -170,6 +171,7 @@ def apply_managed_path_bundle(policy: Policy, instance_id: int | None = None) ->
         policy: Policy row to mutate (not saved).
         instance_id: Concrete instance number, or None for templates.
     """
+    old_logs_path = policy.logs_path
     if instance_id is None:
         root = f"{MANAGED_ROOT}/managed-{{instance_id}}"
         policy.settings_path = f"{root}/settings"
@@ -191,6 +193,7 @@ def apply_managed_path_bundle(policy: Policy, instance_id: int | None = None) ->
         policy.logstash_download_dir = f"{AGENT_OPT_ROOT}/logstash-versions"
     if not policy.binary_path:
         policy.binary_path = "/usr/share/logstash/bin"
+    policy.logstash_yml = retarget_path_logs(policy.logstash_yml, old_logs_path, policy.logs_path)
 
 
 def apply_simulate_path_bundle(policy: Policy, instance_id: int | None = None) -> None:
@@ -203,6 +206,7 @@ def apply_simulate_path_bundle(policy: Policy, instance_id: int | None = None) -
         policy: Policy row to mutate (not saved).
         instance_id: Concrete instance number, or None for templates.
     """
+    old_logs_path = policy.logs_path
     if instance_id is None:
         root = f"{SIMULATE_ROOT}/simulate-{{instance_id}}"
         policy.settings_path = f"{root}/settings"
@@ -224,6 +228,7 @@ def apply_simulate_path_bundle(policy: Policy, instance_id: int | None = None) -
         policy.logstash_download_dir = f"{AGENT_OPT_ROOT}/logstash-versions"
     if not policy.binary_path:
         policy.binary_path = "/usr/share/logstash/bin"
+    policy.logstash_yml = retarget_path_logs(policy.logstash_yml, old_logs_path, policy.logs_path)
 
 
 def uses_packaged_default_paths(policy: Policy) -> bool:

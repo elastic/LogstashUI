@@ -27,12 +27,12 @@ sudo logstash-agent install \
    - Paths: `/opt/logstash-agent/simulate-N/{settings,config,logs,data}`
    - Agent API port: **9500 + N**
    - Logstash API port: **9560 + N**
-   - Units: `lsagent-simulate@N`, `ls-simulate@N`
+   - Units: `simulate-agent@N`, `simulate-logstash@N`
 
 4. Start:
 
 ```bash
-sudo systemctl start lsagent-simulate@N
+sudo systemctl start simulate-agent@N
 ```
 
 5. In the pipeline editor, use the **Sim target** dropdown (shows `simulate-N · Logstash <version>`).

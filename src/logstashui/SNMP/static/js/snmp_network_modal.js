@@ -455,6 +455,7 @@ function openAgentConnectionModalFromNetwork() {
   if (agentFields) agentFields.classList.remove('hidden');
   if (nameField) nameField.classList.add('hidden');
   if (saveBtn) saveBtn.classList.add('hidden');
+  if (window.resetAgentEnrollSelection) window.resetAgentEnrollSelection();
 }
 
 // Refresh connections dropdown
