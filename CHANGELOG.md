@@ -1,3 +1,52 @@
+## [0.5.4] - Dissect and grok debuggers, system policies, SSL verification controls - 10/26/2026
+
+### Added
+
+- **Dissect debugger** (#214) in Utilities, with CodeMirror inputs, a grok-pattern warning, empty-input messages, a single `convert_datatype` error, and Ctrl+Enter to run. In-app documentation for the Utilities pages.
+- **Grok debugger reimplemented to match Logstash** (#214). It uses the bundled `logstash-patterns-core` 4.3.4 patterns with an ECS mode selector and CodeMirror inputs. The `pygrok` dependency is removed.
+- **SSL verification controls** (#216):
+  - An "allow self-signed certificates" checkbox on Elasticsearch connections. Existing connections default to enabled, so nothing changes on upgrade.
+  - An advanced `ssl_certificate_authorities` option at the SNMP Network level, also available through the REST API.
+- **System policies are deployed automatically.** The Packaged, Managed and Simulate policies ship with a compliant `logstash.yml` and are deployed at revision 1, and new policies default to the recommended settings. Migration `0031_deploy_system_policies` fills in untouched seeds, keeps customized YAML (but deploys it), and skips policies that already have agents enrolled or are already deployed.
+- The Policy column in the connection manager shows which policy revision each agent is on, so you can see whether the latest changes have been applied.
+- Graph mode can move nodes, via a new move mode in the pipeline graph editor.
+- Field-syntax warnings: entering a dot-separated value in a field that takes field-reference syntax shows an alert with a one-click convert to `[a][b]` form.
+- New SNMP icons, also shown on the Devices page.
+
+### Changed
+
+- The agent policy selector when adding a Logstash agent connection no longer defaults to the first policy. The command is only shown once you pick one.
+- The "install Logstash" toggle is replaced by a note about installing Logstash for managed policies. The "allow self-signed" toggle is removed from the agent connection form.
+- Host names in the connection manager are truncated more readably.
+- The plugin parser now reads option types from plugin definitions instead of guessing. Comments inside codec blocks, and hashes written as plugin comments, are preserved instead of failing to parse.
+- Storage device data was updated for the latest template and schema changes.
+- Docs no longer hard-code version numbers.
+
+### Fixed
+
+- Grok and dissect debuggers are hardened (#214):
+  - Huge `:int` / `=> int` conversions no longer return a 500 or stall the worker. Integers over 4,300 digits show a placeholder.
+  - The 15-second simulation limit now covers grok pattern compilation and failure explanations, and applies to dissect too.
+  - Grok patterns that expand past 200,000 characters are rejected with a compile error.
+  - Dissect conversion tags are appended to a captured `tags` field instead of replacing it.
+  - CRLF is normalized in dissect samples, patterns and `convert_datatype`, so multiline Windows pastes match.
+  - Dissect now follows `logstash-filter-dissect` 1.3.0 (append, indirect, field order), and the nonexistent `append_separator` option is removed.
+  - The simulate spinner shows while a request runs, and repeat clicks during a request are dropped.
+- SNMP pipelines deployed against a connection that allows self-signed certificates now set `ssl_verification_mode => none` so the Logstash node accepts the same certificate. This applies only to TLS connections (`https://` or Cloud ID). Plain HTTP is left alone.
+- SSL verification is never disabled for Cloud ID connections.
+- Testing an offline connection no longer shows a green "Connected" pill next to the error.
+- Form placeholders render in the right place.
+- The SNMP agent can load in a Kibana environment again (a regression unrelated to the SSL work).
+- Windows hosts: the Docker entrypoint no longer fails on host directory ownership.
+- Untouched policies no longer show a false "Unsaved Changes", and the license header no longer ends up in customer `logstash.yml` files.
+- The network map no longer zooms all the way out unprompted.
+- Values containing `"` or `'` are no longer cut short in inputs, and dropdowns keep saved values that aren't in the option list (for example `${ECS_MODE}`).
+
+### Upgrade notes
+
+- Run `migrate` on upgrade. Three migrations are new: `0025_network_ssl_certificate_authorities` (SNMP), `0030_connection_allow_self_signed_certs` and `0031_deploy_system_policies` (PipelineManager).
+- Existing connections keep `allow self-signed = true`. Turn it off per connection if you want strict verification.
+
 ## [0.5.3] - REST API, scale and Postgres pooling, SNMP device coverage - 10/06/2026
 
 Package version is **0.5.3**. Preferred LogstashAgent version is **0.5.3** (lockstep).
