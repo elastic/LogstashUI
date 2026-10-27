@@ -20,6 +20,8 @@ import secrets
 
 from cryptography.fernet import Fernet
 
+from Common.encryption import encrypt_credential
+
 from .models import ApiKey, Connection as ConnectionTable, EnrollmentToken, Policy
 from .agent_modes import (
     build_policy_config,
@@ -183,6 +185,31 @@ def _encrypt_for_agent(raw_api_key: str, plaintext: str) -> str:
     """
     key = base64.urlsafe_b64encode(hashlib.sha256(raw_api_key.encode("utf-8")).digest())
     return Fernet(key).encrypt(plaintext.encode("utf-8")).decode("utf-8")
+
+
+def _inbound_key_for_checkin(connection, raw_api_key: str, data: dict) -> dict:
+    """Return ``{"inbound_api_key_encrypted": ...}`` when the agent needs its key.
+
+    Generates the connection's inbound key on first use. The agent reports
+    ``inbound_api_key_sha256`` of the key it holds; on mismatch the key is
+    re-sent wrapped with ``_encrypt_for_agent``.
+
+    Args:
+        connection: Agent ``Connection`` row.
+        raw_api_key: Agent's plaintext API key (from the check-in header).
+        data: Parsed check-in body.
+    """
+    inbound_key = connection.get_agent_inbound_key()
+    if not inbound_key:
+        inbound_key = secrets.token_urlsafe(32)
+        ConnectionTable.objects.filter(pk=connection.pk).update(
+            agent_inbound_key=encrypt_credential(inbound_key)
+        )
+        logger.info("Generated agent inbound key for connection %s", connection.pk)
+    expected = hashlib.sha256(inbound_key.encode("utf-8")).hexdigest()
+    if data.get("inbound_api_key_sha256") == expected:
+        return {}
+    return {"inbound_api_key_encrypted": _encrypt_for_agent(raw_api_key, inbound_key)}
 
 
 def _build_snmp_changes(connection, policy, raw_api_key, agent_snmp_pipelines, agent_snmp_keystore):
@@ -469,6 +496,8 @@ def enroll(request):
                 conn_name = f"{host_short}-managed-{instance_id}"
             else:
                 conn_name = host_short or callback_host
+            # Key this UI presents when calling the agent's /_logstash/* API
+            inbound_api_key = secrets.token_urlsafe(32)
             connection = ConnectionTable.objects.create(
                 name=conn_name,
                 connection_type="AGENT",
@@ -479,6 +508,7 @@ def enroll(request):
                 instance_id=instance_id,
                 agent_api_port=agent_api_port,
                 logstash_api_port=logstash_api_port,
+                agent_inbound_key=inbound_api_key,
             )
 
             raw_api_key = secrets.token_urlsafe(32)
@@ -495,6 +525,7 @@ def enroll(request):
             response_body = {
                 "success": True,
                 "api_key": raw_api_key,
+                "inbound_api_key": inbound_api_key,
                 "policy_id": policy.id,
                 "connection_id": connection.id,
                 "policy_config": policy_config,
@@ -788,6 +819,12 @@ def check_in(request):
             "desired_agent_version": connection.desired_agent_version,
             "managed_changes_available": managed_changes_available,
         }
+
+        # Upgrade path: deliver the agent-API inbound key to agents enrolled before
+        # it existed, or whose copy drifted (fingerprint mismatch).
+        inbound_part = _inbound_key_for_checkin(connection, raw_api_key, data)
+        if inbound_part:
+            response_payload.update(inbound_part)
 
         # Upgrade path: agent without server cert sends CSR; re-issue without re-enroll
         try:

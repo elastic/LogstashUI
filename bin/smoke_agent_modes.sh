@@ -66,6 +66,7 @@ run_agent_offline() {
     export PYTHONPATH=src
     if ! "$PY" -m pytest \
       tests/test_e2e_agent_modes_smoke.py \
+      tests/test_api_auth.py \
       tests/test_coexistence.py \
       tests/test_multi_instance_units.py \
       tests/test_install_registry.py \
@@ -75,6 +76,7 @@ run_agent_offline() {
       # retry without -p if plugin flags differ
       "$PY" -m pytest \
         tests/test_e2e_agent_modes_smoke.py \
+        tests/test_api_auth.py \
         tests/test_coexistence.py \
         tests/test_multi_instance_units.py \
         tests/test_install_registry.py \
@@ -112,6 +114,12 @@ fi
 
 UI_CTR="$(docker ps --format '{{.Names}}' | grep -E 'logstashui-logstashui|logstashui$' | head -1 || true)"
 AGENT_CTR="$(docker ps --format '{{.Names}}' | grep -E 'logstashagent' | head -1 || true)"
+
+# Same per-install UI<->agent secrets start_logstashui.sh uses (needed for
+# compose_up and for the Phase 1 auth probes against an already-running stack).
+# shellcheck source=compose_secrets.sh
+. "$SCRIPT_DIR/compose_secrets.sh"
+ensure_compose_secrets "$UI_ROOT/logstashui_data"
 
 compose_up() {
   echo "[Compose] Starting smoke stack (embedded profile)..."
@@ -185,21 +193,41 @@ if curl -skf "https://127.0.0.1:8443/.well-known/logstashui/ca.crt" >/dev/null 2
 else
   bad "UI product CA not reachable (start stack or pass --rebuild)"
 fi
-if curl -skf "https://127.0.0.1:9500/" >/dev/null 2>&1 || curl -sk -o /dev/null -w '' "https://127.0.0.1:9500/" 2>/dev/null; then
-  CODE=$(curl -sk -o /dev/null -w '%{http_code}' "https://127.0.0.1:9500/" || echo 000)
-  if [[ "$CODE" != "000" && "$CODE" != "" ]]; then
-    ok "Embedded agent HTTPS :9500 (HTTP $CODE)"
-  else
-    bad "Embedded agent HTTPS :9500"
-  fi
+AGENT="https://127.0.0.1:9500"
+# curl prints 000 itself on connect failure; don't append another
+code() { curl -sk -o /dev/null -w '%{http_code}' "$@" 2>/dev/null || true; }
+# Agent container starts after UI is healthy; give FastAPI time to bind HTTPS
+CODE=000
+for i in $(seq 1 60); do
+  CODE=$(code "$AGENT/")
+  [[ "$CODE" == "200" ]] && break
+  sleep 2
+done
+if [[ "$CODE" == "200" ]]; then
+  ok "Embedded agent HTTPS :9500 (HTTP $CODE)"
 else
-  CODE=$(curl -sk -o /dev/null -w '%{http_code}' "https://127.0.0.1:9500/" || echo 000)
-  if [[ "$CODE" != "000" ]]; then
-    ok "Embedded agent HTTPS :9500 (HTTP $CODE)"
-  else
-    bad "Embedded agent HTTPS :9500 not reachable"
-  fi
+  bad "Embedded agent HTTPS :9500 not reachable (HTTP $CODE)"
 fi
+
+# Agent API auth: every /_logstash/* route needs Authorization: ApiKey <key>
+AUTH=(-H "Authorization: ApiKey ${LOGSTASH_AGENT_API_KEY}")
+C=$(code "$AGENT/_logstash/health")
+[[ "$C" == "401" ]] && ok "agent /_logstash/health without key → 401" \
+  || bad "agent /_logstash/health without key → $C (expected 401)"
+C=$(code -H "Authorization: ApiKey wrong-key" "$AGENT/_logstash/pipeline")
+[[ "$C" == "401" ]] && ok "agent /_logstash/pipeline with wrong key → 401" \
+  || bad "agent /_logstash/pipeline with wrong key → $C (expected 401)"
+C=$(code "${AUTH[@]}" "$AGENT/_logstash/tls-status")
+[[ "$C" == "200" ]] && ok "agent /_logstash/tls-status with key → 200" \
+  || bad "agent /_logstash/tls-status with key → $C (expected 200; key mismatch? see logstashui_data/.agent_api_key)"
+C=$(code "${AUTH[@]}" -H 'Content-Type: application/json' \
+  -d '{"pipeline_name":"../../app/src/logstashagent/data/pwn","config":"input {}"}' \
+  "$AGENT/_logstash/validate")
+[[ "$C" == "400" ]] && ok "agent /_logstash/validate path traversal → 400" \
+  || bad "agent /_logstash/validate path traversal → $C (expected 400)"
+C=$(code "$AGENT/openapi.json")
+[[ "$C" == "404" ]] && ok "agent OpenAPI schema not exposed → 404" \
+  || bad "agent /openapi.json → $C (expected 404)"
 echo ""
 
 # ---------------------------------------------------------------------------

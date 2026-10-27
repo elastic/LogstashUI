@@ -31,6 +31,7 @@ import time
 import re
 from html import escape as _html_escape
 from Common.product_ca import agent_requests_verify
+from PipelineManager.agent_client import agent_auth_headers
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +75,14 @@ def _sim_agent_url(request):
     if fallback:
         return fallback, None, None
     return None, None, err or "No simulation agent URL available"
+
+
+def _sim_agent_headers(target):
+    """Auth headers for the agent ``_sim_agent_url`` resolved.
+
+    ``target`` None means the ``settings.LOGSTASH_AGENT_URL`` embedded fallback.
+    """
+    return agent_auth_headers((target or {}).get("connection_id"))
 
 
 @require_admin_role
@@ -211,6 +220,7 @@ def SimulatePipeline(request):
             return HttpResponse(
                 f'<div class="text-red-400">Error: {sim_err or "No simulation agent available"}</div>'
             )
+        agent_headers = _sim_agent_headers(sim_target)
 
         # Clone source-policy keystore onto the simulate agent when ${...} vars appear
         try:
@@ -224,6 +234,7 @@ def SimulatePipeline(request):
                 pipeline_text=request.POST.get('pipeline_text', '') or '',
                 ls_id=ls_id,
                 policy_id=policy_id,
+                agent_headers=agent_headers,
             )
         except Exception as ks_err:
             logger.error("Keystore sync before simulation failed: %s", ks_err, exc_info=True)
@@ -603,6 +614,7 @@ end
                 try:
                     slots_resp = requests.get(
                         f"{logstash_agent_url}/_logstash/slots",
+                        headers=agent_headers,
                         verify=agent_requests_verify(),
                         timeout=5,
                     )
@@ -627,6 +639,7 @@ end
                     try:
                         status_resp = requests.get(
                             f"{logstash_agent_url}/_logstash/pipelines/status",
+                            headers=agent_headers,
                             verify=agent_requests_verify(),
                             timeout=5,
                         )
@@ -708,6 +721,7 @@ end
                 response = requests.post(
                     f"{logstash_agent_url}/_logstash/slots/allocate",
                     json=slot_allocation_body,
+                    headers=agent_headers,
                     verify=agent_requests_verify(),
                     timeout=120,
                 )
@@ -807,7 +821,7 @@ end
         if log_text:
             # Send the user's log input via logstashagent's simulate endpoint
             # This proxies the request to the local Logstash HTTP input on port 9449
-            simulation_input_url = f"{_sim_agent_url(request)[0]}/_logstash/simulate"
+            simulation_input_url = f"{logstash_agent_url}/_logstash/simulate"
             try:
                 # Parse log_text as JSON if it looks like JSON, otherwise send as message field
                 try:
@@ -828,6 +842,7 @@ end
                 response = requests.post(
                     simulation_input_url,
                     json=log_data,
+                    headers=agent_headers,
                     verify=agent_requests_verify(),
                     timeout=45,
                 )
@@ -1053,10 +1068,14 @@ def CheckIfPipelineLoaded(request):
             }, status=400)
 
         # Call logstashagent to check pipeline status
-        logstash_agent_url = f"{_sim_agent_url(request)[0]}/_logstash/pipelines/status"
+        base, sim_target, _ = _sim_agent_url(request)
+        logstash_agent_url = f"{base}/_logstash/pipelines/status"
 
         try:
-            response = requests.get(logstash_agent_url, timeout=5, verify=agent_requests_verify())
+            response = requests.get(
+                logstash_agent_url, timeout=5, verify=agent_requests_verify(),
+                headers=_sim_agent_headers(sim_target),
+            )
             response.raise_for_status()
 
             data = response.json()
@@ -1116,7 +1135,11 @@ def GetRelatedLogs(request):
         # Get slot creation timestamp from logstashagent
         min_timestamp = None
         try:
-            slots_response = requests.get(f"{_sim_agent_url(request)[0]}/_logstash/slots", timeout=5, verify=agent_requests_verify())
+            base, sim_target, _ = _sim_agent_url(request)
+            slots_response = requests.get(
+                f"{base}/_logstash/slots", timeout=5, verify=agent_requests_verify(),
+                headers=_sim_agent_headers(sim_target),
+            )
             slots_response.raise_for_status()
             slots_data = slots_response.json()
 
@@ -1150,7 +1173,8 @@ def GetRelatedLogs(request):
             logger.warning(f"Using fallback: filtering logs from last 30 seconds (min_timestamp: {min_timestamp})")
 
         # Call logstashagent to get pipeline logs
-        logstash_agent_url = f"{_sim_agent_url(request)[0]}/_logstash/pipeline/{pipeline_id}/logs"
+        base, sim_target, _ = _sim_agent_url(request)
+        logstash_agent_url = f"{base}/_logstash/pipeline/{pipeline_id}/logs"
         params = {
             "max_entries": min(max_entries, 500),
             "min_level": min_level
@@ -1165,7 +1189,10 @@ def GetRelatedLogs(request):
 
         try:
             logger.debug(f"Requesting logs from {logstash_agent_url} with params: {params}")
-            response = requests.get(logstash_agent_url, params=params, timeout=10, verify=agent_requests_verify())
+            response = requests.get(
+                logstash_agent_url, params=params, timeout=10, verify=agent_requests_verify(),
+                headers=_sim_agent_headers(sim_target),
+            )
             response.raise_for_status()
 
             data = response.json()
@@ -1238,7 +1265,8 @@ def UploadFile(request):
         logger.info(f"Encoded content length: {len(encoded_content)} characters")
 
         # Send to logstashagent
-        logstash_agent_url = f"{_sim_agent_url(request)[0]}/_logstash/write-file"
+        base, sim_target, _ = _sim_agent_url(request)
+        logstash_agent_url = f"{base}/_logstash/write-file"
 
         response = requests.post(
             logstash_agent_url,
@@ -1246,6 +1274,7 @@ def UploadFile(request):
                 "filename": filename,
                 "content": encoded_content
             },
+            headers=_sim_agent_headers(sim_target),
             verify=agent_requests_verify(),
             timeout=10
         )
@@ -1323,7 +1352,7 @@ def GetSimulationNodeHealth(request):
         ``queued_requests``, plus TLS pin flags.
     """
     try:
-        base, _, err = _sim_agent_url(request)
+        base, sim_target, err = _sim_agent_url(request)
         if not base:
             base = settings.LOGSTASH_AGENT_URL
         if not base:
@@ -1337,7 +1366,10 @@ def GetSimulationNodeHealth(request):
         logstash_agent_url = f"{base}/_logstash/health"
         
         try:
-            response = requests.get(logstash_agent_url, timeout=3, verify=agent_requests_verify())
+            response = requests.get(
+                logstash_agent_url, timeout=3, verify=agent_requests_verify(),
+                headers=_sim_agent_headers(sim_target),
+            )
             response.raise_for_status()
             
             health_data = response.json()
@@ -1417,7 +1449,8 @@ def ValidateLogstashConfig(request):
         logstash_config = converter.components_to_logstash_config()
         
         # Send to logstashagent for validation
-        logstash_agent_url = f"{_sim_agent_url(request)[0]}/_logstash/validate"
+        base, sim_target, _ = _sim_agent_url(request)
+        logstash_agent_url = f"{base}/_logstash/validate"
         
         try:
             response = requests.post(
@@ -1426,6 +1459,7 @@ def ValidateLogstashConfig(request):
                     "pipeline_name": pipeline_name,
                     "config": logstash_config
                 },
+                headers=_sim_agent_headers(sim_target),
                 verify=agent_requests_verify(),
                 timeout=30
             )

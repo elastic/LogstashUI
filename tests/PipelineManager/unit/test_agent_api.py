@@ -6,9 +6,11 @@ from PipelineManager.models import (
     ApiKey, Connection, EnrollmentToken, Keystore, Pipeline, Policy
 )
 
+from cryptography.fernet import Fernet
 from datetime import datetime, timezone
 from unittest.mock import patch
 import base64
+import hashlib
 import json
 import pytest
 
@@ -135,6 +137,11 @@ class TestEnrollEndpoint:
 
         # Verify API key was created
         assert connection.api_keys.exists()
+
+        # Agent-API inbound key: returned once, stored encrypted
+        assert data['inbound_api_key']
+        assert connection.agent_inbound_key.startswith('gAAAAA')
+        assert connection.get_agent_inbound_key() == data['inbound_api_key']
 
     def test_enroll_skips_csr_when_insecure_http(self, client, test_enrollment_token, monkeypatch):
         monkeypatch.setenv("LOGSTASHUI_INSECURE_HTTP", "true")
@@ -1204,9 +1211,13 @@ def test_checkin_hot_path_queries_and_no_payload_logging(
     rf, test_agent_connection, test_api_key, django_assert_num_queries, caplog
 ):
     from PipelineManager.agent_api import check_in
+    # Steady state: agent already holds the current inbound key
+    test_agent_connection.agent_inbound_key = 'inbound-key'
+    test_agent_connection.save()
     request = rf.post('/ConnectionManager/CheckIn/', data=json.dumps({
         'connection_id': test_agent_connection.pk,
         'status_blob': {'agent_version': 'payload-must-not-be-logged'},
+        'inbound_api_key_sha256': hashlib.sha256(b'inbound-key').hexdigest(),
     }), content_type='application/json', HTTP_AUTHORIZATION=f'ApiKey {test_api_key}')
     with caplog.at_level('DEBUG', logger='PipelineManager.agent_api'):
         with django_assert_num_queries(4):
@@ -1215,6 +1226,48 @@ def test_checkin_hot_path_queries_and_no_payload_logging(
     assert 'payload-must-not-be-logged' not in caplog.text
     test_agent_connection.refresh_from_db()
     assert test_agent_connection.status_blob['agent_version'] == 'payload-must-not-be-logged'
+
+
+def _checkin(rf, conn, api_key, **extra):
+    from PipelineManager.agent_api import check_in
+    request = rf.post('/ConnectionManager/CheckIn/', data=json.dumps({
+        'connection_id': conn.pk, **extra,
+    }), content_type='application/json', HTTP_AUTHORIZATION=f'ApiKey {api_key}')
+    response = check_in(request)
+    assert response.status_code == 200
+    return json.loads(response.content)
+
+
+def _unwrap_for_agent(raw_api_key, token):
+    key = base64.urlsafe_b64encode(hashlib.sha256(raw_api_key.encode()).digest())
+    return Fernet(key).decrypt(token.encode()).decode()
+
+
+class TestCheckinInboundKey:
+    def test_legacy_agent_gets_generated_key(self, rf, test_agent_connection, test_api_key):
+        assert test_agent_connection.agent_inbound_key is None
+        body = _checkin(rf, test_agent_connection, test_api_key)
+        test_agent_connection.refresh_from_db()
+        stored = test_agent_connection.get_agent_inbound_key()
+        assert stored and test_agent_connection.agent_inbound_key.startswith('gAAAAA')
+        assert _unwrap_for_agent(test_api_key, body['inbound_api_key_encrypted']) == stored
+
+    def test_matching_fingerprint_not_resent(self, rf, test_agent_connection, test_api_key):
+        test_agent_connection.agent_inbound_key = 'inbound-key'
+        test_agent_connection.save()
+        body = _checkin(
+            rf, test_agent_connection, test_api_key,
+            inbound_api_key_sha256=hashlib.sha256(b'inbound-key').hexdigest(),
+        )
+        assert 'inbound_api_key_encrypted' not in body
+
+    def test_stale_fingerprint_resent_without_rotation(self, rf, test_agent_connection, test_api_key):
+        test_agent_connection.agent_inbound_key = 'inbound-key'
+        test_agent_connection.save()
+        body = _checkin(rf, test_agent_connection, test_api_key, inbound_api_key_sha256='stale')
+        assert _unwrap_for_agent(test_api_key, body['inbound_api_key_encrypted']) == 'inbound-key'
+        test_agent_connection.refresh_from_db()
+        assert test_agent_connection.get_agent_inbound_key() == 'inbound-key'
 
 
 def test_checkin_preserves_concurrent_admin_changes(rf, test_agent_connection, test_api_key):

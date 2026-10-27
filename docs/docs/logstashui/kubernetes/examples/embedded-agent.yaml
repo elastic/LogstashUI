@@ -4,11 +4,11 @@
 
 # Optional embedded simulation agent (compose --profile embedded analog).
 # Apply a DB tree first (sqlite/ postgresql/ or mysql/), uncomment
-# LOGSTASH_AGENT_URL in ConfigMap/logstashui and LOGSTASHUI_AGENT_CSR_SECRET
-# in Secret/logstashui, then:
+# LOGSTASH_AGENT_URL in ConfigMap/logstashui, set LOGSTASHUI_AGENT_CSR_SECRET and
+# LOGSTASH_AGENT_API_KEY in Secret/logstashui, then:
 #   kubectl apply -f docs/docs/logstashui/kubernetes/examples/embedded-agent.yaml
 # ClusterIP only. Lab node. Prefer enrolled Simulate agents for serious work.
-# Missing CSR secret → CreateContainerConfigError (intentional).
+# Missing CSR secret or API key → CreateContainerConfigError (intentional).
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -101,6 +101,11 @@ spec:
                 secretKeyRef:
                   name: logstashui
                   key: LOGSTASHUI_AGENT_CSR_SECRET
+            - name: LOGSTASH_AGENT_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: logstashui
+                  key: LOGSTASH_AGENT_API_KEY
           startupProbe:
             tcpSocket:
               port: agent

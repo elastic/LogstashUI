@@ -202,6 +202,12 @@ if not exist "logstashui_data\db.sqlite3" (
     )
 )
 echo Host data directory: %CD%\logstashui_data
+
+REM Per-install secrets shared by UI and embedded agent (see bin\compose_secrets.sh):
+REM   LOGSTASH_AGENT_API_KEY       UI -> agent /_logstash/* API
+REM   LOGSTASHUI_AGENT_CSR_SECRET  agent -> UI server-cert bootstrap
+call :ENSURE_SECRET LOGSTASH_AGENT_API_KEY "%CD%\logstashui_data\.agent_api_key"
+call :ENSURE_SECRET LOGSTASHUI_AGENT_CSR_SECRET "%CD%\logstashui_data\.agent_csr_secret"
 echo.
 
 REM Now enable delayed expansion for variable parsing
@@ -302,7 +308,6 @@ cd docker
 
 REM UI must start before the agent so TLS material is issued first
 if not defined LOGSTASH_AGENT_URL set "LOGSTASH_AGENT_URL=https://host.docker.internal:9501"
-if not defined LOGSTASHUI_AGENT_CSR_SECRET set "LOGSTASHUI_AGENT_CSR_SECRET=logstashui-compose-dev"
 %DOCKER_COMPOSE% !COMPOSE_FILES! up -d !REBUILD_FLAG! logstashui
 cd ..
 
@@ -312,7 +317,6 @@ ping 127.0.0.1 -n 9 >nul
 echo Starting LogstashAgent on port 9501 (HTTPS when cert issued)
 cd LogstashAgent
 if not defined LOGSTASH_UI_URL set "LOGSTASH_UI_URL=https://localhost:8443"
-if not defined LOGSTASHUI_AGENT_CSR_SECRET set "LOGSTASHUI_AGENT_CSR_SECRET=logstashui-compose-dev"
 set "LOGSTASH_AGENT_PORT=9501"
 start "LogstashAgent" cmd /K "uv run python -m logstashagent.main --mode embedded"
 cd ..
@@ -347,3 +351,11 @@ echo.
 
 REM Restore original directory
 popd
+goto :eof
+
+REM ENSURE_SECRET VAR FILE: keep an exported VAR, else read FILE (generate once)
+:ENSURE_SECRET
+if defined %~1 goto :eof
+if not exist "%~2" powershell -NoProfile -Command "$b=New-Object byte[] 32; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); [IO.File]::WriteAllText('%~2', ([Convert]::ToBase64String($b) -replace '[/+=]',''))"
+set /p %~1=<"%~2"
+goto :eof

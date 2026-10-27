@@ -25,7 +25,7 @@ kubectl apply -f docs/docs/logstashui/kubernetes/examples/sqlite/
 Same role as compose `--profile embedded`: an in-cluster LogstashAgent for the pipeline editor Sim target (`embedded · docker`). No enroll. Lab only — prefer an enrolled Simulate agent for serious work.
 
 1. Apply **one** DB tree above.
-2. Set `LOGSTASHUI_AGENT_CSR_SECRET` in its Secret. DO NOT use the secret default.
+2. Set `LOGSTASHUI_AGENT_CSR_SECRET` and `LOGSTASH_AGENT_API_KEY` in its Secret to long random values. DO NOT use the defaults. The agent rejects every `/_logstash/*` call without the API key.
 3. Apply the overlay:
 
 ```bash
