@@ -370,6 +370,12 @@ class Connection(models.Model):
         null=True,
         help_text="Logstash HTTP API port for this connection (packaged 9600; managed 9700+N; simulate 9560+N; embedded 9560)"
     )
+    agent_inbound_key = models.CharField(
+        max_length=512,
+        blank=True,
+        null=True,
+        help_text="Encrypted key the UI presents to this agent's API (Authorization: ApiKey)"
+    )
     logstash_version_resolved = models.CharField(
         max_length=64,
         blank=True,
@@ -445,6 +451,8 @@ class Connection(models.Model):
             self.ssh_key = encrypt_credential(self.ssh_key)
         if self.api_key and not self._is_encrypted(self.api_key):
             self.api_key = encrypt_credential(self.api_key)
+        if self.agent_inbound_key and not self._is_encrypted(self.agent_inbound_key):
+            self.agent_inbound_key = encrypt_credential(self.agent_inbound_key)
 
         super().save(*args, **kwargs)
 
@@ -459,6 +467,10 @@ class Connection(models.Model):
     def get_api_key(self):
         """Return the decrypted API key, or None if unset."""
         return decrypt_credential(self.api_key) if self.api_key else None
+
+    def get_agent_inbound_key(self):
+        """Return the decrypted agent inbound API key, or None if unset."""
+        return decrypt_credential(self.agent_inbound_key) if self.agent_inbound_key else None
 
 
 MANAGED_BY_CHOICES = [

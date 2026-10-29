@@ -20,6 +20,7 @@ import requests
 import logging
 import json
 from Common.product_ca import agent_requests_verify
+from PipelineManager.agent_client import agent_auth_headers
 
 logger = logging.getLogger(__name__)
 
@@ -243,6 +244,7 @@ def CreatePipeline(request, simulate=False, pipeline_name=None, pipeline_config=
                 response = requests.put(
                     logstash_agent_url,
                     json=pipeline_body,
+                    headers=agent_auth_headers(),  # embedded agent at LOGSTASH_AGENT_URL
                     verify=agent_requests_verify(),  # --insecure equivalent
                     timeout=10
                 )

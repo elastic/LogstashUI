@@ -254,3 +254,5 @@ graphify-out/
 
 # Test and env related
 .config
+logstashui_data
+oldlsui_data/

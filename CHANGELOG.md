@@ -1,3 +1,22 @@
+## [0.5.5] - Unreleased: Authenticated calls to LogstashAgent
+
+### Security
+
+- **LogstashUI now authenticates to LogstashAgent.** This pairs with the agent release that requires `Authorization: ApiKey <key>` on every `/_logstash/*` route. All UI-to-agent calls now send it: simulation, slots, logs, validate, write-file, keystore sync, health, and the simulation-pipeline PUT.
+  - Enrolled agents: each connection gets its own random key, stored encrypted in the new `Connection.agent_inbound_key` field (migration `0032_connection_agent_inbound_key`). New enrollments get the key in the enroll response. Agents enrolled earlier get it wrapped for that agent on their next check-in, and it is re-sent if the agent's SHA-256 fingerprint stops matching.
+  - Embedded agent: the new `LOGSTASH_AGENT_API_KEY` setting/env, which must match the agent's.
+  - The embedded key is never sent to an enrolled agent.
+- **No more weak default compose secret.** `docker-compose.yml` no longer defaults `LOGSTASHUI_AGENT_CSR_SECRET` to `logstashui-compose-dev`. `bin/start_logstashui.sh`, `start_logstashui.bat` and `smoke_agent_modes.sh` generate `LOGSTASH_AGENT_API_KEY` and `LOGSTASHUI_AGENT_CSR_SECRET` once per install and keep them in `logstashui_data/.agent_api_key` and `.agent_csr_secret` (mode 600). An exported value takes precedence.
+
+### Changed
+
+- The Kubernetes examples add `LOGSTASH_AGENT_API_KEY` to `Secret/logstashui` and pass it to the embedded agent Deployment.
+- `bin/smoke_agent_modes.sh` Phase 1 now probes agent auth: no key and wrong key return `401`, the right key returns `200`, a traversal attempt on `/validate` returns `400`, and `/openapi.json` returns `404`. The offline phase also runs the agent's `tests/test_api_auth.py`.
+
+### Upgrade notes
+
+- If you run `docker compose` directly instead of the start scripts, export the same `LOGSTASH_AGENT_API_KEY` and `LOGSTASHUI_AGENT_CSR_SECRET` for both services.
+
 ## [0.5.4] - Dissect and grok debuggers, system policies, SSL verification controls - 10/26/2026
 
 ### Added

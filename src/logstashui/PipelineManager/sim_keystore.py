@@ -126,12 +126,13 @@ def collect_policy_secrets(policy: Policy) -> tuple[dict[str, str], Optional[str
 
 
 def fetch_agent_keystore(
-    agent_base_url: str, *, timeout: float = 15.0
+    agent_base_url: str, *, timeout: float = 15.0, headers: Optional[dict] = None
 ) -> dict:
     """GET current secrets from the simulate agent's keystore endpoint.
 
     Args:
         agent_base_url: Agent FastAPI base URL.
+        headers: Agent auth headers (``agent_client.agent_auth_headers``).
         timeout: HTTP timeout in seconds.
 
     Returns:
@@ -142,7 +143,7 @@ def fetch_agent_keystore(
         RuntimeError: Agent responded with HTTP 4xx/5xx.
     """
     url = agent_base_url.rstrip("/") + "/_logstash/keystore"
-    resp = requests.get(url, timeout=timeout, verify=agent_requests_verify())
+    resp = requests.get(url, timeout=timeout, verify=agent_requests_verify(), headers=headers)
     if resp.status_code >= 400:
         raise RuntimeError(
             f"Failed to read agent keystore ({resp.status_code}): {resp.text[:300]}"
@@ -172,6 +173,7 @@ def sync_keystore_to_agent(
     *,
     restart: bool = True,
     timeout: float = 30.0,
+    headers: Optional[dict] = None,
 ) -> dict:
     """POST secrets to the simulate agent's ``/_logstash/keystore/sync``.
 
@@ -179,6 +181,7 @@ def sync_keystore_to_agent(
 
     Args:
         agent_base_url: Agent FastAPI base URL.
+        headers: Agent auth headers (``agent_client.agent_auth_headers``).
         secrets: Lowercased key → plaintext value.
         password: Optional keystore password.
         restart: Whether the agent should restart Logstash after a write.
@@ -202,7 +205,9 @@ def sync_keystore_to_agent(
         url,
         bool(password),
     )
-    resp = requests.post(url, json=payload, timeout=timeout, verify=agent_requests_verify())
+    resp = requests.post(
+        url, json=payload, timeout=timeout, verify=agent_requests_verify(), headers=headers
+    )
     if resp.status_code >= 400:
         raise RuntimeError(
             f"Keystore sync failed ({resp.status_code}): {resp.text[:500]}"
@@ -221,6 +226,7 @@ def maybe_sync_keystore_for_simulation(
     ls_id=None,
     policy_id=None,
     policy_name=None,
+    agent_headers: Optional[dict] = None,
 ) -> Optional[dict]:
     """Sync policy secrets onto the simulate agent when the pipeline needs them.
 
@@ -234,6 +240,7 @@ def maybe_sync_keystore_for_simulation(
 
     Args:
         agent_base_url: Agent FastAPI base URL.
+        agent_headers: Agent auth headers (``agent_client.agent_auth_headers``).
         components: Editor components tree (optional).
         pipeline_text: Raw LSCL (optional).
         ls_id: Policy primary key from the editor.
@@ -272,7 +279,7 @@ def maybe_sync_keystore_for_simulation(
 
     # Compare to simulate instance before writing
     try:
-        agent_ks = fetch_agent_keystore(agent_base_url)
+        agent_ks = fetch_agent_keystore(agent_base_url, headers=agent_headers)
         current = agent_ks.get("secrets") or {}
         if secrets_equal(secrets, current):
             logger.info(
@@ -295,7 +302,7 @@ def maybe_sync_keystore_for_simulation(
         )
 
     result = sync_keystore_to_agent(
-        agent_base_url, secrets, password, restart=True
+        agent_base_url, secrets, password, restart=True, headers=agent_headers
     )
     result["policy"] = policy.name
     if result.get("unchanged"):

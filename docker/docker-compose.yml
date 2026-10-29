@@ -37,8 +37,12 @@ services:
       # Example: ALLOWED_HOSTS=yourdomain.com,www.yourdomain.com,192.168.1.100
       - ALLOWED_HOSTS=${ALLOWED_HOSTS:-*}
       - CSRF_TRUSTED_ORIGINS=${CSRF_TRUSTED_ORIGINS:-https://localhost:8443,https://127.0.0.1:8443}
-      # Shared with embedded agent so it can obtain a server cert without enroll
-      - LOGSTASHUI_AGENT_CSR_SECRET=${LOGSTASHUI_AGENT_CSR_SECRET:-logstashui-compose-dev}
+      # Shared with embedded agent so it can obtain a server cert without enroll.
+      # No default: bin/start_logstashui.sh generates one per install; unset = rejected.
+      - LOGSTASHUI_AGENT_CSR_SECRET=${LOGSTASHUI_AGENT_CSR_SECRET:-}
+      # Key the UI presents to the embedded agent's /_logstash/* API. Must match
+      # the agent's value; start_logstashui.sh generates one per install.
+      - LOGSTASH_AGENT_API_KEY=${LOGSTASH_AGENT_API_KEY:-}
       # LOGSTASH_AGENT_URL: HTTPS direct to agent (no nginx)
       # Host mode: https://host.docker.internal:9501
       # Embedded: https://logstashagent:9500
@@ -85,7 +89,9 @@ services:
       # StreamSimulate / Logstash callbacks into UI HTTPS
       - LOGSTASH_URL=https://logstashui:8443
       - SIMULATION_MODE=true
-      - LOGSTASHUI_AGENT_CSR_SECRET=${LOGSTASHUI_AGENT_CSR_SECRET:-logstashui-compose-dev}
+      - LOGSTASHUI_AGENT_CSR_SECRET=${LOGSTASHUI_AGENT_CSR_SECRET:-}
+      # Required: unset = every /_logstash/* call is refused (503)
+      - LOGSTASH_AGENT_API_KEY=${LOGSTASH_AGENT_API_KEY:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:

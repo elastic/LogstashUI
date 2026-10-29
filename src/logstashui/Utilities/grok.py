@@ -1,3 +1,7 @@
+#Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+#or more contributor license agreements. Licensed under the Elastic License;
+#you may not use this file except in compliance with the Elastic License.
+
 """Logstash grok matching for the Grok Debugger.
 
 Follows jls-grok 0.11 (pattern expansion, captures) and logstash-filter-grok 4.4

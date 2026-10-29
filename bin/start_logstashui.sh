@@ -380,6 +380,10 @@ ensure_host_data_dir() {
 }
 ensure_host_data_dir
 
+# shellcheck source=compose_secrets.sh
+. "$PROJECT_ROOT/bin/compose_secrets.sh"
+ensure_compose_secrets "$PROJECT_ROOT/logstashui_data"
+
 # Linux Docker bind-mounts keep host UIDs; pass ours so the container can write
 # ./logstashui_data without chowning it to the image's appuser (10001).
 export PUID="${PUID:-$(id -u)}"
@@ -499,7 +503,6 @@ if [ "$MODE" == "host" ]; then
     $DOCKER_COMPOSE rm -f logstashagent 2>/dev/null || true
 
     export LOGSTASH_AGENT_URL="${LOGSTASH_AGENT_URL:-https://host.docker.internal:9501}"
-    export LOGSTASHUI_AGENT_CSR_SECRET="${LOGSTASHUI_AGENT_CSR_SECRET:-logstashui-compose-dev}"
     if [ -n "$REBUILD_FLAG" ]; then
         echo "Rebuilding UI image from local source (docker-compose.smoke.yml)..."
         compose_cmd up -d $REBUILD_FLAG logstashui
@@ -514,10 +517,10 @@ if [ "$MODE" == "host" ]; then
     echo "Starting LogstashAgent on port 9501 (HTTPS when cert issued)"
     cd "$PROJECT_ROOT/LogstashAgent"
     export LOGSTASH_UI_URL="${LOGSTASH_UI_URL:-https://localhost:8443}"
-    export LOGSTASHUI_AGENT_CSR_SECRET="${LOGSTASHUI_AGENT_CSR_SECRET:-logstashui-compose-dev}"
     # Host-mode legacy uses 9501 so it does not clash with container 9500
     nohup env LOGSTASH_UI_URL="$LOGSTASH_UI_URL" \
         LOGSTASHUI_AGENT_CSR_SECRET="$LOGSTASHUI_AGENT_CSR_SECRET" \
+        LOGSTASH_AGENT_API_KEY="$LOGSTASH_AGENT_API_KEY" \
         LOGSTASH_AGENT_PORT=9501 \
         uv run python -m logstashagent.main --mode embedded \
         > "$PROJECT_ROOT/logstashagent.log" 2>&1 &

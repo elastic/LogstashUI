@@ -354,6 +354,10 @@ else:
         "LOGSTASH_AGENT_URL", "https://logstashagent:9500"
     )
 LOGSTASH_AGENT_URL = force_http_url(LOGSTASH_AGENT_URL, enabled=INSECURE_HTTP)
+# Shared key for the embedded agent's API (Authorization: ApiKey). Must match
+# the agent container's LOGSTASH_AGENT_API_KEY. Enrolled agents use per-connection
+# keys instead (Connection.agent_inbound_key).
+LOGSTASH_AGENT_API_KEY = os.environ.get("LOGSTASH_AGENT_API_KEY") or None
 
 # Logstash tarball proxy
 # Cache of Logstash release tarballs served to agents whose policy sets
