@@ -2,12 +2,12 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
-from PipelineManager.models import Connection
-from PipelineManager.simulation import simulation_results, simulation_lock
+from PipelineManager.models import Connection, SimulationResult
 
 from unittest.mock import patch, MagicMock, Mock
 from django.core.files.uploadedfile import SimpleUploadedFile
-from collections import deque
+from datetime import timedelta
+from django.utils import timezone
 
 import json
 import pytest
@@ -331,10 +331,6 @@ class TestStreamSimulate:
 
     def test_stream_simulate_success(self, client):
         """Test successful event streaming"""
-        # Clear the queue before test
-        with simulation_lock:
-            simulation_results.clear()
-
         event_data = {
             "message": "test event",
             "run_id": "test-run-123",
@@ -357,10 +353,9 @@ class TestStreamSimulate:
         data = json.loads(response.content)
         assert data['status'] == 'ok'
 
-        # Verify event was stored
-        with simulation_lock:
-            assert len(simulation_results) == 1
-            assert simulation_results[0]['run_id'] == 'test-run-123'
+        stored = SimulationResult.objects.get()
+        assert stored.run_id == 'test-run-123'
+        assert stored.payload == event_data
 
     def test_stream_simulate_csrf_exempt(self, client):
         """Test that StreamSimulate is CSRF-exempt (can be called without token)"""
@@ -387,13 +382,19 @@ class TestStreamSimulate:
         data = json.loads(response.content)
         assert 'error' in data
 
+    def test_stream_simulate_non_object_returns_400(self, client):
+        """A JSON array or scalar is not an event and is not stored"""
+        response = client.post(
+            '/ConnectionManager/StreamSimulate/',
+            data='[1, 2]',
+            content_type='application/json'
+        )
+
+        assert response.status_code == 400
+        assert not SimulationResult.objects.exists()
+
     def test_stream_simulate_injection_attempt(self, client):
         """Test StreamSimulate with potential injection payload"""
-        # Clear the queue
-        with simulation_lock:
-            simulation_results.clear()
-
-        # Attempt to inject malicious data
         event_data = {
             "message": "<script>alert('XSS')</script>",
             "run_id": "test-run-xss",
@@ -407,13 +408,10 @@ class TestStreamSimulate:
         )
 
         assert response.status_code == 200
-        
-        # Verify data is stored as-is (will be escaped when rendered)
-        with simulation_lock:
-            assert len(simulation_results) == 1
-            stored_event = simulation_results[0]
-            # Data should be stored but will be escaped during rendering
-            assert stored_event['message'] == "<script>alert('XSS')</script>"
+
+        # Data should be stored as-is; it is escaped when rendered
+        stored_event = SimulationResult.objects.get().payload
+        assert stored_event['message'] == "<script>alert('XSS')</script>"
 
     def test_stream_simulate_method_not_allowed(self, client):
         """Test StreamSimulate with GET request"""
@@ -422,6 +420,42 @@ class TestStreamSimulate:
         assert response.status_code == 405
         data = json.loads(response.content)
         assert 'error' in data
+
+
+# ============================================================================
+# SimulationResult Tests
+# ============================================================================
+
+@pytest.mark.django_db
+class TestSimulationResult:
+    """Results are stored in the database so every server worker sees them"""
+
+    def test_take_returns_requested_runs_in_arrival_order_and_deletes_them(self):
+        SimulationResult.add({"run_id": "a", "n": 1})
+        SimulationResult.add({"run_id": "b", "n": 2})
+        SimulationResult.add({"run_id": "a", "n": 3})
+
+        taken = SimulationResult.take(["a", "missing"])
+
+        assert [r["n"] for r in taken["a"]] == [1, 3]
+        assert taken["missing"] == []
+        assert list(SimulationResult.objects.values_list("run_id", flat=True)) == ["b"]
+        assert SimulationResult.take(["a"]) == {"a": []}
+
+    def test_add_prunes_results_older_than_max_age(self):
+        SimulationResult.add({"run_id": "old"})
+        SimulationResult.objects.update(
+            created_at=timezone.now() - timedelta(seconds=SimulationResult.MAX_AGE_SECONDS + 1)
+        )
+
+        SimulationResult.add({"run_id": "new"})
+
+        assert list(SimulationResult.objects.values_list("run_id", flat=True)) == ["new"]
+
+    def test_event_without_run_id_is_stored_under_empty_run_id(self):
+        SimulationResult.add({"message": "no run"})
+
+        assert SimulationResult.objects.get().run_id == ""
 
 
 # ============================================================================
@@ -434,21 +468,9 @@ class TestGetSimulationResults:
 
     def test_get_simulation_results_success(self, authenticated_client):
         """Test successful retrieval of simulation results"""
-        # Clear and populate queue
-        with simulation_lock:
-            simulation_results.clear()
-            simulation_results.append({
-                "message": "event 1",
-                "run_id": "test-run-1"
-            })
-            simulation_results.append({
-                "message": "event 2",
-                "run_id": "test-run-1"
-            })
-            simulation_results.append({
-                "message": "event 3",
-                "run_id": "test-run-2"
-            })
+        SimulationResult.add({"message": "event 1", "run_id": "test-run-1"})
+        SimulationResult.add({"message": "event 2", "run_id": "test-run-1"})
+        SimulationResult.add({"message": "event 3", "run_id": "test-run-2"})
 
         response = authenticated_client.get('/ConnectionManager/GetSimulationResults/?run_id=test-run-1')
 
@@ -458,10 +480,8 @@ class TestGetSimulationResults:
         assert len(data['results']) == 2
         assert all(r['run_id'] == 'test-run-1' for r in data['results'])
 
-        # Verify only run-1 events were removed from queue
-        with simulation_lock:
-            assert len(simulation_results) == 1
-            assert simulation_results[0]['run_id'] == 'test-run-2'
+        # Only run-1 events were removed
+        assert list(SimulationResult.objects.values_list('run_id', flat=True)) == ['test-run-2']
 
     def test_get_simulation_results_no_run_id(self, authenticated_client):
         """Test GetSimulationResults without run_id parameter"""
@@ -472,18 +492,11 @@ class TestGetSimulationResults:
         assert 'error' in data
         assert 'run_id' in data['error']
 
-    def test_get_simulation_results_race_condition_safety(self, authenticated_client):
-        """Test GetSimulationResults handles concurrent access safely"""
-        # Populate queue
-        with simulation_lock:
-            simulation_results.clear()
-            for i in range(100):
-                simulation_results.append({
-                    "message": f"event {i}",
-                    "run_id": "test-run-race"
-                })
+    def test_get_simulation_results_are_returned_once(self, authenticated_client):
+        """A second poll for the same run does not return the same events again"""
+        for i in range(100):
+            SimulationResult.add({"message": f"event {i}", "run_id": "test-run-race"})
 
-        # Make multiple concurrent-like requests
         response1 = authenticated_client.get('/ConnectionManager/GetSimulationResults/?run_id=test-run-race')
         response2 = authenticated_client.get('/ConnectionManager/GetSimulationResults/?run_id=test-run-race')
 
@@ -493,15 +506,11 @@ class TestGetSimulationResults:
         data1 = json.loads(response1.content)
         data2 = json.loads(response2.content)
 
-        # First request should get all events, second should get none
         assert len(data1['results']) == 100
         assert len(data2['results']) == 0
 
     def test_get_simulation_results_empty_queue(self, authenticated_client):
         """Test GetSimulationResults when no results exist"""
-        with simulation_lock:
-            simulation_results.clear()
-
         response = authenticated_client.get('/ConnectionManager/GetSimulationResults/?run_id=nonexistent')
 
         assert response.status_code == 200

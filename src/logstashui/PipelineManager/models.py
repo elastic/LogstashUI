@@ -5,7 +5,7 @@
 """PipelineManager data models: policies, connections, pipelines, and artifacts."""
 
 from django.conf import settings
-from django.db import models
+from django.db import models, transaction
 from Common.encryption import encrypt_credential, decrypt_credential
 from django.core.exceptions import ValidationError
 from django.contrib.auth.hashers import make_password, check_password, identify_hasher
@@ -487,6 +487,19 @@ class Pipeline(models.Model):
     ``managed_by`` distinguishes user-authored pipelines from SNMP/library
     ones; only user pipelines enter policy revisions.
     """
+    #: Fields stored per pipeline in a policy revision snapshot.
+    SNAPSHOT_FIELDS = (
+        'name', 'description', 'lscl', 'no_input', 'non_reloadable',
+        'pipeline_workers', 'pipeline_batch_size', 'pipeline_batch_delay',
+        'queue_type', 'queue_max_bytes', 'queue_checkpoint_writes',
+    )
+    #: Snapshot fields ``policies_diff`` compares besides ``name``. Older
+    #: snapshots without a field are compared only on the fields they have.
+    DIFF_FIELDS = (
+        'lscl', 'pipeline_workers', 'pipeline_batch_size', 'pipeline_batch_delay',
+        'queue_type', 'queue_max_bytes', 'queue_checkpoint_writes',
+    )
+
     policy = models.ForeignKey(
         Policy,
         on_delete=models.CASCADE,
@@ -1210,3 +1223,67 @@ class LogstashArtifact(models.Model):
             status=cls.Status.FETCHING,
             heartbeat_at__gte=stale_before,
         ).count()
+
+
+class SimulationResult(models.Model):
+    """One event a simulation pipeline posted back, waiting to be read.
+
+    The simulate agent posts results to whichever gunicorn worker takes the
+    request, and the reader (the editor's poll or a synchronous API call) may
+    be on another worker. The database is the only state they share, so
+    results are queued here rather than in process memory. Rows are deleted
+    when read, and unread rows are pruned after ``MAX_AGE_SECONDS``.
+
+    Examples:
+        >>> SimulationResult.add({'run_id': 'r1', 'message': 'hi'})
+        >>> SimulationResult.take(['r1'])
+        {'r1': [{'run_id': 'r1', 'message': 'hi'}]}
+    """
+
+    #: Unread results older than this are dropped; no reader waits this long.
+    MAX_AGE_SECONDS = 600
+
+    run_id = models.CharField(max_length=64, db_index=True)
+    payload = models.JSONField()
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        db_table = 'simulation_result'
+        ordering = ['id']
+
+    def __str__(self):
+        return f"{self.run_id} #{self.pk}"
+
+    @classmethod
+    def add(cls, event):
+        """Queue one posted event and prune results nobody read.
+
+        Args:
+            event: Decoded event JSON; ``run_id`` identifies its run.
+        """
+        cls.objects.create(run_id=str(event.get('run_id') or '')[:64], payload=event)
+        cutoff = timezone.now() - timedelta(seconds=cls.MAX_AGE_SECONDS)
+        cls.objects.filter(created_at__lt=cutoff).delete()
+
+    @classmethod
+    def take(cls, run_ids):
+        """Remove and return queued results for ``run_ids``, oldest first.
+
+        Args:
+            run_ids: Run identifiers to collect.
+
+        Returns:
+            dict: ``{run_id: [event, ...]}`` for every requested run id.
+        """
+        collected = {run_id: [] for run_id in run_ids}
+        with transaction.atomic():
+            rows = list(
+                cls.objects.select_for_update()
+                .filter(run_id__in=list(collected))
+                .values_list('id', 'run_id', 'payload')
+            )
+            if rows:
+                cls.objects.filter(id__in=[row[0] for row in rows]).delete()
+        for _id, run_id, payload in rows:
+            collected[run_id].append(payload)
+        return collected
