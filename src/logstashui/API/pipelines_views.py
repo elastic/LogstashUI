@@ -1158,7 +1158,9 @@ def _simulate_bulk(request, data, components, events, t_start, timeout, shape):
     entries = [{'index': 0, 'run_id': start.run_id, 'error': start.forward_error}]
     for index, event_text in enumerate(events[1:], start=1):
         run_id = str(uuid.uuid4())
-        _queued, forward_error = send_simulation_event(start.agent_url, slot_id, run_id, event_text)
+        _queued, forward_error = send_simulation_event(
+            start.agent_url, slot_id, run_id, event_text, agent_headers=start.agent_headers,
+        )
         entries.append({'index': index, 'run_id': run_id, 'error': forward_error})
 
     pending = [e['run_id'] for e in entries]

@@ -651,7 +651,7 @@ def _started(run_id='run-a', slot_id=1, **fields):
 
 def _agent_delivers(*results_per_call):
     """``send_simulation_event`` stand-in that stores results the way the agent would."""
-    def send(agent_url, slot_id, run_id, log_text):
+    def send(agent_url, slot_id, run_id, log_text, agent_headers=None):
         for result in results_per_call[send.calls]:
             SimulationResult.add({**result, 'run_id': run_id})
         send.calls += 1
