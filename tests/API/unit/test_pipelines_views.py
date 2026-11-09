@@ -5,14 +5,14 @@
 """Tests for API/pipelines_views.py — pipeline REST endpoints."""
 
 import json
-from collections import deque
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from django.contrib.auth.models import User
 from Management.models import UserProfile
-from PipelineManager.models import Pipeline, Policy, Revision
+from PipelineManager.models import Connection, Pipeline, Policy, Revision, SimulationResult
+from PipelineManager.simulation import SimulationStart
 
 
 # ---------------------------------------------------------------------------
@@ -362,10 +362,10 @@ class TestPolicyDeploy:
 
 
 # ---------------------------------------------------------------------------
-# ES Pipelines (mock Elasticsearch client)
+# Centralized (CPM) Logstash pipelines (mock Elasticsearch client)
 # ---------------------------------------------------------------------------
 
-_ES_PIPELINE_BODY = {
+_CPM_PIPELINE_BODY = {
     'my-pipe': {
         'description': 'test',
         'pipeline': 'input{} filter{} output{}',
@@ -377,44 +377,62 @@ _ES_PIPELINE_BODY = {
 
 
 @pytest.mark.django_db
-class TestESPipelineList:
+class TestCentralizedPipelineList:
 
     @patch('API.pipelines_views.get_elastic_connection')
     def test_list_returns_200(self, mock_get_es, authenticated_client, test_connection):
         mock_es = MagicMock()
-        mock_es.logstash.get_pipeline.return_value = _ES_PIPELINE_BODY
+        mock_es.logstash.get_pipeline.return_value = _CPM_PIPELINE_BODY
         mock_get_es.return_value = mock_es
-        response = authenticated_client.get(f'/api/pipelines/es/{test_connection.id}/')
+        response = authenticated_client.get(f'/api/pipelines/centralized/{test_connection.id}/')
         assert response.status_code == 200
 
     @patch('API.pipelines_views.get_elastic_connection')
     def test_list_returns_pipelines(self, mock_get_es, authenticated_client, test_connection):
         mock_es = MagicMock()
-        mock_es.logstash.get_pipeline.return_value = _ES_PIPELINE_BODY
+        mock_es.logstash.get_pipeline.return_value = _CPM_PIPELINE_BODY
         mock_get_es.return_value = mock_es
-        data = authenticated_client.get(f'/api/pipelines/es/{test_connection.id}/').json()
+        data = authenticated_client.get(f'/api/pipelines/centralized/{test_connection.id}/').json()
         assert data['count'] == 1
         assert data['pipelines'][0]['name'] == 'my-pipe'
+        assert data['pipelines'][0]['lscl'] == 'input{} filter{} output{}'
+
+    @patch('API.pipelines_views.get_elastic_connection')
+    def test_list_can_omit_lscl(self, mock_get_es, authenticated_client, test_connection):
+        mock_get_es.return_value.logstash.get_pipeline.return_value = _CPM_PIPELINE_BODY
+        data = authenticated_client.get(
+            f'/api/pipelines/centralized/{test_connection.id}/?include_lscl=false'
+        ).json()
+        assert data['pipelines'][0]['name'] == 'my-pipe'
+        assert 'lscl' not in data['pipelines'][0]
 
     @patch('API.pipelines_views.get_elastic_connection')
     def test_list_es_error_returns_502(self, mock_get_es, authenticated_client, test_connection):
         mock_get_es.side_effect = Exception('Connection refused')
-        response = authenticated_client.get(f'/api/pipelines/es/{test_connection.id}/')
+        response = authenticated_client.get(f'/api/pipelines/centralized/{test_connection.id}/')
         assert response.status_code == 502
 
     def test_list_no_auth_returns_401(self, client, test_connection):
-        assert client.get(f'/api/pipelines/es/{test_connection.id}/').status_code == 401
+        assert client.get(f'/api/pipelines/centralized/{test_connection.id}/').status_code == 401
+
+    @patch('API.pipelines_views.get_elastic_connection')
+    def test_deprecated_es_alias_still_routes(self, mock_get_es, authenticated_client, test_connection):
+        mock_es = MagicMock()
+        mock_es.logstash.get_pipeline.return_value = _CPM_PIPELINE_BODY
+        mock_get_es.return_value = mock_es
+        assert authenticated_client.get(f'/api/pipelines/es/{test_connection.id}/').status_code == 200
+        assert authenticated_client.get(f'/api/pipelines/es/{test_connection.id}/my-pipe/').status_code == 200
 
 
 @pytest.mark.django_db
-class TestESPipelineCreate:
+class TestCentralizedPipelineCreate:
 
     @patch('API.pipelines_views.get_elastic_connection')
     def test_create_returns_201(self, mock_get_es, authenticated_client, test_connection):
         mock_es = MagicMock()
         mock_es.logstash.put_pipeline.return_value = {'acknowledged': True}
         mock_get_es.return_value = mock_es
-        response = _post(authenticated_client, f'/api/pipelines/es/{test_connection.id}/', {
+        response = _post(authenticated_client, f'/api/pipelines/centralized/{test_connection.id}/', {
             'name': 'new-es-pipe', 'lscl': 'input{} filter{} output{}',
         })
         assert response.status_code == 201
@@ -423,7 +441,7 @@ class TestESPipelineCreate:
     @patch('API.pipelines_views.get_elastic_connection')
     def test_create_missing_name_returns_400(self, mock_get_es, authenticated_client, test_connection):
         mock_get_es.return_value = MagicMock()
-        response = _post(authenticated_client, f'/api/pipelines/es/{test_connection.id}/', {
+        response = _post(authenticated_client, f'/api/pipelines/centralized/{test_connection.id}/', {
             'lscl': 'input{} filter{} output{}',
         })
         assert response.status_code == 400
@@ -431,50 +449,50 @@ class TestESPipelineCreate:
     @patch('API.pipelines_views.get_elastic_connection')
     def test_create_missing_lscl_returns_400(self, mock_get_es, authenticated_client, test_connection):
         mock_get_es.return_value = MagicMock()
-        response = _post(authenticated_client, f'/api/pipelines/es/{test_connection.id}/', {
+        response = _post(authenticated_client, f'/api/pipelines/centralized/{test_connection.id}/', {
             'name': 'x',
         })
         assert response.status_code == 400
 
     def test_create_no_auth_returns_401(self, client, test_connection):
-        assert _post(client, f'/api/pipelines/es/{test_connection.id}/', {}).status_code == 401
+        assert _post(client, f'/api/pipelines/centralized/{test_connection.id}/', {}).status_code == 401
 
     def test_create_readonly_returns_403(self, readonly_client, test_connection):
-        assert _post(readonly_client, f'/api/pipelines/es/{test_connection.id}/', {}).status_code == 403
+        assert _post(readonly_client, f'/api/pipelines/centralized/{test_connection.id}/', {}).status_code == 403
 
 
 @pytest.mark.django_db
-class TestESPipelineGet:
+class TestCentralizedPipelineGet:
 
     @patch('API.pipelines_views.get_elastic_connection')
     def test_get_returns_200(self, mock_get_es, authenticated_client, test_connection):
         mock_es = MagicMock()
-        mock_es.logstash.get_pipeline.return_value = _ES_PIPELINE_BODY
+        mock_es.logstash.get_pipeline.return_value = _CPM_PIPELINE_BODY
         mock_get_es.return_value = mock_es
-        response = authenticated_client.get(f'/api/pipelines/es/{test_connection.id}/my-pipe/')
+        response = authenticated_client.get(f'/api/pipelines/centralized/{test_connection.id}/my-pipe/')
         assert response.status_code == 200
         assert response.json()['pipeline']['name'] == 'my-pipe'
 
     @patch('API.pipelines_views.get_elastic_connection')
     def test_get_es_error_surfaces_as_error(self, mock_get_es, authenticated_client, test_connection):
         mock_get_es.side_effect = Exception('404 not found')
-        response = authenticated_client.get(f'/api/pipelines/es/{test_connection.id}/missing-pipe/')
+        response = authenticated_client.get(f'/api/pipelines/centralized/{test_connection.id}/missing-pipe/')
         assert response.status_code == 404
 
     def test_get_no_auth_returns_401(self, client, test_connection):
-        assert client.get(f'/api/pipelines/es/{test_connection.id}/my-pipe/').status_code == 401
+        assert client.get(f'/api/pipelines/centralized/{test_connection.id}/my-pipe/').status_code == 401
 
 
 @pytest.mark.django_db
-class TestESPipelineUpdate:
+class TestCentralizedPipelineUpdate:
 
     @patch('API.pipelines_views.get_elastic_connection')
     def test_update_returns_200(self, mock_get_es, authenticated_client, test_connection):
         mock_es = MagicMock()
-        mock_es.logstash.get_pipeline.return_value = _ES_PIPELINE_BODY
+        mock_es.logstash.get_pipeline.return_value = _CPM_PIPELINE_BODY
         mock_es.logstash.put_pipeline.return_value = {'acknowledged': True}
         mock_get_es.return_value = mock_es
-        response = _put(authenticated_client, f'/api/pipelines/es/{test_connection.id}/my-pipe/', {
+        response = _put(authenticated_client, f'/api/pipelines/centralized/{test_connection.id}/my-pipe/', {
             'lscl': 'input{} filter{ mutate{} } output{}',
         })
         assert response.status_code == 200
@@ -484,10 +502,10 @@ class TestESPipelineUpdate:
     def test_update_merges_existing_settings(self, mock_get_es, authenticated_client, test_connection):
         """Unspecified settings are preserved from the existing pipeline."""
         mock_es = MagicMock()
-        mock_es.logstash.get_pipeline.return_value = _ES_PIPELINE_BODY
+        mock_es.logstash.get_pipeline.return_value = _CPM_PIPELINE_BODY
         mock_es.logstash.put_pipeline.return_value = {}
         mock_get_es.return_value = mock_es
-        _put(authenticated_client, f'/api/pipelines/es/{test_connection.id}/my-pipe/', {
+        _put(authenticated_client, f'/api/pipelines/centralized/{test_connection.id}/my-pipe/', {
             'pipeline_workers': 4,
         })
         call_body = mock_es.logstash.put_pipeline.call_args[1]['body']
@@ -496,200 +514,449 @@ class TestESPipelineUpdate:
         assert 'pipeline.batch.size' in call_body['pipeline_settings']
 
     def test_update_no_auth_returns_401(self, client, test_connection):
-        assert _put(client, f'/api/pipelines/es/{test_connection.id}/my-pipe/', {}).status_code == 401
+        assert _put(client, f'/api/pipelines/centralized/{test_connection.id}/my-pipe/', {}).status_code == 401
 
     def test_update_readonly_returns_403(self, readonly_client, test_connection):
-        assert _put(readonly_client, f'/api/pipelines/es/{test_connection.id}/my-pipe/', {}).status_code == 403
+        assert _put(readonly_client, f'/api/pipelines/centralized/{test_connection.id}/my-pipe/', {}).status_code == 403
 
 
 @pytest.mark.django_db
-class TestESPipelineDelete:
+class TestCentralizedPipelineDelete:
 
     @patch('API.pipelines_views.get_elastic_connection')
     def test_delete_returns_200(self, mock_get_es, authenticated_client, test_connection):
         mock_es = MagicMock()
         mock_es.logstash.delete_pipeline.return_value = {'acknowledged': True}
         mock_get_es.return_value = mock_es
-        response = authenticated_client.delete(f'/api/pipelines/es/{test_connection.id}/my-pipe/')
+        response = authenticated_client.delete(f'/api/pipelines/centralized/{test_connection.id}/my-pipe/')
         assert response.status_code == 200
         mock_es.logstash.delete_pipeline.assert_called_once_with(id='my-pipe')
 
     @patch('API.pipelines_views.get_elastic_connection')
     def test_delete_es_error_returns_error(self, mock_get_es, authenticated_client, test_connection):
         mock_get_es.side_effect = Exception('404 not found')
-        response = authenticated_client.delete(f'/api/pipelines/es/{test_connection.id}/my-pipe/')
+        response = authenticated_client.delete(f'/api/pipelines/centralized/{test_connection.id}/my-pipe/')
         assert response.status_code == 404
 
     def test_delete_no_auth_returns_401(self, client, test_connection):
-        assert client.delete(f'/api/pipelines/es/{test_connection.id}/my-pipe/').status_code == 401
+        assert client.delete(f'/api/pipelines/centralized/{test_connection.id}/my-pipe/').status_code == 401
 
     def test_delete_readonly_returns_403(self, readonly_client, test_connection):
-        assert readonly_client.delete(f'/api/pipelines/es/{test_connection.id}/my-pipe/').status_code == 403
+        assert readonly_client.delete(f'/api/pipelines/centralized/{test_connection.id}/my-pipe/').status_code == 403
 
 
 # ---------------------------------------------------------------------------
 # Simulate
 # ---------------------------------------------------------------------------
 
-def _make_sim_html(run_id, slot_id=1):
-    """Minimal HTML response that SimulatePipeline would return."""
-    return (
-        f'<div data-run-id="{run_id}" data-slot-id="{slot_id}">'
-        f'Simulation started</div>'
-    ).encode()
+@pytest.mark.django_db
+class TestPipelineFind:
+
+    @pytest.fixture
+    def cpm(self):
+        """CPM pipelines returned by every CENTRALIZED connection."""
+        with patch('API.pipelines_views.get_elastic_connection') as mock_get_es:
+            get_pipeline = mock_get_es.return_value.options.return_value.logstash.get_pipeline
+            get_pipeline.return_value = {
+                'asa-new': {'last_modified': '2026-10-12T15:03:11.204Z'},
+                'asa-new-fixed': {'last_modified': '2026-10-14T09:41:52.118Z'},
+                'syslog': {},
+            }
+            yield get_pipeline
+
+    def test_finds_cpm_pipeline_with_similar_names(self, authenticated_client, test_connection, cpm):
+        response = authenticated_client.get('/api/pipelines/find/?name=asa-new')
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body['matches'] == [{
+            'type': 'cpm', 'name': 'asa-new', 'connection_id': test_connection.id,
+            'connection_name': test_connection.name, 'last_modified': '2026-10-12T15:03:11.204Z',
+        }]
+        assert [p['name'] for p in body['similar']] == ['asa-new-fixed']
+        assert body['unreachable'] == []
+
+    def test_topic_keyword_returns_every_pipeline_containing_it(
+        self, authenticated_client, test_connection, cpm
+    ):
+        body = authenticated_client.get('/api/pipelines/find/?name=ASA').json()
+
+        assert body['matches'] == []
+        assert sorted(p['name'] for p in body['similar']) == ['asa-new', 'asa-new-fixed']
+
+    def test_finds_agent_pipeline_and_cpm_pipeline_with_same_name(
+        self, authenticated_client, test_connection, cpm, policy
+    ):
+        agent = Pipeline.objects.create(policy=policy, name='asa-new', lscl='', managed_by='user')
+
+        matches = authenticated_client.get('/api/pipelines/find/?name=asa-new').json()['matches']
+
+        assert {m['type'] for m in matches} == {'agent', 'cpm'}
+        agent_match = next(m for m in matches if m['type'] == 'agent')
+        assert agent_match == {
+            'type': 'agent', 'name': 'asa-new', 'pipeline_id': agent.id, 'policy_id': policy.id,
+            'policy_name': policy.name, 'managed_by': 'user',
+            'last_modified': agent.last_updated.isoformat(),
+        }
+
+    def test_embedded_policies_are_not_searched(self, authenticated_client, policy):
+        policy.policy_type = Policy.PolicyType.EMBEDDED
+        policy.save()
+        Pipeline.objects.create(policy=policy, name='asa-new', lscl='', managed_by='user')
+
+        body = authenticated_client.get('/api/pipelines/find/?name=asa-new').json()
+
+        assert body['matches'] == [] and body['similar'] == []
+
+    def test_unreachable_connection_is_reported_not_treated_as_empty(
+        self, authenticated_client, test_connection, cpm
+    ):
+        cpm.side_effect = Exception('connection timed out')
+
+        body = authenticated_client.get('/api/pipelines/find/?name=asa-new').json()
+
+        assert body['matches'] == []
+        assert body['unreachable'] == [{
+            'connection_id': test_connection.id, 'connection_name': test_connection.name,
+            'error': 'connection timed out',
+        }]
+
+    def test_agent_connections_are_not_queried(self, authenticated_client, cpm):
+        Connection.objects.create(name='agent-1', connection_type='AGENT', host='10.0.0.5')
+
+        authenticated_client.get('/api/pipelines/find/?name=asa-new')
+
+        cpm.assert_not_called()
+
+    def test_name_is_required(self, authenticated_client):
+        assert authenticated_client.get('/api/pipelines/find/?name=%20').status_code == 400
+
+    def test_readonly_allowed(self, readonly_client):
+        assert readonly_client.get('/api/pipelines/find/?name=x').status_code == 200
+
+    def test_no_auth_returns_401(self, client):
+        assert client.get('/api/pipelines/find/?name=x').status_code == 401
+
+    def test_post_returns_405(self, authenticated_client):
+        assert authenticated_client.post('/api/pipelines/find/?name=x').status_code == 405
+
+
+_MUTATE_COMPONENTS = json.dumps({'filter': [{'plugin': 'mutate', 'id': 'mut1', 'config': {}}]})
+
+
+def _started(run_id='run-a', slot_id=1, **fields):
+    """A successful ``start_simulation`` result."""
+    return SimulationStart(run_id=run_id, slot_id=slot_id, agent_url='http://agent', **fields)
+
+
+def _agent_delivers(*results_per_call):
+    """``send_simulation_event`` stand-in that stores results the way the agent would."""
+    def send(agent_url, slot_id, run_id, log_text):
+        for result in results_per_call[send.calls]:
+            SimulationResult.add({**result, 'run_id': run_id})
+        send.calls += 1
+        return True, None
+    send.calls = 0
+    return send
 
 
 @pytest.mark.django_db
 class TestPipelineSimulate:
 
-    @patch('API.pipelines_views.SimulatePipeline')
-    @patch('API.pipelines_views.logstash_config_parse')
-    def test_simulate_missing_lscl_and_pipeline_id_returns_400(
-        self, mock_parse, mock_sim, authenticated_client
-    ):
+    @patch('API.pipelines_views.start_simulation')
+    def test_simulate_missing_lscl_and_pipeline_id_returns_400(self, mock_start, authenticated_client):
         response = _post(authenticated_client, '/api/pipelines/simulate/', {
             'event': 'some log line',
         })
         assert response.status_code == 400
+        mock_start.assert_not_called()
 
-    @patch('API.pipelines_views.SimulatePipeline')
-    @patch('API.pipelines_views.logstash_config_parse')
-    def test_simulate_missing_event_returns_400(
-        self, mock_parse, mock_sim, authenticated_client
-    ):
+    @patch('API.pipelines_views.start_simulation')
+    def test_simulate_missing_event_returns_400(self, mock_start, authenticated_client):
         response = _post(authenticated_client, '/api/pipelines/simulate/', {
             'lscl': _SIMPLE_LSCL,
         })
         assert response.status_code == 400
 
-    @patch('API.pipelines_views.SimulatePipeline')
+    @patch('API.pipelines_views.start_simulation')
     @patch('API.pipelines_views.logstash_config_parse')
-    def test_simulate_no_filter_plugins_returns_400(
-        self, mock_parse, mock_sim, authenticated_client
-    ):
+    def test_simulate_no_filter_plugins_returns_400(self, mock_parse, mock_start, authenticated_client):
         mock_parse.logstash_config_to_components.return_value = json.dumps({'filter': []})
         response = _post(authenticated_client, '/api/pipelines/simulate/', {
             'lscl': 'input{} output{}', 'event': 'test',
         })
         assert response.status_code == 400
+        mock_start.assert_not_called()
 
-    @patch('API.pipelines_views.simulation_results')
-    @patch('API.pipelines_views.simulation_lock')
-    @patch('API.pipelines_views.SimulatePipeline')
+    @patch('API.pipelines_views.start_simulation')
     @patch('API.pipelines_views.logstash_config_parse')
-    def test_simulate_success_with_lscl(
-        self, mock_parse, mock_sim, mock_lock, mock_results, authenticated_client
-    ):
-        run_id = 'test-run-1234'
-        mock_parse.logstash_config_to_components.return_value = json.dumps({
-            'filter': [{'plugin': 'mutate', 'id': 'mut1', 'config': {}}]
-        })
-
-        from django.http import HttpResponse
-        from unittest.mock import MagicMock as MM
-        fake_resp = HttpResponse(_make_sim_html(run_id))
-        mock_sim.return_value = fake_resp
-
-        # Simulate results appearing on first poll
-        event_result = {'run_id': run_id, 'snapshots': {}, 'message': 'hello'}
-        mock_results.__iter__ = MagicMock(return_value=iter([event_result]))
-        mock_results.__len__ = MagicMock(return_value=1)
-
-        with patch('API.pipelines_views.simulation_lock') as ml:
-            ml.__enter__ = MagicMock(return_value=None)
-            ml.__exit__ = MagicMock(return_value=False)
-
-            with patch('API.pipelines_views.simulation_results', [event_result]):
-                response = _post(authenticated_client, '/api/pipelines/simulate/', {
-                    'lscl': _SIMPLE_LSCL,
-                    'event': 'test log line',
-                    'timeout': 10,
-                })
-
-        # Either success (200) or timeout (408) — sim agent not running in test env
-        assert response.status_code in (200, 408, 502)
-
-    @patch('API.pipelines_views.SimulatePipeline')
-    @patch('API.pipelines_views.logstash_config_parse')
-    def test_simulate_loads_lscl_from_pipeline_id(
-        self, mock_parse, mock_sim, authenticated_client, pipeline
-    ):
-        """pipeline_id causes LSCL to be loaded from DB."""
-        mock_parse.logstash_config_to_components.return_value = json.dumps({
-            'filter': [{'plugin': 'mutate', 'id': 'mut1', 'config': {}}]
-        })
-        from django.http import HttpResponse
-        mock_sim.return_value = HttpResponse(b'<div data-pipeline-failed="true">Error</div>')
+    def test_simulate_success_with_lscl(self, mock_parse, mock_start, authenticated_client):
+        mock_parse.logstash_config_to_components.return_value = _MUTATE_COMPONENTS
+        mock_start.return_value = _started(slot_id=3)
+        SimulationResult.add({'run_id': 'run-a', 'simulation': {'step': '0'}})
+        SimulationResult.add({'run_id': 'run-a', 'snapshots': {'mut1': {}}, 'message': 'hello'})
 
         response = _post(authenticated_client, '/api/pipelines/simulate/', {
-            'pipeline_id': pipeline.id,
-            'event': 'test',
-            'timeout': 1,
+            'lscl': _SIMPLE_LSCL, 'event': 'test log line', 'timeout': 10,
+            'policy_id': 7, 'sim_connection_id': 2,
         })
-        # LSCL was loaded from DB and parse was attempted
-        mock_parse.logstash_config_to_components.assert_called_once_with(pipeline.lscl)
-        assert response.status_code in (200, 408, 502)
 
-    @patch('API.pipelines_views.SimulatePipeline')
+        assert response.status_code == 200
+        body = response.json()
+        assert body['run_id'] == 'run-a' and body['slot_id'] == 3
+        assert body['complete'] is True and body['count'] == 2
+        assert not SimulationResult.objects.exists()
+        args, kwargs = mock_start.call_args
+        assert args[1] == 'test log line'
+        assert kwargs['session'] == {}
+        assert kwargs['policy_id'] == 7 and kwargs['sim_connection_id'] == 2
+
+    @patch('API.pipelines_views.start_simulation')
     @patch('API.pipelines_views.logstash_config_parse')
-    def test_simulate_unknown_pipeline_id_returns_404(
-        self, mock_parse, mock_sim, authenticated_client
+    def test_simulate_start_error_returns_502(self, mock_parse, mock_start, authenticated_client):
+        mock_parse.logstash_config_to_components.return_value = _MUTATE_COMPONENTS
+        mock_start.return_value = SimulationStart(
+            error='Error allocating slot: boom', slot_id=2, pipeline_failed=True,
+        )
+        response = _post(authenticated_client, '/api/pipelines/simulate/', {
+            'lscl': _SIMPLE_LSCL, 'event': 'x',
+        })
+        assert response.status_code == 502
+        assert response.json() == {
+            'success': False, 'error': 'Error allocating slot: boom', 'slot_id': 2,
+        }
+
+    @patch('API.pipelines_views.start_simulation')
+    @patch('API.pipelines_views.logstash_config_parse')
+    def test_simulate_loads_lscl_from_pipeline_id(
+        self, mock_parse, mock_start, authenticated_client, pipeline
     ):
+        mock_parse.logstash_config_to_components.return_value = _MUTATE_COMPONENTS
+        mock_start.return_value = SimulationStart(error='Error: boom')
+
+        response = _post(authenticated_client, '/api/pipelines/simulate/', {
+            'pipeline_id': pipeline.id, 'event': 'test', 'timeout': 1,
+        })
+        mock_parse.logstash_config_to_components.assert_called_once_with(pipeline.lscl)
+        assert response.status_code == 502
+
+    @patch('API.pipelines_views.start_simulation')
+    def test_simulate_unknown_pipeline_id_returns_404(self, mock_start, authenticated_client):
         response = _post(authenticated_client, '/api/pipelines/simulate/', {
             'pipeline_id': 99999, 'event': 'test',
         })
         assert response.status_code == 404
+        mock_start.assert_not_called()
 
+    @pytest.mark.parametrize('timeout, clock', [(1, 5), (9999, 200)])
     @patch('API.pipelines_views.time')
-    @patch('API.pipelines_views.SimulatePipeline')
+    @patch('API.pipelines_views.start_simulation')
     @patch('API.pipelines_views.logstash_config_parse')
     def test_simulate_timeout_returns_408(
-        self, mock_parse, mock_sim_pipeline, mock_time, authenticated_client
+        self, mock_parse, mock_start, mock_time, authenticated_client, timeout, clock
     ):
-        mock_parse.logstash_config_to_components.return_value = json.dumps({
-            'filter': [{'plugin': 'mutate', 'id': 'mut1', 'config': {}}]
+        """No results by the deadline is a 408; a timeout over 180 is clamped to 180."""
+        mock_parse.logstash_config_to_components.return_value = _MUTATE_COMPONENTS
+        mock_start.return_value = _started()
+        mock_time.time.side_effect = [0, clock, clock]
+
+        response = _post(authenticated_client, '/api/pipelines/simulate/', {
+            'lscl': _SIMPLE_LSCL, 'event': 'test', 'timeout': timeout,
         })
-        from django.http import HttpResponse
-        mock_sim_pipeline.return_value = HttpResponse(_make_sim_html('timeout-run-id'))
-
-        # Advance clock past the 1s timeout immediately so the poll loop exits
-        mock_time.time.side_effect = [0, 5, 5, 5]
-        mock_time.sleep = MagicMock()
-
-        with patch('API.pipelines_views.simulation_results', []):
-            with patch('API.pipelines_views.simulation_lock') as ml:
-                ml.__enter__ = MagicMock(return_value=None)
-                ml.__exit__ = MagicMock(return_value=False)
-                response = _post(authenticated_client, '/api/pipelines/simulate/', {
-                    'lscl': _SIMPLE_LSCL, 'event': 'test', 'timeout': 1,
-                })
         assert response.status_code == 408
+        assert response.json()['run_id'] == 'run-a'
+
+    @pytest.mark.parametrize('body', [
+        {'connection_id': 1},
+        {'name': 'asa-new'},
+        {'lscl': _SIMPLE_LSCL, 'connection_id': 1, 'name': 'asa-new'},
+        {'pipeline_id': 1, 'connection_id': 1, 'name': 'asa-new'},
+    ])
+    @patch('API.pipelines_views.start_simulation')
+    def test_simulate_cpm_source_conflicts_return_400(self, mock_start, authenticated_client, body):
+        response = _post(authenticated_client, '/api/pipelines/simulate/', {
+            'event': 'test', **body,
+        })
+        assert response.status_code == 400
+        mock_start.assert_not_called()
+
+    @patch('API.pipelines_views.get_elastic_connection')
+    @patch('API.pipelines_views.start_simulation')
+    @patch('API.pipelines_views.logstash_config_parse')
+    def test_simulate_loads_lscl_from_cpm_pipeline(
+        self, mock_parse, mock_start, mock_get_es, authenticated_client, test_connection
+    ):
+        mock_get_es.return_value.logstash.get_pipeline.return_value = {
+            'asa-new': {'pipeline': 'filter { mutate {} }'},
+        }
+        mock_parse.logstash_config_to_components.return_value = _MUTATE_COMPONENTS
+        mock_start.return_value = SimulationStart(error='Error: boom')
+
+        response = _post(authenticated_client, '/api/pipelines/simulate/', {
+            'connection_id': test_connection.id, 'name': 'asa-new', 'event': 'test',
+        })
+
+        mock_get_es.return_value.logstash.get_pipeline.assert_called_once_with(id='asa-new')
+        mock_parse.logstash_config_to_components.assert_called_once_with('filter { mutate {} }')
+        assert response.status_code == 502
+
+    @pytest.mark.parametrize('lookup', [
+        {'return_value': {}},
+        {'side_effect': Exception('404 Not Found')},
+    ])
+    @patch('API.pipelines_views.get_elastic_connection')
+    @patch('API.pipelines_views.start_simulation')
+    def test_simulate_unknown_cpm_pipeline_returns_404(
+        self, mock_start, mock_get_es, authenticated_client, test_connection, lookup
+    ):
+        mock_get_es.return_value.logstash.get_pipeline.configure_mock(**lookup)
+        response = _post(authenticated_client, '/api/pipelines/simulate/', {
+            'connection_id': test_connection.id, 'name': 'asa-fixed', 'event': 'test',
+        })
+        assert response.status_code == 404
+        assert 'asa-fixed' in response.json()['error']
+        mock_start.assert_not_called()
+
+    @patch('API.pipelines_views.start_simulation')
+    def test_simulate_unknown_cpm_connection_returns_404(self, mock_start, authenticated_client):
+        response = _post(authenticated_client, '/api/pipelines/simulate/', {
+            'connection_id': 999999, 'name': 'asa-new', 'event': 'test',
+        })
+        assert response.status_code == 404
+        mock_start.assert_not_called()
+
+    @pytest.mark.parametrize('body', [
+        {'event': 'one', 'events': ['two']},
+        {'events': []},
+        {'events': 'not-a-list'},
+        {'events': ['x'] * 101},
+        {'events': ['ok', '  ']},
+        {'events': ['ok', 42]},
+    ])
+    @patch('API.pipelines_views.start_simulation')
+    def test_simulate_bulk_invalid_events_returns_400(self, mock_start, authenticated_client, body):
+        response = _post(authenticated_client, '/api/pipelines/simulate/', {
+            'lscl': _SIMPLE_LSCL, **body,
+        })
+        assert response.status_code == 400
+        mock_start.assert_not_called()
+
+    @patch('API.pipelines_views.send_simulation_event')
+    @patch('API.pipelines_views.start_simulation')
+    @patch('API.pipelines_views.logstash_config_parse')
+    def test_simulate_bulk_reuses_slot_and_returns_events_in_order(
+        self, mock_parse, mock_start, mock_send, authenticated_client
+    ):
+        """The first event starts the run; the rest go straight to the same slot."""
+        mock_parse.logstash_config_to_components.return_value = _MUTATE_COMPONENTS
+        mock_start.return_value = _started(slot_id=4)
+        mock_send.side_effect = _agent_delivers([
+            {'simulation': {'step': '0'}},
+            {'snapshots': {'mut1': {}}, 'message': 'b'},
+        ])
+        SimulationResult.add({'run_id': 'other', 'snapshots': {'x': {}}})
+        SimulationResult.add({'run_id': 'run-a', 'snapshots': {'mut1': {}}, 'message': 'a'})
+
+        response = _post(authenticated_client, '/api/pipelines/simulate/', {
+            'lscl': _SIMPLE_LSCL,
+            'events': ['line a', {'message': 'b'}],
+            'timeout': 5,
+        })
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body['slot_id'] == 4
+        assert body['count'] == 2 and body['complete_count'] == 2
+        assert body['events'][0]['run_id'] == 'run-a'
+        assert len(body['events'][1]['results']) == 2
+        assert 'error' not in body['events'][0]
+        assert list(SimulationResult.objects.values_list('run_id', flat=True)) == ['other']
+
+        mock_start.assert_called_once()
+        assert mock_start.call_args.args[1] == 'line a'
+        agent_url, slot_id, run_id, log_text = mock_send.call_args.args
+        assert (agent_url, slot_id) == ('http://agent', 4)
+        assert run_id == body['events'][1]['run_id']
+        assert json.loads(log_text) == {'message': 'b'}
 
     @patch('API.pipelines_views.time')
-    @patch('API.pipelines_views.SimulatePipeline')
+    @patch('API.pipelines_views.send_simulation_event', return_value=(False, 'connection refused'))
+    @patch('API.pipelines_views.start_simulation')
     @patch('API.pipelines_views.logstash_config_parse')
-    def test_simulate_timeout_capped_at_180(
-        self, mock_parse, mock_sim_pipeline, mock_time, authenticated_client
+    def test_simulate_bulk_partial_timeout_reports_incomplete_events(
+        self, mock_parse, mock_start, mock_send, mock_time, authenticated_client
     ):
-        """timeout > 180 is silently clamped; the loop exits after the cap, not 9999s."""
-        mock_parse.logstash_config_to_components.return_value = json.dumps({
-            'filter': [{'plugin': 'mutate', 'id': 'mut1', 'config': {}}]
+        mock_parse.logstash_config_to_components.return_value = _MUTATE_COMPONENTS
+        mock_start.return_value = _started()
+        mock_time.time.side_effect = [0, 0, 5, 5]
+        SimulationResult.add({'run_id': 'run-a', 'snapshots': {'mut1': {}}})
+
+        response = _post(authenticated_client, '/api/pipelines/simulate/', {
+            'lscl': _SIMPLE_LSCL, 'events': ['a', 'b'], 'timeout': 1,
         })
-        from django.http import HttpResponse
-        mock_sim_pipeline.return_value = HttpResponse(_make_sim_html('cap-run-id'))
 
-        # Clock jumps 200s per call — exceeds even the 180s cap immediately
-        mock_time.time.side_effect = [0, 200, 200, 200]
-        mock_time.sleep = MagicMock()
+        assert response.status_code == 200
+        body = response.json()
+        assert body['complete_count'] == 1
+        assert body['events'][0]['complete'] is True
+        assert body['events'][1]['complete'] is False
+        assert body['events'][1]['error'] == 'connection refused'
 
-        with patch('API.pipelines_views.simulation_results', []):
-            with patch('API.pipelines_views.simulation_lock') as ml:
-                ml.__enter__ = MagicMock(return_value=None)
-                ml.__exit__ = MagicMock(return_value=False)
-                response = _post(authenticated_client, '/api/pipelines/simulate/', {
-                    'lscl': _SIMPLE_LSCL, 'event': 'test', 'timeout': 9999,
-                })
-        assert response.status_code == 408
+    @patch('API.pipelines_views.send_simulation_event')
+    @patch('API.pipelines_views.start_simulation')
+    @patch('API.pipelines_views.logstash_config_parse')
+    def test_simulate_bulk_first_event_failure_returns_502(
+        self, mock_parse, mock_start, mock_send, authenticated_client
+    ):
+        mock_parse.logstash_config_to_components.return_value = _MUTATE_COMPONENTS
+        mock_start.return_value = SimulationStart(error='Error allocating slot: boom')
+        response = _post(authenticated_client, '/api/pipelines/simulate/', {
+            'lscl': _SIMPLE_LSCL, 'events': ['a', 'b', 'c'],
+        })
+        assert response.status_code == 502
+        mock_send.assert_not_called()
+
+    @patch('API.pipelines_views.start_simulation')
+    def test_simulate_invalid_detail_returns_400(self, mock_start, authenticated_client):
+        response = _post(authenticated_client, '/api/pipelines/simulate/', {
+            'lscl': _SIMPLE_LSCL, 'event': 'x', 'detail': 'verbose',
+        })
+        assert response.status_code == 400
+        assert 'detail' in response.json()['error']
+        mock_start.assert_not_called()
+
+    @pytest.mark.parametrize('body', [
+        {'event': 'line a'},
+        {'events': ['line a']},
+    ])
+    @patch('API.pipelines_views.start_simulation')
+    @patch('API.pipelines_views.logstash_config_parse')
+    def test_simulate_steps_detail_returns_diffs_not_raw_results(
+        self, mock_parse, mock_start, authenticated_client, body
+    ):
+        mock_parse.logstash_config_to_components.return_value = json.dumps({
+            'filter': [{'plugin': 'grok', 'id': 'filter_grok_0', 'config': {'id': 'hdr'}}]
+        })
+        mock_start.return_value = _started()
+        step = {'message': 'line a', 'w': 'line',
+                'simulation': {'step': '1', 'id': 'filter_grok_0'}}
+        SimulationResult.add({'run_id': 'run-a', 'message': 'line a', 'simulation': {'id': 'original'}})
+        SimulationResult.add({**step, 'run_id': 'run-a', 'snapshots': {'filter_grok_0': step}})
+
+        response = _post(authenticated_client, '/api/pipelines/simulate/', {
+            'lscl': _SIMPLE_LSCL, 'detail': 'steps', 'timeout': 5, **body,
+        })
+
+        assert response.status_code == 200
+        data = response.json()
+        shaped = data['events'][0] if 'events' in body else data
+        assert 'results' not in shaped
+        assert shaped['detail'] == 'steps'
+        assert shaped['final'] == {'message': 'line a', 'w': 'line'}
+        assert shaped['steps'] == [
+            {'step': 1, 'plugin': 'grok', 'component': 'filter_grok_0', 'id': 'hdr', 'ms': 0.0,
+             'added': {'w': 'line'}},
+        ]
 
     def test_simulate_no_auth_returns_401(self, client):
         assert _post(client, '/api/pipelines/simulate/', {}).status_code == 401

@@ -7,7 +7,44 @@
 from django import forms
 from django.core.exceptions import ValidationError
 from django.forms import ModelForm
+from urllib.parse import urlparse, urlunparse
 from PipelineManager.models import Connection
+
+
+def split_host_port(host, port):
+    """Move a port written into an Elasticsearch URL into the ``port`` field.
+
+    Connections are dialled as ``f"{host}:{port}"``, so a port left in
+    ``host`` would be doubled.
+
+    Args:
+        host: Elasticsearch URL as entered.
+        port: Port field value, or None.
+
+    Returns:
+        tuple: ``(host_without_port, port)``.
+
+    Raises:
+        ValidationError: ``host`` carries a different port than ``port``.
+
+    Examples:
+        >>> split_host_port('https://es.lab:9200', None)
+        ('https://es.lab', 9200)
+        >>> split_host_port('https://es.lab', 9200)
+        ('https://es.lab', 9200)
+    """
+    parsed = urlparse(host if '://' in host else f'//{host}')
+    try:
+        host_port = parsed.port
+    except ValueError:
+        return host, port
+    if host_port is None:
+        return host, port
+    if port and int(port) != host_port:
+        raise ValidationError(
+            f"Host includes port {host_port} but Port is {port}. Put the port only in Port.")
+    netloc = parsed.netloc.rsplit(':', 1)[0]
+    return urlunparse(parsed._replace(netloc=netloc)).removeprefix('//'), host_port
 
 
 class ConnectionForm(ModelForm):
@@ -203,6 +240,8 @@ class ConnectionForm(ModelForm):
                 cleaned_data['cloud_id'] = ''
                 if not cleaned_data.get('host'):
                     raise forms.ValidationError("Host is required when using Elastic Node URL mode.")
+                cleaned_data['host'], cleaned_data['port'] = split_host_port(
+                    cleaned_data['host'], cleaned_data.get('port'))
 
             # --- Auth type ---
             if auth_type == 'basic':

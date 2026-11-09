@@ -9,7 +9,7 @@ import pytest
 
 from django.contrib.auth.models import User
 from Management.models import UserProfile
-from PipelineManager.models import EnrollmentToken, Policy, Revision
+from PipelineManager.models import EnrollmentToken, Pipeline, Policy, Revision
 
 
 # ---------------------------------------------------------------------------
@@ -121,6 +121,13 @@ class TestPolicyList:
                       'has_undeployed_changes', 'active_agent_count', 'created_at'):
             assert field in item, f'Missing field: {field}'
 
+    def test_list_can_omit_config_files(self, authenticated_client, packaged_policy):
+        policies = authenticated_client.get('/api/policies/?include_config=false').json()['policies']
+        item = next(p for p in policies if p['id'] == packaged_policy.id)
+        assert item['name'] == packaged_policy.name
+        for field in ('logstash_yml', 'jvm_options', 'log4j2_properties'):
+            assert field not in item
+
     def test_list_no_auth_401(self, client):
         assert client.get('/api/policies/').status_code == 401
 
@@ -217,6 +224,13 @@ class TestPolicyGet:
                   'policy_type', 'is_system', 'current_revision_number', 'has_undeployed_changes'):
             assert f in p, f'Missing: {f}'
 
+    def test_get_can_omit_config_files(self, authenticated_client, packaged_policy):
+        p = authenticated_client.get(
+            f'/api/policies/{packaged_policy.id}/?include_config=false').json()['policy']
+        assert p['settings_path'] == packaged_policy.settings_path
+        for f in ('logstash_yml', 'jvm_options', 'log4j2_properties'):
+            assert f not in p
+
     def test_get_no_sensitive_fields(self, authenticated_client, packaged_policy):
         p = authenticated_client.get(f'/api/policies/{packaged_policy.id}/').json()['policy']
         assert 'keystore_password' not in p
@@ -260,12 +274,13 @@ class TestPolicyUpdate:
         r = _put(authenticated_client, f'/api/policies/{packaged_policy.id}/', {'policy_type': 'MANAGED'})
         assert r.status_code == 400
 
-    def test_update_embedded_403(self, authenticated_client, db):
+    def test_update_embedded_409(self, authenticated_client, db):
         embedded = Policy.objects.create(
             name='emb', policy_type=Policy.PolicyType.EMBEDDED, is_system=True
         )
         r = _put(authenticated_client, f'/api/policies/{embedded.id}/', {'jvm_options': '-Xms1g'})
-        assert r.status_code == 403
+        assert r.status_code == 409
+        assert r.json()['code'] == 'protected'
 
     def test_update_system_simulate_path_locked(self, authenticated_client, db):
         sys_sim = Policy.objects.create(
@@ -303,9 +318,10 @@ class TestPolicyDelete:
         assert r.status_code == 200
         assert not Policy.objects.filter(id=packaged_policy.id).exists()
 
-    def test_delete_system_403(self, authenticated_client, system_policy):
+    def test_delete_system_409(self, authenticated_client, system_policy):
         r = authenticated_client.delete(f'/api/policies/{system_policy.id}/')
-        assert r.status_code == 403
+        assert r.status_code == 409
+        assert r.json()['code'] == 'protected'
         assert Policy.objects.filter(id=system_policy.id).exists()
 
     def test_delete_with_connection_400(self, authenticated_client, packaged_policy, db):
@@ -416,12 +432,13 @@ class TestPolicyClone:
         clone = Policy.objects.get(name='clone-notsys')
         assert clone.is_system is False
 
-    def test_clone_embedded_403(self, authenticated_client, db):
+    def test_clone_embedded_409(self, authenticated_client, db):
         embedded = Policy.objects.create(
             name='emb-src', policy_type=Policy.PolicyType.EMBEDDED, is_system=True
         )
         r = _post(authenticated_client, f'/api/policies/{embedded.id}/clone/', {'new_name': 'emb-clone'})
-        assert r.status_code == 403
+        assert r.status_code == 409
+        assert r.json()['code'] == 'protected'
 
     def test_clone_missing_new_name_400(self, authenticated_client, packaged_policy):
         r = _post(authenticated_client, f'/api/policies/{packaged_policy.id}/clone/', {})
@@ -471,6 +488,85 @@ class TestPolicyDiff:
         d = authenticated_client.get(f'/api/policies/{packaged_policy.id}/diff/').json()
         assert d['last_deployed_revision'] == 1
         assert d['previous']['logstash_yml'] == packaged_policy.logstash_yml
+
+    def test_diff_flags_pipeline_settings_change(self, authenticated_client, packaged_policy):
+        pipe = Pipeline.objects.create(policy=packaged_policy, name='p1', lscl='input {}')
+        authenticated_client.post(f'/api/policies/{packaged_policy.id}/deploy/')
+        url = f'/api/policies/{packaged_policy.id}/diff/'
+        assert authenticated_client.get(url).json()['has_undeployed_changes'] is False
+
+        pipe.pipeline_workers = 4
+        pipe.save()
+        d = authenticated_client.get(url).json()
+        assert d['has_undeployed_changes'] is True
+        assert d['current']['pipelines'][0]['pipeline_workers'] == 4
+
+    def test_diff_ignores_settings_missing_from_old_snapshot(self, authenticated_client, packaged_policy):
+        Pipeline.objects.create(policy=packaged_policy, name='p1', lscl='input {}', pipeline_workers=4)
+        Revision.objects.create(policy=packaged_policy, revision_number=1, created_by='old', snapshot_json={
+            'logstash_yml': packaged_policy.logstash_yml, 'jvm_options': packaged_policy.jvm_options,
+            'log4j2_properties': packaged_policy.log4j2_properties,
+            'settings_path': packaged_policy.settings_path, 'logs_path': packaged_policy.logs_path,
+            'binary_path': packaged_policy.binary_path,
+            'pipelines': [{'name': 'p1', 'description': '', 'lscl': 'input {}',
+                           'no_input': False, 'non_reloadable': False}],
+            'keystore': [], 'keystore_password_hash': packaged_policy.keystore_password_hash,
+        })
+        d = authenticated_client.get(f'/api/policies/{packaged_policy.id}/diff/').json()
+        assert d['has_undeployed_changes'] is False
+
+    def _deploy_then_change(self, client, policy):
+        Pipeline.objects.create(policy=policy, name='keep', lscl='input {}\n')
+        Pipeline.objects.create(policy=policy, name='gone', lscl='input {}\n')
+        policy.keystore_entries.create(key_name='ES_PW', key_value='old-secret', revision_number=1)
+        policy.keystore_entries.create(key_name='OLD_KEY', key_value='x', revision_number=1)
+        client.post(f'/api/policies/{policy.id}/deploy/')
+
+        Pipeline.objects.filter(policy=policy, name='keep').update(
+            lscl='input {}\noutput {}\n', pipeline_workers=8)
+        Pipeline.objects.filter(policy=policy, name='gone').delete()
+        Pipeline.objects.create(policy=policy, name='new', lscl='input { stdin {} }\n')
+        policy.keystore_entries.filter(key_name='ES_PW').update(key_value='new-secret')
+        policy.keystore_entries.filter(key_name='OLD_KEY').delete()
+        policy.keystore_entries.create(key_name='NEW_KEY', key_value='y', revision_number=2)
+        Policy.objects.filter(pk=policy.pk).update(logstash_yml=policy.logstash_yml + '\nlog.level: debug\n')
+        return f'/api/policies/{policy.id}/diff/'
+
+    def test_diff_summary_names_changes(self, authenticated_client, packaged_policy):
+        url = self._deploy_then_change(authenticated_client, packaged_policy)
+        full = authenticated_client.get(url).json()
+        d = authenticated_client.get(url + '?detail=summary').json()
+
+        assert 'current' not in d and 'previous' not in d and 'diffs' not in d['changes']
+        assert d['pending_changes'] == full['pending_changes'] == 3
+        assert d['changes'] == {
+            'config_files': ['logstash_yml'],
+            'paths': [],
+            'pipelines': {'added': ['new'], 'removed': ['gone'],
+                          'changed': [{'name': 'keep', 'fields': ['lscl', 'pipeline_workers']}]},
+            'keystore': {'added': ['NEW_KEY'], 'removed': ['OLD_KEY'], 'changed': ['ES_PW']},
+            'keystore_password_changed': False,
+        }
+        assert 'secret' not in json.dumps(d)
+
+    def test_diff_changes_adds_unified_diffs(self, authenticated_client, packaged_policy):
+        url = self._deploy_then_change(authenticated_client, packaged_policy)
+        diffs = authenticated_client.get(url + '?detail=changes').json()['changes']['diffs']
+        assert list(diffs['config_files']) == ['logstash_yml']
+        assert '+log.level: debug' in diffs['config_files']['logstash_yml']
+        assert sorted(diffs['pipelines']) == ['keep', 'new']
+        assert '+output {}' in diffs['pipelines']['keep']
+        assert '+input { stdin {} }' in diffs['pipelines']['new']
+
+    def test_diff_summary_skips_fields_missing_from_old_snapshot(self, authenticated_client, packaged_policy):
+        self.test_diff_ignores_settings_missing_from_old_snapshot(authenticated_client, packaged_policy)
+        d = authenticated_client.get(f'/api/policies/{packaged_policy.id}/diff/?detail=summary').json()
+        assert d['changes']['pipelines'] == {'added': [], 'removed': [], 'changed': []}
+
+    def test_diff_bad_detail_400(self, authenticated_client, packaged_policy):
+        r = authenticated_client.get(f'/api/policies/{packaged_policy.id}/diff/?detail=all')
+        assert r.status_code == 400
+        assert 'detail must be one of' in r.json()['error']
 
     def test_diff_404(self, authenticated_client):
         assert authenticated_client.get('/api/policies/99999/diff/').status_code == 404

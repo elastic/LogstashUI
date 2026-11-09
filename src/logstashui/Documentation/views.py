@@ -27,6 +27,7 @@ TITLE_OVERRIDES = {
     'logstashui.yml': 'logstashui.yml',
     'SNMP': 'SNMP',
     'rest_api': 'REST API Reference',
+    'mcp': 'MCP Server',
     'logstash_proxy': 'Logstash Tarball Proxy',
     'tsds_implementation': 'TSDS Implementation',
     'data_overview': 'Data Overview',

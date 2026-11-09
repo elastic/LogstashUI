@@ -15,11 +15,15 @@ from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
-_AUTH_SCHEME = 'ApiKey '
+#: ``Bearer`` exists for MCP clients that only offer a bearer-token field.
+#: Agents only send ``ApiKey``, and ``parse_token`` ignores non-``lsui_`` keys.
+_AUTH_SCHEMES = ('ApiKey ', 'Bearer ')
 
 
 def _resolve_api_token(request):
     """Resolve an admin API token from the ``Authorization`` header.
+
+    Accepts ``ApiKey lsui_...`` or ``Bearer lsui_...``.
 
     Args:
         request: Incoming Django request.
@@ -31,12 +35,13 @@ def _resolve_api_token(request):
         ``'invalid'`` when a token was offered but is not usable.
     """
     header = request.headers.get('Authorization', '')
-    if not header.startswith(_AUTH_SCHEME):
+    scheme = next((s for s in _AUTH_SCHEMES if header.startswith(s)), None)
+    if scheme is None:
         return None
 
     from PipelineManager.models import ApiKey
 
-    prefix, secret = ApiKey.parse_token(header[len(_AUTH_SCHEME):].strip())
+    prefix, secret = ApiKey.parse_token(header[len(scheme):].strip())
     if prefix is None:
         # Not an admin token. Leave agent keys entirely alone.
         return None
