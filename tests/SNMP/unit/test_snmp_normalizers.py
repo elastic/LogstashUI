@@ -8,12 +8,16 @@ Tests for SNMP.snmp_normalizers — all pure functions, no DB or network require
 
 import pytest
 
+import json
+from pathlib import Path
+
 from SNMP.snmp_normalizers import (
     _apply_normalizers,
     _generate_multiply_get_filter,
     _generate_ratio_get_filter,
     _generate_sum_get_filter,
     _generate_translate_filter,
+    validate_normalizers,
 )
 
 
@@ -720,3 +724,56 @@ class TestScopeQualifiedFilterIds:
             [self.GET_SUM, self.GET_MULTIPLY, self.GET_RATIO]
         )
         self._assert_unique(components)
+
+
+# ===========================================================================
+# validate_normalizers
+# ===========================================================================
+
+OFFICIAL_PROFILES = Path(__file__).parents[3] / 'src' / 'logstashui' / 'SNMP' / 'data' / 'official_profiles'
+
+#: Official profile normalizers that send params the pipeline generator ignores.
+KNOWN_OFFICIAL_ISSUES = {
+    'netapp_7mode_system.json': ["normalizers[2] (translate): unknown param 'output_field'; allowed: mapping.",
+                                 "normalizers[3] (translate): unknown param 'output_field'; allowed: mapping."],
+}
+
+
+def _multiply(**overrides):
+    norm = {'operation': 'multiply', 'target': {'scope': 'get', 'field': 'ups.voltage'},
+            'params': {'multiply_value': 0.1}}
+    norm.update(overrides)
+    return norm
+
+
+class TestValidateNormalizers:
+
+    def test_valid_and_empty_pass(self):
+        assert validate_normalizers([_multiply()]) == []
+        assert validate_normalizers([]) == []
+        assert validate_normalizers(None) == []
+
+    @pytest.mark.parametrize('normalizer, message', [
+        (_multiply(operation='scale'), "unknown operation 'scale'"),
+        (_multiply(params={'factor': 0.1}), "unknown param 'factor'"),
+        (_multiply(params={'multiply_value': '0.1'}), "'multiply_value' must be a number"),
+        (_multiply(target={'scope': 'get'}), 'target.field is required'),
+        (_multiply(target={'scope': 'walk', 'field': 'x'}), 'target.scope must be one of'),
+        (_multiply(target={'scope': 'table', 'field': 'if.in'}), 'target.table is required'),
+        ({'operation': 'sum', 'target': {'scope': 'get'}, 'params': {'input_fields': ['a', 'b']}},
+         "'output_field' is required"),
+        ({'operation': 'translate', 'target': {'scope': 'get', 'field': 'x'}, 'params': {'mapping': ['1']}},
+         "'mapping' must be an object"),
+        ('multiply', 'must be an object'),
+    ])
+    def test_rejects(self, normalizer, message):
+        errors = validate_normalizers([normalizer])
+        assert any(message in e for e in errors), errors
+
+    def test_not_a_list(self):
+        assert validate_normalizers({'operation': 'multiply'}) == ['normalizers must be a list.']
+
+    @pytest.mark.parametrize('path', sorted(OFFICIAL_PROFILES.glob('*.json')), ids=lambda p: p.name)
+    def test_official_profiles_pass(self, path):
+        errors = validate_normalizers(json.loads(path.read_text()).get('normalizers'))
+        assert errors == KNOWN_OFFICIAL_ISSUES.get(path.name, [])

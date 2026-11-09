@@ -19,7 +19,7 @@ from SNMP.snmp_test import (
     _device_poll_address,
     _device_response_data,
     _format_snmp_value,
-    _load_profile_data,
+    load_profile_data,
     _merge_profile_oids,
     _resolve_device_poll_address,
 )
@@ -194,13 +194,13 @@ class TestFormatSnmpValue:
 
 
 # ===========================================================================
-# _load_profile_data
+# load_profile_data
 # ===========================================================================
 
 class TestLoadProfileData:
 
     def test_returns_profile_data_for_custom_profile(self, test_custom_profile):
-        data = _load_profile_data(test_custom_profile)
+        data = load_profile_data(test_custom_profile)
         assert data == test_custom_profile.profile_data
 
     def test_official_placeholder_loads_from_file(self, settings, tmp_path):
@@ -223,7 +223,7 @@ class TestLoadProfileData:
             profile_data={'is_official_placeholder': True},
             vendor='Generic'
         )
-        data = _load_profile_data(official_profile)
+        data = load_profile_data(official_profile)
         assert data['get']['sysDescr'] == '1.3.6.1.2.1.1.1.0'
 
     def test_official_placeholder_missing_file_returns_empty(self, settings, tmp_path):
@@ -235,7 +235,7 @@ class TestLoadProfileData:
             profile_data={'is_official_placeholder': True},
             vendor='Generic'
         )
-        data = _load_profile_data(official_profile)
+        data = load_profile_data(official_profile)
         assert data == {'get': {}, 'walk': {}, 'table': {}}
 
 

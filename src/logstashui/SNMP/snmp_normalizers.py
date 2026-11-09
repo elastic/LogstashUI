@@ -4,6 +4,93 @@
 
 """Logstash filter fragments for SNMP profile normalizers (multiply, ratio, translate)."""
 
+import functools
+import json
+import os
+
+_INPUT_TYPES = {
+    'float': ((int, float), 'a number'),
+    'string': (str, 'a string'),
+    'field_selector': (str, 'a field name'),
+    'field_list': (list, 'a list of field names'),
+    'key_value_pairs': (dict, 'an object of value mappings'),
+}
+
+
+@functools.cache
+def normalizer_definitions():
+    """Return the operation definitions from ``SNMP/data/normalizers.json``."""
+    path = os.path.join(os.path.dirname(__file__), 'data', 'normalizers.json')
+    with open(path, encoding='utf-8') as fh:
+        return json.load(fh)
+
+
+def validate_normalizers(normalizers):
+    """Check profile normalizers against ``normalizers.json``, the same rules the UI editor uses.
+
+    Args:
+        normalizers: The profile's ``normalizers`` list.
+
+    Returns:
+        list[str]: One message per problem; empty when valid.
+
+    Examples:
+        >>> validate_normalizers([{'operation': 'multiply',
+        ...                        'target': {'scope': 'get', 'field': 'ups.voltage'},
+        ...                        'params': {'multiply_value': 0.1}}])
+        []
+        >>> validate_normalizers([{'operation': 'multiply',
+        ...                        'target': {'scope': 'get', 'field': 'ups.voltage'},
+        ...                        'params': {'factor': 0.1}}])
+        ["normalizers[0] (multiply): unknown param 'factor'; allowed: multiply_value."]
+    """
+    if not normalizers:
+        return []
+    if not isinstance(normalizers, list):
+        return ['normalizers must be a list.']
+    definitions = normalizer_definitions()
+    errors = []
+    for i, norm in enumerate(normalizers):
+        where = f'normalizers[{i}]'
+        if not isinstance(norm, dict):
+            errors.append(f'{where} must be an object.')
+            continue
+        operation = norm.get('operation')
+        spec = definitions.get(operation)
+        if spec is None:
+            errors.append(f"{where}: unknown operation {operation!r}; use one of: {', '.join(definitions)}.")
+            continue
+        where = f'{where} ({operation})'
+
+        target = norm.get('target')
+        if not isinstance(target, dict):
+            errors.append(f'{where}: target must be an object with a scope.')
+        else:
+            scope = target.get('scope')
+            if scope not in spec['applies_to']:
+                errors.append(f"{where}: target.scope must be one of: {', '.join(spec['applies_to'])}.")
+            if scope == 'table' and not target.get('table'):
+                errors.append(f'{where}: target.table is required when scope is table.')
+            if spec.get('has_target_field') and not target.get('field'):
+                errors.append(f'{where}: target.field is required.')
+
+        params = norm.get('params', {})
+        if not isinstance(params, dict):
+            errors.append(f'{where}: params must be an object.')
+            continue
+        inputs = spec.get('inputs', {})
+        for name, value in params.items():
+            if name not in inputs:
+                errors.append(f"{where}: unknown param {name!r}; allowed: {', '.join(inputs)}.")
+                continue
+            expected, label = _INPUT_TYPES.get(inputs[name].get('type'), (object, 'a value'))
+            if not isinstance(value, expected) or isinstance(value, bool):
+                errors.append(f'{where}: param {name!r} must be {label}.')
+        for name, definition in inputs.items():
+            if definition.get('required') and params.get(name) in (None, '', [], {}):
+                errors.append(f'{where}: param {name!r} is required.')
+    return errors
+
 
 def _next_id(base, counter):
     """Return `base` plus an incrementing suffix, mutating `counter` in place.

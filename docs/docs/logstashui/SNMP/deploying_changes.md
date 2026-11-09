@@ -16,6 +16,12 @@ Any create, update, or delete across SNMP configuration (devices, networks, cred
 
 Pipelines whose generated content is unchanged are skipped — deploying with no effective changes is a no-op.
 
+### Leftover pipelines
+
+Every deploy checks **all** Centralized connections for generated SNMP pipelines (named `snmp-*`, with `[MANAGED]` in the description) that no current network or template produces on that connection, and deletes them. This catches pipelines left behind when you delete a network, move it to another connection, or rename it.
+
+Don't point two LogstashUI instances at the same Elasticsearch cluster for SNMP: each instance treats the other's generated pipelines as leftovers and deletes them on its next deploy. Pipelines you write yourself are never touched, even if their names start with `snmp-`, as long as their description doesn't contain `[MANAGED]`.
+
 ## Deployment Modes
 
 Each **network** chooses one of two deployment modes, so different networks can use different modes side by side.

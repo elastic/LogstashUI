@@ -817,6 +817,40 @@ class TestDeployConfiguration:
         from django.core.cache import cache
         cache.delete('snmp_deployment_plan')
 
+    def test_orphans_found_on_connection_no_network_uses(self, authenticated_client, test_connection):
+        """A deleted network's last connection is still scanned, and the apply deletes what the plan lists."""
+        from django.core.cache import cache
+        from API.snmp_views import _diff_counts
+
+        managed = {'description': '[MANAGED] SNMP discovery pipeline', 'pipeline': 'input {}'}
+        with patch('SNMP.snmp_crud.get_elastic_connection') as mock_es_conn:
+            mock_es = MagicMock()
+            mock_es.logstash.get_pipeline.return_value = {
+                'snmp-gone-discovery': managed,
+                'snmp-test': {'description': 'hand-written', 'pipeline': 'input {}'},
+            }
+            mock_es_conn.return_value = mock_es
+
+            diff = json.loads(authenticated_client.get('/SNMP/GetDeployDiff/').content)
+            applied = json.loads(authenticated_client.post('/SNMP/DeployConfiguration/').content)
+
+        deletes = [d for d in diff['networks'] if d['action'] == 'delete']
+        assert [(d['pipeline_name'], d['connection_id'], d['destination_name']) for d in deletes] == [
+            ('snmp-gone-discovery', test_connection.id, test_connection.name)]
+        assert applied['pipelines_deleted'] == _diff_counts(diff['networks'])['delete'] == 1
+        mock_es.logstash.delete_pipeline.assert_called_once_with(id='snmp-gone-discovery')
+        cache.delete('snmp_deployment_plan')
+
+    def test_orphan_expected_names_are_per_connection(self, test_network):
+        """A network's pipeline names are expected only on its own connection."""
+        from SNMP.snmp_crud import _expected_cpm_pipelines_by_connection
+
+        test_network.discovery_enabled = True
+        test_network.save(update_fields=['discovery_enabled'])
+        expected = _expected_cpm_pipelines_by_connection([test_network])
+        assert set(expected) == {test_network.connection.id}
+        assert any(name.endswith('-discovery') for name in expected[test_network.connection.id])
+
     def test_deploy_configuration_requires_admin(self, readonly_client):
         """Test that deploying configuration requires admin role"""
         response = readonly_client.post('/SNMP/DeployConfiguration/')

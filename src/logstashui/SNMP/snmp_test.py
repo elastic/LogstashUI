@@ -115,7 +115,7 @@ def _format_snmp_value(value):
     return value_str
 
 
-def _load_profile_data(profile):
+def load_profile_data(profile):
     """Load official profile JSON from disk or a custom profile from the database.
 
     Args:
@@ -155,7 +155,7 @@ def _merge_profile_oids(profiles):
     }
     
     for profile in profiles:
-        profile_data = _load_profile_data(profile)
+        profile_data = load_profile_data(profile)
         
         if 'get' in profile_data:
             merged['get'].update(profile_data['get'])

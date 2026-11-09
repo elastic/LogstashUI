@@ -633,10 +633,10 @@ class Profile(models.Model):
         return self.name
     
     def clean(self):
-        """Require `profile_data` to be a JSON object when present.
+        """Require `profile_data` to be a JSON object and `normalizers` to match `normalizers.json`.
 
         Raises:
-            ValidationError: If `profile_data` is not a dict.
+            ValidationError: If `profile_data` is not a dict or a normalizer is invalid.
         """
         super().clean()
         
@@ -649,6 +649,11 @@ class Profile(models.Model):
             
             # Basic validation - could be expanded based on required profile structure
             # For now, just ensure it's valid JSON
+
+        from .snmp_normalizers import validate_normalizers
+        normalizer_errors = validate_normalizers(self.normalizers)
+        if normalizer_errors:
+            raise ValidationError({'normalizers': normalizer_errors})
     
     def save(self, *args, **kwargs):
         """Run `full_clean()` then persist the row."""

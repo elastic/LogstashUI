@@ -9,6 +9,10 @@
         "type": "float",
         "default": 1.0,
         "description": "The value to multiply the SNMP value by."
+      },
+      "output_field": {
+        "type": "string",
+        "description": "Field to write the result to (e.g. 'system.cpu.total.norm.pct'). Leave empty to overwrite the source field."
       }
     }
   },
