@@ -2400,12 +2400,6 @@ def DeployConfiguration(request):
         # Query all networks with their credentials
         networks = Network.objects.select_related('credential', 'discovery_credential', 'connection').all()
 
-        if not networks.exists():
-            return JsonResponse({
-                'success': False,
-                'error': 'No networks configured'
-            }, status=400)
-
         pipelines_created = 0
         pipelines_updated = 0
         pipelines_deleted = 0

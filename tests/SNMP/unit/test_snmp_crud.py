@@ -954,11 +954,24 @@ class TestDeployConfiguration:
 
     @patch('SNMP.snmp_crud.get_elastic_connection')
     def test_deploy_configuration_no_networks(self, mock_es_conn, authenticated_client):
-        """Test deploying with no networks configured"""
+        """With no networks and nothing left over, the deploy succeeds with no changes."""
         response = authenticated_client.post('/SNMP/DeployConfiguration/')
-        assert response.status_code == 400
-        data = json.loads(response.content)
-        assert 'No networks configured' in data['error']
+        assert response.status_code == 200
+        assert json.loads(response.content)['pipelines_deleted'] == 0
+
+    def test_deleting_last_network_cleans_up_without_cached_plan(self, authenticated_client, test_connection):
+        """Apply without a cached plan still removes the last deleted network's pipelines."""
+        from django.core.cache import cache
+
+        cache.delete('snmp_deployment_plan')
+        managed = {'description': '[MANAGED] SNMP polling pipeline', 'pipeline': 'input {}'}
+        clients = self._clusters({'c1': [test_connection]}, {'c1': {'snmp-gone-default-polling': managed}})
+        with patch('SNMP.snmp_crud.get_elastic_connection', side_effect=lambda conn_id: clients[conn_id]):
+            response = authenticated_client.post('/SNMP/DeployConfiguration/')
+
+        assert response.status_code == 200
+        assert json.loads(response.content)['pipelines_deleted'] == 1
+        clients[test_connection.id].logstash.delete_pipeline.assert_called_once_with(id='snmp-gone-default-polling')
 
 
 # ============================================================================
