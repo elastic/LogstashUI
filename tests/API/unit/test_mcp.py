@@ -798,6 +798,22 @@ def _fake_diff(_request):
     return JsonResponse(_PLAN)
 
 
+@pytest.mark.parametrize('lscl,expected', [
+    ('community => "public"', 'community => "[redacted]"'),
+    ('"community" => "public"', '"community" => "[redacted]"'),
+    ("auth_pass => 'line1\n\tline2' next => \"ok\"", "auth_pass => '[redacted]' next => \"ok\""),
+    ('community => ["a", \'b\']', 'community => ["[redacted]", \'[redacted]\']'),
+    ('community => ["${snmp_1_v2}"]', 'community => ["${snmp_1_v2}"]'),
+    ('password => "a\\"b" host => "h"', 'password => "[redacted]" host => "h"'),
+    ('api_key => "${ES_KEY}tail"', 'api_key => "[redacted]"'),
+    ('ssl_keystore_password => "x"', 'ssl_keystore_password => "[redacted]"'),
+    ('host => "community"', 'host => "community"'),
+])
+def test_mask_secrets(lscl, expected):
+    from API.snmp_views import _mask_secrets
+    assert _mask_secrets(lscl) == expected
+
+
 @pytest.mark.django_db
 class TestSnmpDeployDiff:
 
@@ -834,6 +850,21 @@ class TestSnmpDeployDiff:
         with patch('SNMP.snmp_crud.GetDeployDiff', _fake_diff):
             rest = json.dumps(authenticated_client.post('/api/snmp/deploy/diff/').json())
         assert 'LSCL-SECRET' not in rest and 'LSCL-KEY' not in rest
+
+    def test_trap_and_multiline_secrets_are_masked(self, client, admin_auth, authenticated_client):
+        from django.http import JsonResponse
+        trap = {'network_name': 'lab', 'pipeline_name': 'snmp-lab-trap', 'action': 'update',
+                'pipeline_type': 'trap', 'current': '',
+                'new': 'input { snmptrap { community => ["TRAP-SECRET"] } }\n'
+                       'input { snmp { "community" => "QUOTED-SECRET" auth_pass => \'LINE-1\n\tLINE-2\' } }\n'}
+        plan = {**_PLAN, 'networks': [trap]}
+        with patch('SNMP.snmp_crud.GetDeployDiff', lambda _request: JsonResponse(plan)):
+            texts = [json.dumps(_call(client, admin_auth, 'snmp_deploy_diff', {'detail': d})['result'])
+                     for d in ('changes', 'full')]
+            texts.append(json.dumps(authenticated_client.post('/api/snmp/deploy/diff/').json()))
+        for text in texts:
+            for secret in ('TRAP-SECRET', 'QUOTED-SECRET', 'LINE-1', 'LINE-2'):
+                assert secret not in text
 
     def test_rest_default_returns_full_entries(self, authenticated_client):
         with patch('SNMP.snmp_crud.GetDeployDiff', _fake_diff):

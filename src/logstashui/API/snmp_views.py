@@ -1417,20 +1417,43 @@ _DIFF_ROW_KEYS = ('pipeline_name', 'action', 'pipeline_type', 'network_name', 't
                   'deployment_mode', 'destination_type', 'destination_name', 'connection_id',
                   'agent_policy_id', 'manual_keystore_keys', 'note')
 
-#: Quoted LSCL values for secret settings; ``${VAR}`` keystore references are kept.
+_SECRET_KEYS = r'(?:api_key|cloud_auth|community|auth_pass|priv_pass|\w*password)'
+
+#: One LSCL string token, as the Logstash grammar reads it (may span lines).
+_LSCL_STRING = r'''"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*\''''
+
+#: A secret setting (bare or quoted key) and its value: one string or a list of strings.
 _SECRET_SETTING_RE = re.compile(
-    r'''(\b(?:api_key|cloud_auth|community|auth_pass|priv_pass|\w*password)\s*=>\s*)(["'])(?!\$\{).*?(?<!\\)\2'''
+    rf'''((?:\b{_SECRET_KEYS}\b|(["']){_SECRET_KEYS}\2)\s*=>\s*)'''
+    rf'''({_LSCL_STRING}|\[\s*(?:(?:{_LSCL_STRING})\s*,?\s*)*\])''',
+    re.DOTALL,
 )
+
+_KEYSTORE_REF_RE = re.compile(r'''(["'])\$\{[^}]*\}\1''')
+
+
+def _mask_string(match):
+    token = match.group(0)
+    return token if _KEYSTORE_REF_RE.fullmatch(token) else f'{token[0]}[redacted]{token[0]}'
 
 
 def _mask_secrets(lscl):
     """Replace secret values in generated LSCL with ``[redacted]``.
 
+    Every string in a secret setting's value is masked, including list items
+    (the snmptrap ``community`` list), quoted keys, and values that span
+    lines. A value that is exactly a ``${VAR}`` keystore reference is kept.
+
     Examples:
         >>> _mask_secrets('community => "public" api_key => "${ES_KEY}"')
         'community => "[redacted]" api_key => "${ES_KEY}"'
+        >>> _mask_secrets('"community" => ["a", \\'b\\']')
+        '"community" => ["[redacted]", \\'[redacted]\\']'
     """
-    return _SECRET_SETTING_RE.sub(r'\1\2[redacted]\2', lscl or '')
+    return _SECRET_SETTING_RE.sub(
+        lambda m: m.group(1) + re.sub(_LSCL_STRING, _mask_string, m.group(3), flags=re.DOTALL),
+        lscl or '',
+    )
 
 
 def _diff_counts(entries):
