@@ -758,7 +758,7 @@ class TestValidateNormalizers:
         (_multiply(operation='scale'), "unknown operation 'scale'"),
         (_multiply(params={'factor': 0.1}), "unknown param 'factor'"),
         (_multiply(params={'multiply_value': '0.1'}), "'multiply_value' must be a number"),
-        (_multiply(target={'scope': 'get'}), 'target.field is required'),
+        (_multiply(target={'scope': 'get'}), 'target.field must be a non-empty string'),
         (_multiply(target={'scope': 'walk', 'field': 'x'}), 'target.scope must be one of'),
         ({'operation': 'sum', 'target': {'scope': 'get'}, 'params': {'input_fields': ['a', 'b']}},
          "'output_field' is required"),

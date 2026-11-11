@@ -223,6 +223,24 @@ class TestProfileCreate:
         stored = Profile.objects.get(name='sum_norm').normalizers
         assert stored[0]['params']['input_fields'] == ['a', 'b']
 
+    @pytest.mark.parametrize('normalizer, message', [
+        ({'operation': ['multiply'], 'target': {'scope': 'get', 'field': 'a'}}, 'unknown operation'),
+        ({'operation': {'op': 'multiply'}, 'target': {'scope': 'get', 'field': 'a'}}, 'unknown operation'),
+        ({'operation': 'multiply', 'target': {'scope': 'get', 'field': ['a']},
+          'params': {'multiply_value': 2}}, 'target.field must be a non-empty string'),
+        ({'operation': 'multiply', 'target': {'scope': 'get', 'field': '  '},
+          'params': {'multiply_value': 2}}, 'target.field must be a non-empty string'),
+        ({'operation': 'sum', 'target': {'scope': 'get'},
+          'params': {'input_fields': ['a', 1], 'output_field': 'c'}}, "'input_fields' must be a list of field names"),
+    ])
+    def test_create_malformed_normalizer_400(self, authenticated_client, normalizer, message):
+        r = _post(authenticated_client, '/api/snmp/profiles/', {
+            'name': 'bad_norm', 'vendor': 'Acme', 'profile_data': SAMPLE_PROFILE_DATA,
+            'normalizers': [normalizer],
+        })
+        assert r.status_code == 400, r.content
+        assert message in json.dumps(r.json()['error'])
+
     @pytest.mark.parametrize('body, message', [
         ({'name': 'mine.json'}, 'reserved for official profiles'),
         ({'name': '../../secrets.json', 'profile_data': {'is_official_placeholder': True}},

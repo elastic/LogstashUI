@@ -97,7 +97,7 @@ def validate_normalizers(normalizers):
             errors.append(f'{where} must be an object.')
             continue
         operation = norm.get('operation')
-        spec = definitions.get(operation)
+        spec = definitions.get(operation) if isinstance(operation, str) else None
         if spec is None:
             errors.append(f"{where}: unknown operation {operation!r}; use one of: {', '.join(definitions)}.")
             continue
@@ -110,8 +110,9 @@ def validate_normalizers(normalizers):
             scope = target.get('scope')
             if scope not in spec['applies_to']:
                 errors.append(f"{where}: target.scope must be one of: {', '.join(spec['applies_to'])}.")
-            if spec.get('has_target_field') and not target.get('field'):
-                errors.append(f'{where}: target.field is required.')
+            field = target.get('field')
+            if spec.get('has_target_field') and not (isinstance(field, str) and field.strip()):
+                errors.append(f'{where}: target.field must be a non-empty string.')
 
         params = norm.get('params', {})
         if not isinstance(params, dict):
@@ -122,8 +123,11 @@ def validate_normalizers(normalizers):
             if name not in inputs:
                 errors.append(f"{where}: unknown param {name!r}; allowed: {', '.join(inputs)}.")
                 continue
-            expected, label = _INPUT_TYPES.get(inputs[name].get('type'), (object, 'a value'))
-            if not isinstance(value, expected) or isinstance(value, bool):
+            input_type = inputs[name].get('type')
+            expected, label = _INPUT_TYPES.get(input_type, (object, 'a value'))
+            if (not isinstance(value, expected) or isinstance(value, bool)
+                    or (input_type == 'field_list'
+                        and not all(isinstance(f, str) and f.strip() for f in value))):
                 errors.append(f'{where}: param {name!r} must be {label}.')
         for name, definition in inputs.items():
             if definition.get('required') and params.get(name) in (None, '', [], {}):
