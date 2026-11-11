@@ -851,6 +851,59 @@ class TestDeployConfiguration:
         assert set(expected) == {test_network.connection.id}
         assert any(name.endswith('-discovery') for name in expected[test_network.connection.id])
 
+    @staticmethod
+    def _clusters(connections_by_cluster, pipelines_by_cluster):
+        """``get_elastic_connection`` stand-in: one mock client per connection, grouped by cluster UUID."""
+        clients = {}
+        for cluster, connections in connections_by_cluster.items():
+            for conn in connections:
+                es = MagicMock()
+                es.info.return_value = {'cluster_uuid': cluster}
+                es.logstash.get_pipeline.return_value = dict(pipelines_by_cluster.get(cluster, {}))
+                clients[conn.id] = es
+        return clients
+
+    def _deploy_diff(self, client, clients):
+        from django.core.cache import cache
+        with patch('SNMP.snmp_crud.get_elastic_connection', side_effect=lambda conn_id: clients[conn_id]):
+            diff = json.loads(client.get('/SNMP/GetDeployDiff/').content)
+        cache.delete('snmp_deployment_plan')
+        return diff
+
+    def test_orphan_scan_combines_connections_on_one_cluster(self, authenticated_client, test_network):
+        """A second connection to the same cluster doesn't see the first one's pipelines as orphans."""
+        from SNMP.snmp_crud import _expected_cpm_pipelines_by_connection
+
+        other = Connection.objects.create(name='Same cluster, other key', connection_type='CENTRALIZED',
+                                          host='https://localhost:9200', username='reader', password='x')
+        discovery = next(iter(_expected_cpm_pipelines_by_connection([test_network])[test_network.connection.id]))
+        managed = {'description': '[MANAGED] SNMP discovery pipeline', 'pipeline': 'input {}'}
+        clients = self._clusters({'c1': [test_network.connection, other]}, {'c1': {discovery: managed}})
+
+        diff = self._deploy_diff(authenticated_client, clients)
+
+        assert [d for d in diff['networks'] if d['action'] == 'delete'] == []
+        assert clients[other.id].logstash.get_pipeline.call_count == 0
+
+    def test_moved_network_deletes_copy_on_old_cluster(self, authenticated_client, test_network):
+        """Moving a network to another cluster plans a create there and a delete of the old copy."""
+        from SNMP.snmp_crud import _expected_cpm_pipelines_by_connection
+
+        old_conn = test_network.connection
+        new_conn = Connection.objects.create(name='New cluster', connection_type='CENTRALIZED',
+                                             host='https://es2:9200', username='elastic', password='x')
+        test_network.connection = new_conn
+        test_network.save(update_fields=['connection'])
+        discovery = next(iter(_expected_cpm_pipelines_by_connection([test_network])[new_conn.id]))
+        managed = {'description': '[MANAGED] SNMP discovery pipeline', 'pipeline': 'input {}'}
+        clients = self._clusters({'c1': [old_conn], 'c2': [new_conn]}, {'c1': {discovery: managed}})
+
+        diff = self._deploy_diff(authenticated_client, clients)
+
+        planned = {(d['action'], d['pipeline_name'], d['connection_id']) for d in diff['networks']}
+        assert ('create', discovery, new_conn.id) in planned
+        assert ('delete', discovery, old_conn.id) in planned
+
     def test_deploy_configuration_requires_admin(self, readonly_client):
         """Test that deploying configuration requires admin role"""
         response = readonly_client.post('/SNMP/DeployConfiguration/')

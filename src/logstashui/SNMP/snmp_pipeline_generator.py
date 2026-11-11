@@ -1147,10 +1147,9 @@ def _get_device_profiles(device, profile_cache=None):
                 profile_data = profile_cache[profile_name]
             else:
                 # Load the actual profile data from JSON file
-                official_profiles_dir = os.path.join(settings.BASE_DIR, 'SNMP', 'data', 'official_profiles')
-                profile_path = os.path.join(official_profiles_dir, f"{profile_name}.json")
+                profile_path = profile.official_file_path()
 
-                if os.path.exists(profile_path):
+                if profile_path and os.path.exists(profile_path):
                     try:
                         with open(profile_path, 'r') as f:
                             profile_data = json.load(f)

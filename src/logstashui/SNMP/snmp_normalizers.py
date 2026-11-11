@@ -25,8 +25,49 @@ def normalizer_definitions():
         return json.load(fh)
 
 
+def split_field_list(value):
+    """Return a ``field_list`` param as a list, splitting a comma-separated string.
+
+    The profile editor saves ``field_list`` params from a text box, so older
+    profiles hold ``"a, b"`` instead of ``["a", "b"]``.
+
+    Examples:
+        >>> split_field_list('cpu.user, cpu.system')
+        ['cpu.user', 'cpu.system']
+        >>> split_field_list(['cpu.user'])
+        ['cpu.user']
+    """
+    if isinstance(value, str):
+        return [part.strip() for part in value.split(',') if part.strip()]
+    return value
+
+
+def coerce_field_lists(normalizers):
+    """Rewrite comma-separated ``field_list`` params in place as lists.
+
+    Args:
+        normalizers: The profile's ``normalizers`` list; anything else is left alone.
+
+    Examples:
+        >>> norms = [{'operation': 'sum', 'params': {'input_fields': 'a, b', 'output_field': 'c'}}]
+        >>> coerce_field_lists(norms)
+        >>> norms[0]['params']['input_fields']
+        ['a', 'b']
+    """
+    if not isinstance(normalizers, list):
+        return
+    definitions = normalizer_definitions()
+    for norm in normalizers:
+        if not isinstance(norm, dict) or not isinstance(norm.get('params'), dict):
+            continue
+        spec = definitions.get(norm.get('operation')) if isinstance(norm.get('operation'), str) else None
+        for name, definition in (spec or {}).get('inputs', {}).items():
+            if definition.get('type') == 'field_list' and name in norm['params']:
+                norm['params'][name] = split_field_list(norm['params'][name])
+
+
 def validate_normalizers(normalizers):
-    """Check profile normalizers against ``normalizers.json``, the same rules the UI editor uses.
+    """Check profile normalizers against ``normalizers.json``.
 
     Args:
         normalizers: The profile's ``normalizers`` list.
@@ -69,8 +110,6 @@ def validate_normalizers(normalizers):
             scope = target.get('scope')
             if scope not in spec['applies_to']:
                 errors.append(f"{where}: target.scope must be one of: {', '.join(spec['applies_to'])}.")
-            if scope == 'table' and not target.get('table'):
-                errors.append(f'{where}: target.table is required when scope is table.')
             if spec.get('has_target_field') and not target.get('field'):
                 errors.append(f'{where}: target.field is required.')
 
@@ -447,7 +486,7 @@ def _generate_sum_get_filter(normalizers, scope='get', id_counter=None):
 
     for normalizer in normalizers:
         params = normalizer.get('params', {})
-        input_fields = params.get('input_fields', [])
+        input_fields = split_field_list(params.get('input_fields', []))
         output_field = params.get('output_field', '').strip()
 
         if not input_fields or not output_field:

@@ -6,12 +6,10 @@
 
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
-from django.conf import settings
 from .models import Device, DeviceTemplate, Profile, Credential
 from Common.formatters import format_display_name
 import json
 import logging
-import os
 import socket
 import traceback
 
@@ -125,15 +123,12 @@ def load_profile_data(profile):
         Profile dict containing get, walk, and table OID maps.
     """
     if profile.profile_data.get('is_official_placeholder'):
-        profile_name = profile.name.replace('.json', '')
-        official_profiles_dir = os.path.join(settings.BASE_DIR, 'SNMP', 'data', 'official_profiles')
-        profile_path = os.path.join(official_profiles_dir, f"{profile_name}.json")
-        
+        profile_path = profile.official_file_path()
         try:
             with open(profile_path, 'r') as f:
                 return json.load(f)
         except Exception as e:
-            logger.debug(f"Error loading official profile {profile_name}: {e}")
+            logger.debug(f"Error loading official profile {profile.name}: {e}")
             return {'get': {}, 'walk': {}, 'table': {}}
     else:
         return profile.profile_data

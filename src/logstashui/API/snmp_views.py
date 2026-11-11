@@ -964,6 +964,21 @@ def _list_profiles(request):
     return JsonResponse({'profiles': items, 'total': len(items)})
 
 
+_OFFICIAL_MARKER_ERROR = 'profile_data cannot contain is_official_placeholder; it is reserved for official profiles.'
+
+
+def _claims_official(profile_data):
+    """Return True when user-supplied ``profile_data`` carries the official-row marker.
+
+    Examples:
+        >>> _claims_official({'is_official_placeholder': True})
+        True
+        >>> _claims_official({'get': {}})
+        False
+    """
+    return isinstance(profile_data, dict) and 'is_official_placeholder' in profile_data
+
+
 @api_require_admin
 def _create_profile(request):
     data = parse_request_body(request)
@@ -977,6 +992,8 @@ def _create_profile(request):
     if Profile.objects.filter(name=name).exists():
         # H7/M7 fix: duplicate profile should return 409 Conflict, not 400.
         return JsonResponse({'success': False, 'error': 'A profile with this name already exists.'}, status=409)
+    if _claims_official(data.get('profile_data')):
+        return JsonResponse({'success': False, 'error': _OFFICIAL_MARKER_ERROR}, status=400)
 
     profile = Profile(
         name=name,
@@ -1046,6 +1063,8 @@ def _update_profile(request, profile_id):
     if 'product' in data:
         p.product = data['product'] or ''
     if 'profile_data' in data:
+        if _claims_official(data['profile_data']):
+            return JsonResponse({'success': False, 'error': _OFFICIAL_MARKER_ERROR}, status=400)
         p.profile_data = data['profile_data'] or {}
     if 'normalizers' in data:
         p.normalizers = data['normalizers'] or []

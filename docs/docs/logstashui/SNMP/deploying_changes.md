@@ -18,7 +18,7 @@ Pipelines whose generated content is unchanged are skipped — deploying with no
 
 ### Leftover pipelines
 
-Every deploy checks **all** Centralized connections for generated SNMP pipelines (named `snmp-*`, with `[MANAGED]` in the description) that no current network or template produces on that connection, and deletes them. This catches pipelines left behind when you delete a network, move it to another connection, or rename it.
+Every deploy checks **all** Centralized connections for generated SNMP pipelines (named `snmp-*`, with `[MANAGED]` in the description) that no current network or template produces on that cluster, and deletes them. This catches pipelines left behind when you delete a network, move it to another cluster, or rename it. Connections that point at the same cluster (for example with different API keys) are checked together, so a network on one of them doesn't make its pipelines look like leftovers on the other. A connection that can't be reached is skipped, and nothing is deleted through it.
 
 Don't point two LogstashUI instances at the same Elasticsearch cluster for SNMP: each instance treats the other's generated pipelines as leftovers and deletes them on its next deploy. Pipelines you write yourself are never touched, even if their names start with `snmp-`, as long as their description doesn't contain `[MANAGED]`.
 

@@ -17,6 +17,7 @@ from SNMP.snmp_normalizers import (
     _generate_ratio_get_filter,
     _generate_sum_get_filter,
     _generate_translate_filter,
+    coerce_field_lists,
     validate_normalizers,
 )
 
@@ -759,7 +760,6 @@ class TestValidateNormalizers:
         (_multiply(params={'multiply_value': '0.1'}), "'multiply_value' must be a number"),
         (_multiply(target={'scope': 'get'}), 'target.field is required'),
         (_multiply(target={'scope': 'walk', 'field': 'x'}), 'target.scope must be one of'),
-        (_multiply(target={'scope': 'table', 'field': 'if.in'}), 'target.table is required'),
         ({'operation': 'sum', 'target': {'scope': 'get'}, 'params': {'input_fields': ['a', 'b']}},
          "'output_field' is required"),
         ({'operation': 'translate', 'target': {'scope': 'get', 'field': 'x'}, 'params': {'mapping': ['1']}},
@@ -772,6 +772,25 @@ class TestValidateNormalizers:
 
     def test_not_a_list(self):
         assert validate_normalizers({'operation': 'multiply'}) == ['normalizers must be a list.']
+
+    def test_profile_editor_payloads_pass(self):
+        """The profile editor never writes target.table and saves field lists from a text box."""
+        normalizers = [
+            _multiply(target={'scope': 'table', 'field': 'interface.speed'}),
+            {'operation': 'sum', 'target': {'scope': 'get'},
+             'params': {'input_fields': 'cpu.user, cpu.system', 'output_field': 'cpu.active'}},
+        ]
+        coerce_field_lists(normalizers)
+        assert normalizers[1]['params']['input_fields'] == ['cpu.user', 'cpu.system']
+        assert validate_normalizers(normalizers) == []
+
+    def test_sum_generator_splits_comma_separated_fields(self):
+        components = _generate_sum_get_filter([{
+            'operation': 'sum', 'target': {'scope': 'get'},
+            'params': {'input_fields': 'cpu.user, cpu.system', 'output_field': 'cpu.active'},
+        }])
+        code = components[1]['config']['code']
+        assert 'event.get("[cpu][user]")' in code and 'event.get("[cpu][system]")' in code
 
     @pytest.mark.parametrize('path', sorted(OFFICIAL_PROFILES.glob('*.json')), ids=lambda p: p.name)
     def test_official_profiles_pass(self, path):

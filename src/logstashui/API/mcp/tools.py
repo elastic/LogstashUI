@@ -362,7 +362,7 @@ _NETWORK_FIELDS = {
 }
 
 _PROFILE_FIELDS = {
-    'name': _str('Unique profile name. Names ending in .json are treated as official.'),
+    'name': _str('Unique profile name. Names ending in .json are reserved for official profiles.'),
     'vendor': _str('Vendor.'),
     'product': _str('Product.'),
     'description': _str('Description.'),
