@@ -758,13 +758,87 @@ class TestPipelineSimulate:
         """No results by the deadline is a 408; a timeout over 180 is clamped to 180."""
         mock_parse.logstash_config_to_components.return_value = _MUTATE_COMPONENTS
         mock_start.return_value = _started()
-        mock_time.time.side_effect = [0, clock, clock]
+        mock_time.time.side_effect = [0, 0, clock, clock]
 
         response = _post(authenticated_client, '/api/pipelines/simulate/', {
             'lscl': _SIMPLE_LSCL, 'event': 'test', 'timeout': timeout,
         })
         assert response.status_code == 408
         assert response.json()['run_id'] == 'run-a'
+
+    @patch('API.pipelines_views.time')
+    @patch('API.pipelines_views.start_simulation')
+    @patch('API.pipelines_views.logstash_config_parse')
+    def test_simulate_timeout_starts_after_slot_allocation(
+        self, mock_parse, mock_start, mock_time, authenticated_client
+    ):
+        """A slow slot allocation doesn't use up the wait for results."""
+        mock_parse.logstash_config_to_components.return_value = _MUTATE_COMPONENTS
+        mock_start.return_value = _started()
+        # Allocation finishes at t=100; the result lands during the first wait.
+        mock_time.time.side_effect = [0, 100, 101, 102, 103]
+        mock_time.sleep.side_effect = lambda _s: SimulationResult.add(
+            {'run_id': 'run-a', 'snapshots': {'mut1': {}}})
+
+        response = _post(authenticated_client, '/api/pipelines/simulate/', {
+            'lscl': _SIMPLE_LSCL, 'event': 'test', 'timeout': 30,
+        })
+        assert response.status_code == 200
+        assert response.json()['complete'] is True
+
+    @patch('API.pipelines_views.time')
+    @patch('API.pipelines_views.start_simulation')
+    @patch('API.pipelines_views.logstash_config_parse')
+    def test_simulate_send_error_returns_502(
+        self, mock_parse, mock_start, mock_time, authenticated_client
+    ):
+        """When sending the event failed and nothing came back, the send error is reported."""
+        mock_parse.logstash_config_to_components.return_value = _MUTATE_COMPONENTS
+        mock_start.return_value = _started(forward_error='401 Client Error: Unauthorized')
+        mock_time.time.side_effect = [0, 0, 5, 5]
+
+        response = _post(authenticated_client, '/api/pipelines/simulate/', {
+            'lscl': _SIMPLE_LSCL, 'event': 'test', 'timeout': 1,
+        })
+        assert response.status_code == 502
+        assert '401 Client Error' in response.json()['error']
+
+    @patch('API.pipelines_views.start_simulation')
+    @patch('API.pipelines_views.logstash_config_parse')
+    def test_simulate_final_event_without_snapshots_completes(
+        self, mock_parse, mock_start, authenticated_client
+    ):
+        """No filter ran (every filter is behind a conditional): the run still finishes."""
+        mock_parse.logstash_config_to_components.return_value = _MUTATE_COMPONENTS
+        mock_start.return_value = _started()
+        SimulationResult.add({'run_id': 'run-a', 'message': 'x', 'simulation': {'id': 'original'}})
+        SimulationResult.add({'run_id': 'run-a', 'message': 'x', 'simulation': {'id': 'final'}})
+
+        response = _post(authenticated_client, '/api/pipelines/simulate/', {
+            'lscl': _SIMPLE_LSCL, 'event': 'x', 'detail': 'steps', 'timeout': 10,
+        })
+        body = response.json()
+        assert response.status_code == 200
+        assert body['complete'] is True
+        assert body['final'] == {'message': 'x'} and body['steps'] == []
+        assert body['elapsed_ms'] < 5000
+
+    @patch('API.pipelines_views.start_simulation')
+    @patch('API.pipelines_views.logstash_config_parse')
+    def test_simulate_locked_database_is_retried(self, mock_parse, mock_start, authenticated_client):
+        """A "database is locked" read is skipped for that tick; the results are read on the next."""
+        from django.db import OperationalError
+
+        mock_parse.logstash_config_to_components.return_value = _MUTATE_COMPONENTS
+        mock_start.return_value = _started()
+        done = {'run-a': [{'run_id': 'run-a', 'snapshots': {'mut1': {}}}]}
+        with patch('API.pipelines_views.SimulationResult.take',
+                   side_effect=[OperationalError('database is locked'), done]):
+            response = _post(authenticated_client, '/api/pipelines/simulate/', {
+                'lscl': _SIMPLE_LSCL, 'event': 'x', 'timeout': 10,
+            })
+        assert response.status_code == 200
+        assert response.json()['complete'] is True
 
     @pytest.mark.parametrize('body', [
         {'connection_id': 1},
@@ -849,7 +923,7 @@ class TestPipelineSimulate:
     ):
         """The first event starts the run; the rest go straight to the same slot."""
         mock_parse.logstash_config_to_components.return_value = _MUTATE_COMPONENTS
-        mock_start.return_value = _started(slot_id=4)
+        mock_start.return_value = _started(slot_id=4, agent_headers={'Authorization': 'ApiKey k'})
         mock_send.side_effect = _agent_delivers([
             {'simulation': {'step': '0'}},
             {'snapshots': {'mut1': {}}, 'message': 'b'},
@@ -878,6 +952,7 @@ class TestPipelineSimulate:
         assert (agent_url, slot_id) == ('http://agent', 4)
         assert run_id == body['events'][1]['run_id']
         assert json.loads(log_text) == {'message': 'b'}
+        assert mock_send.call_args.kwargs['agent_headers'] == {'Authorization': 'ApiKey k'}
 
     @patch('API.pipelines_views.time')
     @patch('API.pipelines_views.send_simulation_event', return_value=(False, 'connection refused'))

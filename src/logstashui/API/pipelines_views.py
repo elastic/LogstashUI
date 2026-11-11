@@ -39,13 +39,12 @@ import difflib
 import json
 import logging
 import time
-import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
 import requests
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, OperationalError, transaction
 from django.db.models import F
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -53,10 +52,10 @@ from django.views.decorators.csrf import csrf_exempt
 from Common import logstash_config_parse
 from Common.elastic_utils import get_elastic_connection
 from PipelineManager.models import Connection, Pipeline, Policy, SimulationResult
-from PipelineManager.simulation import send_simulation_event, start_simulation
+from PipelineManager.simulation import new_run_id, send_simulation_event, start_simulation
 
 from API.auth import api_require_admin, api_require_auth, parse_request_body
-from API.simulation_detail import DETAIL_LEVELS, component_index, shape_results
+from API.simulation_detail import DETAIL_LEVELS, component_index, run_status, shape_results
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +68,7 @@ _PIPELINE_WRITE_FIELDS = frozenset([
 _SIMULATE_MAX_TIMEOUT = 180  # seconds
 _SIMULATE_DEFAULT_TIMEOUT = 30
 _SIMULATE_MAX_EVENTS = 100
+_EMPTY_FINAL_GRACE = 1.0  # seconds
 
 _FIND_ES_TIMEOUT = 10  # seconds per connection, queried in parallel
 
@@ -879,8 +879,8 @@ def pipeline_simulate(request):
             with ``event``.
         sim_connection_id (int, optional): Specific simulate-agent connection.
         policy_id (int, optional): Source policy for keystore sync.
-        timeout (int, optional): Max seconds to wait for all results.
-            Default 30, max 180.
+        timeout (int, optional): Max seconds to wait for all results once the
+            simulation slot is ready. Default 30, max 180.
         detail (str, optional): ``full`` (default; raw ``results`` with every
             filter snapshot), ``steps`` (``final`` event plus per-filter
             ``steps`` listing only fields added, changed, or removed), or
@@ -1032,9 +1032,21 @@ def pipeline_simulate(request):
         )
     effective_run_id, slot_id = start.run_id, start.slot_id
 
-    results = _collect_simulation_results([effective_run_id], t_start + timeout)[effective_run_id]
+    # Slot allocation can take minutes on a cold agent; the timeout covers the wait for results.
+    results = _collect_simulation_results([effective_run_id], time.time() + timeout)[effective_run_id]
     elapsed_ms = int((time.time() - t_start) * 1000)
 
+    if not results and start.forward_error:
+        return JsonResponse(
+            {
+                'success': False,
+                'error': f'Sending the event to the simulate agent failed: {start.forward_error}',
+                'run_id': effective_run_id,
+                'slot_id': slot_id,
+                'elapsed_ms': elapsed_ms,
+            },
+            status=502,
+        )
     if not results:
         return JsonResponse(
             {
@@ -1059,7 +1071,7 @@ def pipeline_simulate(request):
         'success': True,
         'run_id': effective_run_id,
         'slot_id': slot_id,
-        'complete': any(r.get('snapshots') for r in results),
+        'complete': run_status(results) != 'pending',
         'elapsed_ms': elapsed_ms,
         **shape(results),
     }
@@ -1117,8 +1129,10 @@ def _start_simulation(request, data, components, event_text):
 def _collect_simulation_results(run_ids, deadline):
     """Read results for ``run_ids`` until every run completes or ``deadline`` passes.
 
-    The step-0 "original" event arrives first; a run is done once an event
-    carrying filter snapshots arrives (end of pipeline or a drop).
+    The step-0 "original" event arrives first; a run is done once its final
+    event arrives (see :func:`~API.simulation_detail.run_status`). A final
+    event without snapshots counts after a short grace, as in the editor, in
+    case a later one carries them.
 
     Args:
         run_ids: Run ids to wait for.
@@ -1128,11 +1142,27 @@ def _collect_simulation_results(run_ids, deadline):
         dict: ``{run_id: [result, ...]}`` for every requested run id.
     """
     collected = {run_id: [] for run_id in run_ids}
+    grace_until = {}
     while True:
-        pending = [r for r, res in collected.items() if not any(e.get('snapshots') for e in res)]
+        pending = []
+        for run_id, results in collected.items():
+            status = run_status(results)
+            if status == 'done':
+                continue
+            if status == 'empty_final':
+                until = grace_until.setdefault(run_id, time.time() + _EMPTY_FINAL_GRACE)
+                if time.time() >= until:
+                    continue
+            pending.append(run_id)
         if not pending:
             break
-        for run_id, results in SimulationResult.take(pending).items():
+        try:
+            taken = SimulationResult.take(pending)
+        except OperationalError as exc:
+            # take() rolled back, so the rows are still queued for the next tick.
+            logger.warning("API simulate: could not read results this tick: %s", exc)
+            taken = {}
+        for run_id, results in taken.items():
             collected[run_id].extend(results)
         if time.time() >= deadline:
             break
@@ -1145,7 +1175,8 @@ def _simulate_bulk(request, data, components, events, t_start, timeout, shape):
 
     The first event allocates the slot; the rest are sent straight into it,
     skipping the slot checks and keystore sync that only the first needs.
-    All runs share one ``timeout``. ``shape`` turns one run's raw results
+    All runs share one ``timeout``, counted from when the slot is ready.
+    ``shape`` turns one run's raw results
     into its response fields.
     """
     start = _start_simulation(request, data, components, events[0])
@@ -1155,22 +1186,23 @@ def _simulate_bulk(request, data, components, events, t_start, timeout, shape):
             {'success': False, 'error': start.error, 'slot_id': start.slot_id}, status=502,
         )
     slot_id = start.slot_id
+    wait_start = time.time()
     entries = [{'index': 0, 'run_id': start.run_id, 'error': start.forward_error}]
     for index, event_text in enumerate(events[1:], start=1):
-        run_id = str(uuid.uuid4())
+        run_id = new_run_id()
         _queued, forward_error = send_simulation_event(
             start.agent_url, slot_id, run_id, event_text, agent_headers=start.agent_headers,
         )
         entries.append({'index': index, 'run_id': run_id, 'error': forward_error})
 
     pending = [e['run_id'] for e in entries]
-    collected = _collect_simulation_results(pending, t_start + timeout)
+    collected = _collect_simulation_results(pending, wait_start + timeout)
     elapsed_ms = int((time.time() - t_start) * 1000)
 
     complete_count = 0
     for entry in entries:
         results = collected.get(entry['run_id'], [])
-        entry['complete'] = any(r.get('snapshots') for r in results)
+        entry['complete'] = run_status(results) != 'pending'
         complete_count += entry['complete']
         # A send error only matters if the agent never delivered results.
         forward_error = entry.pop('error')

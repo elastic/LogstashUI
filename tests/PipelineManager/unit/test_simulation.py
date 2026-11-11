@@ -3,6 +3,7 @@
 #you may not use this file except in compliance with the Elastic License.
 
 from PipelineManager.models import Connection, SimulationResult
+from PipelineManager.simulation import is_known_run_id, new_run_id
 
 from unittest.mock import patch, MagicMock, Mock
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -331,9 +332,10 @@ class TestStreamSimulate:
 
     def test_stream_simulate_success(self, client):
         """Test successful event streaming"""
+        run_id = new_run_id()
         event_data = {
             "message": "test event",
-            "run_id": "test-run-123",
+            "run_id": run_id,
             "simulation": {
                 "step": 1,
                 "id": "filter_1"
@@ -354,12 +356,44 @@ class TestStreamSimulate:
         assert data['status'] == 'ok'
 
         stored = SimulationResult.objects.get()
-        assert stored.run_id == 'test-run-123'
+        assert stored.run_id == run_id
         assert stored.payload == event_data
+
+    @pytest.mark.parametrize('run_id', [None, 'test-run-123', '6f1c0f7e-0000-4000-8000-000000000000'])
+    def test_stream_simulate_rejects_unknown_run_id(self, client, run_id):
+        """Results are only stored for runs this server started."""
+        response = client.post('/ConnectionManager/StreamSimulate/',
+                               data=json.dumps({'message': 'x', 'run_id': run_id}),
+                               content_type='application/json')
+        assert response.status_code == 403
+        assert not SimulationResult.objects.exists()
+
+    def test_run_id_expires_with_unread_results(self):
+        run_id = new_run_id()
+        assert is_known_run_id(run_id)
+        assert len(run_id) <= 64
+        later = 2_000_000_000 + SimulationResult.MAX_AGE_SECONDS + 1
+        with patch('PipelineManager.simulation.time.time', return_value=2_000_000_000):
+            fresh = new_run_id()
+        with patch('PipelineManager.simulation.time.time', return_value=later):
+            assert not is_known_run_id(fresh)
+        assert not is_known_run_id(fresh[:-1] + ('0' if fresh[-1] != '0' else '1'))
+
+    def test_stream_simulate_caps_results_per_run(self, client):
+        run_id = new_run_id()
+        with patch.object(SimulationResult, 'MAX_PER_RUN', 2):
+            statuses = [
+                client.post('/ConnectionManager/StreamSimulate/',
+                            data=json.dumps({'message': str(i), 'run_id': run_id}),
+                            content_type='application/json').status_code
+                for i in range(3)
+            ]
+        assert statuses == [200, 200, 429]
+        assert SimulationResult.objects.filter(run_id=run_id).count() == 2
 
     def test_stream_simulate_csrf_exempt(self, client):
         """Test that StreamSimulate is CSRF-exempt (can be called without token)"""
-        event_data = {"message": "test", "run_id": "test-123"}
+        event_data = {"message": "test", "run_id": new_run_id()}
 
         # Call without CSRF token - should still work
         response = client.post(
@@ -397,7 +431,7 @@ class TestStreamSimulate:
         """Test StreamSimulate with potential injection payload"""
         event_data = {
             "message": "<script>alert('XSS')</script>",
-            "run_id": "test-run-xss",
+            "run_id": new_run_id(),
             "malicious_field": "'; DROP TABLE users; --"
         }
 
@@ -516,6 +550,16 @@ class TestGetSimulationResults:
         assert response.status_code == 200
         data = json.loads(response.content)
         assert data['results'] == []
+
+    def test_get_simulation_results_locked_database_returns_empty(self, authenticated_client):
+        """A locked read is an empty poll, not a 500; the rows stay queued for the next one."""
+        from django.db import OperationalError
+
+        with patch.object(SimulationResult, 'take', side_effect=OperationalError('database is locked')):
+            response = authenticated_client.get('/ConnectionManager/GetSimulationResults/?run_id=r1')
+
+        assert response.status_code == 200
+        assert json.loads(response.content)['results'] == []
 
 
 # ============================================================================

@@ -10,6 +10,8 @@ from django.contrib.auth.decorators import login_required
 from django.template.loader import get_template
 from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
+from django.db import OperationalError
+from django.utils.crypto import constant_time_compare, salted_hmac
 from Common import logstash_config_parse
 
 from Common.decorators import require_admin_role
@@ -33,6 +35,45 @@ from Common.product_ca import agent_requests_verify
 from PipelineManager.agent_client import agent_auth_headers
 
 logger = logging.getLogger(__name__)
+
+_RUN_ID_SALT = 'PipelineManager.simulation.run_id'
+
+
+def _run_id_mac(value):
+    return salted_hmac(_RUN_ID_SALT, value).hexdigest()[:16]
+
+
+def new_run_id():
+    """Return a fresh simulation run id that :func:`StreamSimulate` will accept.
+
+    The id is a UUID, its creation time, and a short HMAC under ``SECRET_KEY``,
+    so any worker can tell a run this server started from a made-up one
+    without shared state, and an id stops being accepted once its results
+    would be pruned anyway.
+
+    Examples:
+        >>> is_known_run_id(new_run_id())
+        True
+        >>> is_known_run_id('6f1c0f7e-0000-4000-8000-000000000000')
+        False
+    """
+    value = f"{uuid.uuid4()}-{int(time.time()):08x}"
+    return f"{value}-{_run_id_mac(value)}"
+
+
+def is_known_run_id(run_id):
+    """Return True when ``run_id`` came from :func:`new_run_id` and hasn't expired.
+
+    Args:
+        run_id: The ``run_id`` a posted event carries.
+    """
+    value, _, mac = str(run_id).rpartition('-')
+    _, _, created = value.rpartition('-')
+    try:
+        age = time.time() - int(created, 16)
+    except ValueError:
+        return False
+    return 0 <= age <= SimulationResult.MAX_AGE_SECONDS and constant_time_compare(mac, _run_id_mac(value))
 
 
 def _sim_agent_url(request):
@@ -332,7 +373,7 @@ def start_simulation(components, log_text, *, ui_base_url, session, sim_connecti
             run_id = "preallocation"
             logger.info(f"[FE->BE] Slot preallocation request - {len(filter_plugins)} filter plugins: {[p.get('plugin', 'unknown') for p in filter_plugins]}")
         else:
-            run_id = str(uuid.uuid4())
+            run_id = new_run_id()
             logger.info(f"[FE->BE] Starting simulation with run_id: {run_id} - {len(filter_plugins)} filter plugins: {[p.get('plugin', 'unknown') for p in filter_plugins]}")
 
         # Get logstashagent URL early so we can use it in instrumentation
@@ -990,11 +1031,14 @@ def send_simulation_event(agent_url, slot_id, run_id, log_text, agent_headers=No
 def StreamSimulate(request):
     """Receive one simulated event from Logstash HTTP output and enqueue it.
 
-    Called by the instrumented pipeline's output for each event.
+    Called by the instrumented pipeline's output for each event. The endpoint
+    is unauthenticated, so only events whose ``run_id`` passes
+    :func:`is_known_run_id` are stored, up to ``SimulationResult.MAX_PER_RUN``
+    per run.
 
     Examples:
         # POST JSON (from the agent / Ruby http output)
-        event = {"run_id": "<uuid>", "snapshots": {"plugin-id": {...}}, ...}
+        event = {"run_id": "<new_run_id()>", "snapshots": {"plugin-id": {...}}, ...}
         # {"status": "ok"}
     """
     if request.method != 'POST':
@@ -1006,7 +1050,12 @@ def StreamSimulate(request):
 
         if not isinstance(event_data, dict):
             return JsonResponse({"error": "Event must be a JSON object"}, status=400)
-        SimulationResult.add(event_data)
+        if not is_known_run_id(event_data.get('run_id')):
+            logger.warning("StreamSimulate: rejected event for unknown or expired run_id %r",
+                           str(event_data.get('run_id'))[:64])
+            return JsonResponse({"error": "Unknown or expired run_id"}, status=403)
+        if not SimulationResult.add(event_data):
+            return JsonResponse({"error": "Too many results for this run"}, status=429)
 
         # Log detailed information about the received event
         event_run_id = event_data.get('run_id', 'MISSING')
@@ -1058,7 +1107,13 @@ def GetSimulationResults(request):
         if not run_id:
             return JsonResponse({"error": "Missing run_id parameter"}, status=400)
 
-        matching_results = SimulationResult.take([run_id])[run_id]
+        try:
+            matching_results = SimulationResult.take([run_id])[run_id]
+        except OperationalError as exc:
+            # SQLite raises "database is locked" when a result is written mid-read.
+            # take() rolled back, so the next poll gets these rows.
+            logger.warning("GetSimulationResults: could not read results this poll: %s", exc)
+            matching_results = []
 
         # Log snapshot counts for each event being returned
         snapshot_info = []

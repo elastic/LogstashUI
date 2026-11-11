@@ -1236,12 +1236,15 @@ class SimulationResult(models.Model):
 
     Examples:
         >>> SimulationResult.add({'run_id': 'r1', 'message': 'hi'})
+        True
         >>> SimulationResult.take(['r1'])
         {'r1': [{'run_id': 'r1', 'message': 'hi'}]}
     """
 
     #: Unread results older than this are dropped; no reader waits this long.
     MAX_AGE_SECONDS = 600
+    #: Results queued per run beyond this are refused.
+    MAX_PER_RUN = 1000
 
     run_id = models.CharField(max_length=64, db_index=True)
     payload = models.JSONField()
@@ -1260,10 +1263,18 @@ class SimulationResult(models.Model):
 
         Args:
             event: Decoded event JSON; ``run_id`` identifies its run.
+
+        Returns:
+            bool: False when the run already has ``MAX_PER_RUN`` queued results
+            and the event was not stored.
         """
-        cls.objects.create(run_id=str(event.get('run_id') or '')[:64], payload=event)
+        run_id = str(event.get('run_id') or '')[:64]
+        if cls.objects.filter(run_id=run_id).count() >= cls.MAX_PER_RUN:
+            return False
+        cls.objects.create(run_id=run_id, payload=event)
         cutoff = timezone.now() - timedelta(seconds=cls.MAX_AGE_SECONDS)
         cls.objects.filter(created_at__lt=cutoff).delete()
+        return True
 
     @classmethod
     def take(cls, run_ids):

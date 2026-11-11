@@ -2636,7 +2636,7 @@ curl -X POST https://logstashui.example.com/api/pipelines/simulate/ \
 | `events` | one of | Bulk mode: list of up to 100 log lines or JSON events. Mutually exclusive with `event` |
 | `sim_connection_id` | no | Specific simulate-agent connection ID. Defaults to the session-sticky agent |
 | `policy_id` | no | Source policy for keystore sync when the pipeline uses `${var}` references |
-| `timeout` | no | Seconds to wait for all results. Default `30`, maximum `180` |
+| `timeout` | no | Seconds to wait for all results once the simulation slot is ready (getting a slot on a cold agent can take longer). Default `30`, maximum `180` |
 | `detail` | no | `full` (default), `steps`, or `final`. See **Detail levels** below |
 
 Send exactly one config source: `lscl`, `pipeline_id`, or `connection_id` + `name`. Only the
@@ -2651,7 +2651,7 @@ and `count` with smaller fields and strip the fields the simulation harness adds
 
 | `detail` | Fields per event |
 |----------|------------------|
-| `final` | `final` (the event after the last filter, or `null` if it didn't finish), `dropped`, and `dropped_by` when a `drop` filter ended it |
+| `final` | `final` (the event after the last filter, or `null` if it didn't finish), `dropped`, and `dropped_by` when a `drop` filter ended it. When no filter ran (for example, every filter is inside a conditional the event didn't match), the run still completes and `steps` is empty |
 | `steps` | The `final` fields plus `filter_ms` and `steps`, one entry per filter run, in order |
 
 Each `steps` entry has `step`, `plugin`, `component` (the parser's ID), `id` (the `id` set in
@@ -2743,7 +2743,8 @@ plugins.
 `408` — no results within `timeout`. The simulate agent may still be loading the pipeline;
 retry once. Repeated timeouts mean the simulate agent is not returning results.
 
-`502` — the simulate agent rejected the pipeline or is unreachable.
+`502` — the simulate agent rejected the pipeline or is unreachable, or sending the event to it
+failed and no results arrived (`error` has the reason).
 
 ---
 

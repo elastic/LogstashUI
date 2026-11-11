@@ -1,7 +1,7 @@
 """Shape raw simulation results to a chosen level of detail.
 
 A simulation run produces a step-0 copy of the input and a final event whose
-``snapshots`` hold the event after every filter. Returned as-is that is large
+``snapshots`` hold the event after every filter (none when no filter ran). Returned as-is that is large
 (each snapshot repeats the whole event), so callers pick a level:
 
 ``full``
@@ -58,6 +58,53 @@ def component_index(components):
     return index
 
 
+def is_final_result(result):
+    """Return True when ``result`` is a run's final event, by the rule the editor uses.
+
+    The final event has ``simulation.id`` ``final``, comes from a drop filter
+    (``simulation.final`` ``true``), or is any non-original event carrying
+    filter snapshots. A final event without snapshots means no filter ran,
+    for example because every filter sits in a conditional the event didn't match.
+
+    Examples:
+        >>> is_final_result({'simulation': {'id': 'final'}})
+        True
+        >>> is_final_result({'simulation': {'id': 'original'}, 'snapshots': {}})
+        False
+    """
+    sim = result.get('simulation') or {}
+    if sim.get('id') == 'original':
+        return False
+    return (bool(result.get('snapshots')) or sim.get('id') == 'final'
+            or str(sim.get('final')).lower() == 'true')
+
+
+def run_status(results):
+    """Classify one run's results so far.
+
+    Args:
+        results: Raw results received for one run.
+
+    Returns:
+        str: ``done`` once a final event with snapshots or a drop arrived,
+        ``empty_final`` when only a final event without snapshots arrived
+        (the editor waits briefly for a later one), else ``pending``.
+
+    Examples:
+        >>> run_status([{'simulation': {'id': 'original'}}])
+        'pending'
+        >>> run_status([{'simulation': {'id': 'final'}}])
+        'empty_final'
+        >>> run_status([{'simulation': {'id': 'final'}, 'snapshots': {'f1': {}}}])
+        'done'
+    """
+    finals = [r for r in results if is_final_result(r)]
+    if any(r.get('snapshots') or str((r.get('simulation') or {}).get('final')).lower() == 'true'
+           for r in finals):
+        return 'done'
+    return 'empty_final' if finals else 'pending'
+
+
 def shape_results(results, detail, index):
     """Return the response fields for one simulated event at ``detail``.
 
@@ -75,8 +122,9 @@ def shape_results(results, detail, index):
     if detail == 'full':
         return {'results': results}
 
-    original = next((r for r in results if not r.get('snapshots')), {})
-    final = next((r for r in reversed(results) if r.get('snapshots')), None)
+    original = next((r for r in results if not is_final_result(r)), {})
+    finals = [r for r in results if is_final_result(r)]
+    final = next((r for r in reversed(finals) if r.get('snapshots')), finals[-1] if finals else None)
     if final is None:
         return {'final': None, 'dropped': False}
 
@@ -88,7 +136,8 @@ def shape_results(results, detail, index):
         shaped['dropped_by'] = _describe(sim.get('id'), index)
 
     if detail == 'steps':
-        shaped['steps'], total_ns = _steps(final['snapshots'], _clean(original, run_id), run_id, index)
+        shaped['steps'], total_ns = _steps(final.get('snapshots') or {}, _clean(original, run_id),
+                                           run_id, index)
         shaped['filter_ms'] = round(total_ns / 1e6, 3)
     return shaped
 
