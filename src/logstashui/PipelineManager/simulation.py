@@ -76,6 +76,98 @@ def is_known_run_id(run_id):
     return 0 <= age <= SimulationResult.MAX_AGE_SECONDS and constant_time_compare(mac, _run_id_mac(value))
 
 
+# Identical for every drop plugin so JRuby compiles it once. The drop decision
+# matches logstash-filter-drop: percentage == 100 || rand < percentage / 100.
+_DROP_CODE = """
+require "net/http"
+require "uri"
+require "json"
+
+percentage = event.get("[@metadata][simulation_drop_percentage]").to_f
+event.remove("[@metadata][simulation_drop_percentage]")
+dropped = percentage >= 100 || rand < (percentage / 100.0)
+event.remove("[simulation][final]") unless dropped
+
+# Create snapshot of current event state for the drop plugin
+snapshot = {}
+event.to_hash.each do |key, value|
+  # Skip metadata and snapshots field itself to avoid recursion
+  next if key.start_with?("@metadata") || key == "snapshots"
+  snapshot[key] = value
+end
+
+plugin_id = event.get("[simulation][id]")
+event.set("[snapshots][#{plugin_id}]", snapshot)
+
+if dropped
+  # A dropped event never reaches the output, so report it here
+  uri = URI.parse("__CALLBACK_URL__/ConnectionManager/StreamSimulate/")
+  http = Net::HTTP.new(uri.host, uri.port)
+  http.use_ssl = (uri.scheme == "https")
+  http.verify_mode = OpenSSL::SSL::VERIFY_NONE if http.use_ssl?
+
+  request = Net::HTTP::Post.new(uri.path, {"Content-Type" => "application/json"})
+  request.body = event.to_hash.to_json
+
+  begin
+    response = http.request(request)
+    puts "Drop plugin HTTP response: #{response.code} #{response.message}"
+  rescue => e
+    puts "Drop plugin HTTP error: #{e.class} - #{e.message}"
+    puts e.backtrace.join("\\n")
+  end
+  event.cancel
+end
+""".strip()
+
+
+def _drop_instrumentation(plugin, step, callback_url):
+    """Return the filters that stand in for a ``drop`` plugin during simulation.
+
+    A dropped event never reaches the output, so the Ruby filter posts it to
+    ``StreamSimulate`` (marked ``simulation.final``) and cancels it. With
+    ``percentage`` below 100 the event may survive; then nothing is posted,
+    the marker is removed, and the event continues to the next filter. The
+    original drop plugin is left out because the Ruby filter already decided.
+
+    Args:
+        plugin: The parsed ``drop`` component.
+        step: This plugin's step number in the run.
+        callback_url: LogstashUI base URL the simulate agent can reach.
+
+    Returns:
+        list: A ``mutate`` that sets step metadata, then the ``ruby`` filter.
+
+    Examples:
+        >>> mutate, ruby = _drop_instrumentation(
+        ...     {'id': 'filter_drop_2', 'plugin': 'drop', 'config': {'percentage': 40}},
+        ...     3, 'https://ui:8443')
+        >>> mutate['config']['replace']['[@metadata][simulation_drop_percentage]']
+        '40'
+    """
+    percentage = (plugin.get('config') or {}).get('percentage', 100)
+    return [
+        {
+            "type": "filter",
+            "plugin": "mutate",
+            "config": {
+                # replace, not add_field, so repeated drops don't build arrays
+                "replace": {
+                    "[simulation][step]": str(step),
+                    "[simulation][id]": plugin['id'],
+                    "[simulation][final]": "true",
+                    "[@metadata][simulation_drop_percentage]": str(percentage),
+                }
+            }
+        },
+        {
+            "type": "filter",
+            "plugin": "ruby",
+            "config": {"code": _DROP_CODE.replace("__CALLBACK_URL__", callback_url)},
+        },
+    ]
+
+
 def _sim_agent_url(request):
     """Resolve the simulate agent for ``request``; see :func:`_resolve_sim_agent`."""
     connection_id = (
@@ -514,89 +606,8 @@ def start_simulation(components, log_text, *, ui_base_url, session, sim_connecti
                     step_counter[0] += 1
                     current_step = step_counter[0]
 
-                    # Check if this is a drop plugin - if so, add Ruby code to send event to API before drop
                     if plugin.get('plugin') == 'drop':
-                        # Drop plugins are special - they need to send the event to the API before dropping
-                        # We don't use the normal timing instrumentation for drop plugins
-                        # Instead, we create a snapshot and send it directly via HTTP POST
-
-                        # Add mutate filter to set step and id metadata
-                        # Use replace instead of add_field to avoid array accumulation
-                        drop_metadata_plugin = {
-                            "type": "filter",
-                            "plugin": "mutate",
-                            "config": {
-                                "replace": {
-                                    "[simulation][step]": str(current_step),
-                                    "[simulation][id]": plugin['id'],
-                                    "[simulation][final]": "true"
-                                }
-                            }
-                        }
-                        instrumented.append(drop_metadata_plugin)
-
-                        # This code is now IDENTICAL for all drop plugins, allowing JRuby to compile once and reuse
-                        pre_drop_code = f"""
-require "net/http"
-require "uri"
-require "json"
-
-# Create snapshot of current event state for the drop plugin
-snapshot = {{}}
-event.to_hash.each do |key, value|
-  # Skip metadata and snapshots field itself to avoid recursion
-  next if key.start_with?("@metadata") || key == "snapshots"
-  snapshot[key] = value
-end
-
-# Get plugin ID from event field
-plugin_id = event.get("[simulation][id]")
-event.set("[snapshots][#{{plugin_id}}]", snapshot)
-
-# Note: run_id is added to the event at runtime via the simulate endpoint
-# Do NOT hardcode it here as it would change the pipeline hash for each simulation
-
-# Convert event to hash and send to API
-event_hash = event.to_hash
-
-# Debug: Log run_id to verify it exists
-run_id_value = event.get("run_id")
-puts "Drop plugin: run_id = #{{run_id_value.inspect}}"
-
-# Send HTTP POST to StreamSimulate endpoint
-uri = URI.parse("{logstash_ui_url}/ConnectionManager/StreamSimulate/")
-http = Net::HTTP.new(uri.host, uri.port)
-http.use_ssl = (uri.scheme == "https")
-http.verify_mode = OpenSSL::SSL::VERIFY_NONE if http.use_ssl?
-
-request = Net::HTTP::Post.new(uri.path, {{"Content-Type" => "application/json"}})
-request.body = event_hash.to_json
-
-begin
-  response = http.request(request)
-  # Log response for debugging
-  puts "Drop plugin HTTP response: #{{response.code}} #{{response.message}}"
-rescue => e
-  # Log error for debugging
-  puts "Drop plugin HTTP error: #{{e.class}} - #{{e.message}}"
-  puts e.backtrace.join("\\n")
-end
-""".strip()
-
-                        pre_drop_plugin = {
-                            "type": "filter",
-                            "plugin": "ruby",
-                            "config": {
-                                "code": pre_drop_code
-                            }
-                        }
-                        instrumented.append(pre_drop_plugin)
-
-                        # Add the actual drop plugin
-                        instrumented.append(plugin)
-
-                        # Skip the normal timing instrumentation for drop plugins
-                        # The event is already sent to the API, and the drop will prevent any further processing
+                        instrumented.extend(_drop_instrumentation(plugin, current_step, logstash_ui_url))
                     else:
                         # Regular plugin - add normal timing instrumentation
                         # Add pre-plugin timing instrumentation

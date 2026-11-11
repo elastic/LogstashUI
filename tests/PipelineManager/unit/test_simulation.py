@@ -3,7 +3,7 @@
 #you may not use this file except in compliance with the Elastic License.
 
 from PipelineManager.models import Connection, SimulationResult
-from PipelineManager.simulation import is_known_run_id, new_run_id
+from PipelineManager.simulation import _drop_instrumentation, is_known_run_id, new_run_id
 
 from unittest.mock import patch, MagicMock, Mock
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -454,6 +454,47 @@ class TestStreamSimulate:
         assert response.status_code == 405
         data = json.loads(response.content)
         assert 'error' in data
+
+
+# ============================================================================
+# Drop Instrumentation Tests
+# ============================================================================
+
+class TestDropInstrumentation:
+    """A drop is only reported when the event is actually dropped"""
+
+    @staticmethod
+    def _drop(config):
+        return {'id': 'filter_drop_0', 'type': 'filter', 'plugin': 'drop', 'config': config}
+
+    @pytest.mark.parametrize('config,expected', [({}, '100'), ({'percentage': 40}, '40'),
+                                                 ({'percentage': '${DROP_PCT}'}, '${DROP_PCT}')])
+    def test_percentage_passed_to_ruby(self, config, expected):
+        mutate, _ = _drop_instrumentation(self._drop(config), 3, 'http://ui:8080')
+        replace = mutate['config']['replace']
+        assert replace['[@metadata][simulation_drop_percentage]'] == expected
+        assert replace['[simulation][step]'] == '3'
+        assert replace['[simulation][id]'] == 'filter_drop_0'
+
+    def test_ruby_only_posts_and_cancels_when_dropped(self):
+        _, ruby = _drop_instrumentation(self._drop({'percentage': 40}), 1, 'http://ui:8080')
+        code = ruby['config']['code']
+        assert 'dropped = percentage >= 100 || rand < (percentage / 100.0)' in code
+        assert 'event.remove("[simulation][final]") unless dropped' in code
+        dropped_branch = code[code.index('if dropped'):]
+        assert 'http.request(request)' in dropped_branch
+        assert 'event.cancel' in dropped_branch
+        assert 'http://ui:8080/ConnectionManager/StreamSimulate/' in code
+
+    def test_ruby_identical_across_drops(self):
+        """Same code for every drop so JRuby compiles it once"""
+        codes = {_drop_instrumentation(self._drop(cfg), step, 'http://ui:8080')[1]['config']['code']
+                 for step, cfg in enumerate([{}, {'percentage': 0}, {'percentage': 75}])}
+        assert len(codes) == 1
+
+    def test_original_drop_plugin_not_included(self):
+        filters = _drop_instrumentation(self._drop({'percentage': 0}), 1, 'http://ui:8080')
+        assert [f['plugin'] for f in filters] == ['mutate', 'ruby']
 
 
 # ============================================================================
