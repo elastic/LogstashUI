@@ -885,6 +885,36 @@ class TestDeployConfiguration:
         assert [d for d in diff['networks'] if d['action'] == 'delete'] == []
         assert clients[other.id].logstash.get_pipeline.call_count == 0
 
+    def test_unreachable_network_connection_skips_orphan_cleanup(self, authenticated_client, test_network):
+        """If a network's connection can't be identified, another connection on its cluster deletes nothing."""
+        from SNMP.snmp_crud import _expected_cpm_pipelines_by_connection
+
+        other = Connection.objects.create(name='Same cluster, other key', connection_type='CENTRALIZED',
+                                          host='https://localhost:9200', username='reader', password='x')
+        discovery = next(iter(_expected_cpm_pipelines_by_connection([test_network])[test_network.connection.id]))
+        managed = {'description': '[MANAGED] SNMP discovery pipeline', 'pipeline': 'input {}'}
+        clients = self._clusters({'c1': [test_network.connection, other]}, {'c1': {discovery: managed}})
+        clients[test_network.connection.id].info.side_effect = Exception('401 Unauthorized')
+
+        diff = self._deploy_diff(authenticated_client, clients)
+
+        assert [d for d in diff['networks'] if d['action'] == 'delete'] == []
+        assert clients[other.id].logstash.get_pipeline.call_count == 0
+
+    def test_unreachable_unused_connection_does_not_block_cleanup(self, authenticated_client, test_network):
+        """A down connection no network uses doesn't stop orphan cleanup elsewhere."""
+        down = Connection.objects.create(name='Down', connection_type='CENTRALIZED',
+                                         host='https://es3:9200', username='elastic', password='x')
+        managed = {'description': '[MANAGED] SNMP discovery pipeline', 'pipeline': 'input {}'}
+        clients = self._clusters({'c1': [test_network.connection], 'c3': [down]},
+                                 {'c1': {'snmp-gone-discovery': managed}})
+        clients[down.id].info.side_effect = Exception('connection refused')
+
+        diff = self._deploy_diff(authenticated_client, clients)
+
+        deletes = [(d['pipeline_name'], d['connection_id']) for d in diff['networks'] if d['action'] == 'delete']
+        assert deletes == [('snmp-gone-discovery', test_network.connection.id)]
+
     def test_moved_network_deletes_copy_on_old_cluster(self, authenticated_client, test_network):
         """Moving a network to another cluster plans a create there and a delete of the old copy."""
         from SNMP.snmp_crud import _expected_cpm_pipelines_by_connection

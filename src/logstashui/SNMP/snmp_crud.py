@@ -999,7 +999,10 @@ def _orphan_scan_targets(expected_by_connection):
     connection on its cluster expects it, so connections are grouped by
     ``cluster_uuid`` and their expected names combined. Each cluster is read
     through a connection a network deploys through when there is one.
-    Unreachable connections and clusters are logged and skipped.
+    Unreachable connections and clusters are logged and skipped. If a
+    connection that networks deploy through can't be reached, its cluster is
+    unknown and its expected names could be missing from any cluster, so no
+    targets are returned and nothing is deleted.
 
     Args:
         expected_by_connection: Result of :func:`_expected_cpm_pipelines_by_connection`.
@@ -1022,6 +1025,12 @@ def _orphan_scan_targets(expected_by_connection):
             es = get_elastic_connection(conn.id)
             cluster = es.info()['cluster_uuid']
         except Exception as e:
+            if expected_by_connection.get(conn.id):
+                # Its cluster is unknown, so any cluster's scan could miss its names.
+                logger.warning(
+                    f"Skipping SNMP orphan cleanup: connection {conn.id} has networks but "
+                    f"could not be reached: {e}")
+                return [], cluster_of
             logger.warning(f"Could not check for orphaned pipelines on connection {conn.id}: {e}")
             continue
         cluster_of[conn.id] = cluster
