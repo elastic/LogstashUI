@@ -739,8 +739,9 @@ function generateNormalizerParamsHTML(operation, params = {}, isReadOnly = false
           <input type="${paramDef.type === 'float' ? 'number' : 'text'}" 
                  class="input input-bordered input-sm w-full normalizer-param" 
                  data-param-name="${paramName}"
+                 data-param-type="${paramDef.type}"
                  placeholder="${paramDef.default || ''}"
-                 value="${value}"
+                 value="${Array.isArray(value) ? value.join(', ') : value}"
                  ${paramDef.type === 'float' ? 'step="any"' : ''}
                  ${isReadOnly ? 'readonly' : ''}>
         </div>
@@ -1081,6 +1082,8 @@ function serializeNormalizers() {
       if (value) {
         if (input.type === 'number') {
           value = parseFloat(value);
+        } else if (input.dataset.paramType === 'field_list') {
+          value = value.split(',').map(f => f.trim()).filter(Boolean);
         }
         params[paramName] = value;
       }

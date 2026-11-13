@@ -8,6 +8,9 @@ Rows cover monitored networks and devices, SNMP credentials, poll profiles,
 device templates, and a singleton deployment-state tracker.
 """
 
+import os
+
+from django.conf import settings
 from django.db import models
 from django.core.exceptions import ValidationError
 from django.utils import timezone
@@ -631,14 +634,43 @@ class Profile(models.Model):
     
     def __str__(self):
         return self.name
-    
+
+    def official_file_path(self):
+        """Return the bundled JSON file behind an official placeholder row, or None.
+
+        Only a plain file name inside ``SNMP/data/official_profiles/`` is
+        returned, so a profile name can't point anywhere else on disk.
+
+        Examples:
+            >>> Profile(name='generic_system.json', profile_data={'is_official_placeholder': True}
+            ...         ).official_file_path().endswith('official_profiles/generic_system.json')
+            True
+            >>> Profile(name='../../secrets.json', profile_data={'is_official_placeholder': True}
+            ...         ).official_file_path() is None
+            True
+        """
+        if not isinstance(self.profile_data, dict) or not self.profile_data.get('is_official_placeholder'):
+            return None
+        filename = f"{self.name.removesuffix('.json')}.json"
+        if os.path.basename(filename) != filename or '/' in filename or '\\' in filename:
+            return None
+        return os.path.join(settings.BASE_DIR, 'SNMP', 'data', 'official_profiles', filename)
+
     def clean(self):
-        """Require `profile_data` to be a JSON object when present.
+        """Require `profile_data` to be a JSON object and `normalizers` to match `normalizers.json`.
+
+        Comma-separated `field_list` params are rewritten as lists first. Names
+        ending in ``.json`` are reserved for official profiles.
 
         Raises:
-            ValidationError: If `profile_data` is not a dict.
+            ValidationError: If `profile_data` is not a dict, a normalizer is
+                invalid, or a user profile's name ends in ``.json``.
         """
         super().clean()
+
+        is_placeholder = isinstance(self.profile_data, dict) and self.profile_data.get('is_official_placeholder')
+        if self.official_key is None and not is_placeholder and self.name.endswith('.json'):
+            raise ValidationError({'name': 'Names ending in .json are reserved for official profiles.'})
         
         if self.profile_data:
             # Ensure it's a dict
@@ -649,6 +681,12 @@ class Profile(models.Model):
             
             # Basic validation - could be expanded based on required profile structure
             # For now, just ensure it's valid JSON
+
+        from .snmp_normalizers import coerce_field_lists, validate_normalizers
+        coerce_field_lists(self.normalizers)
+        normalizer_errors = validate_normalizers(self.normalizers)
+        if normalizer_errors:
+            raise ValidationError({'normalizers': normalizer_errors})
     
     def save(self, *args, **kwargs):
         """Run `full_clean()` then persist the row."""

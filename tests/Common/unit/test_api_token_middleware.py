@@ -240,10 +240,18 @@ class TestAgentKeysUnaffected:
         client.login(username='testuser', password='testpass123')
         response = client.post(
             ADD_CONNECTION, BODY, content_type=FORM_CT,
-            HTTP_AUTHORIZATION='Bearer lsui_deadbeefcafe_bogus',
+            HTTP_AUTHORIZATION='Basic lsui_deadbeefcafe_bogus',
         )
         # Falls through to normal session handling -> CSRF rejection.
         assert response.status_code == 403
+
+    def test_bearer_scheme_resolves_admin_token(self, csrf_client):
+        """Bearer is accepted for MCP clients, so a bogus lsui_ token is rejected."""
+        response = csrf_client.post(
+            ADD_CONNECTION, BODY, content_type=FORM_CT,
+            HTTP_AUTHORIZATION='Bearer lsui_deadbeefcafe_bogus',
+        )
+        assert response.status_code == 401
 
 
 @pytest.mark.django_db

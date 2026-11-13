@@ -6,7 +6,7 @@
 
 from django.http import JsonResponse
 
-from PipelineManager.models import Revision, Policy, Connection as ConnectionTable, Keystore
+from PipelineManager.models import Revision, Policy, Pipeline, Connection as ConnectionTable, Keystore
 from PipelineManager.agent_versions import resolve_running_logstash_version
 
 from Common.decorators import require_admin_role
@@ -85,7 +85,7 @@ def deploy_policy(request):
             # Agent policies own ONLY user-authored artifacts. SNMP (and any
             # future managed subsystem) is deployed on its own channel and must
             # never enter policy revisions/rollback history.
-            'pipelines': list(policy.pipelines.filter(managed_by='user').values('name', 'description', 'lscl', 'no_input', 'non_reloadable')),
+            'pipelines': list(policy.pipelines.filter(managed_by='user').values(*Pipeline.SNAPSHOT_FIELDS)),
             'keystore': list(policy.keystore_entries.filter(managed_by='user').values('key_name', 'key_value')),
             'keystore_password_hash': policy.keystore_password_hash
         }
@@ -153,7 +153,7 @@ def get_policy_diff(request):
             'settings_path': policy.settings_path,
             'logs_path': policy.logs_path,
             'binary_path': policy.binary_path,
-            'pipelines': list(policy.pipelines.filter(managed_by='user').values('name', 'description', 'lscl', 'no_input', 'non_reloadable')),
+            'pipelines': list(policy.pipelines.filter(managed_by='user').values(*Pipeline.SNAPSHOT_FIELDS)),
             'keystore': list(policy.keystore_entries.filter(managed_by='user').values('key_name', 'key_value')),
             'keystore_password_hash': policy.keystore_password_hash
         }

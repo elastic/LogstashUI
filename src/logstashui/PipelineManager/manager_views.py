@@ -14,6 +14,7 @@ from .forms import ConnectionForm
 from PipelineManager.models import Connection as ConnectionTable
 
 from Common.decorators import require_admin_role
+from API.mcp.tools import toolset_catalog
 
 from Common.elastic_utils import get_elastic_connection, test_elastic_connectivity
 
@@ -110,6 +111,7 @@ def PipelineManager(request):
         'has_connections': has_connections,
         'form': ConnectionForm(),
         'preferred_agent_version': settings.__PREFERRED_LS_AGENT_VERSION__,
+        'mcp_toolsets': toolset_catalog(),
     })
 
 def test_connectivity(connection_id):

@@ -951,6 +951,123 @@ def _cleanup_stale_es_pipelines(networks):
     return total
 
 
+def _orphan_scan_connections():
+    """Return every CENTRALIZED connection the SNMP orphan scan should check.
+
+    All of them, not only those current networks use: deleting the last network
+    on a connection, or moving a network to another one, would otherwise leave
+    its generated CPM pipelines running forever.
+    """
+    return Connection.objects.filter(connection_type=Connection.ConnectionType.CENTRALIZED).order_by('id')
+
+
+def _expected_cpm_pipelines_by_connection(networks):
+    """Map each connection ID to the generated CPM pipeline names that should exist on it.
+
+    Args:
+        networks: Network rows.
+
+    Returns:
+        dict: ``{connection_id: {pipeline_name, ...}}`` for CENTRALIZED-mode networks.
+
+    Examples:
+        >>> _expected_cpm_pipelines_by_connection([])
+        {}
+    """
+    expected = {}
+    for network in networks:
+        if network.deployment_mode == 'AGENT' or not network.connection:
+            continue
+        names = expected.setdefault(network.connection.id, set())
+        devices = Device.objects.filter(network=network).select_related('device_template')
+        if devices.exists():
+            for template in _get_unique_templates_for_network(devices):
+                names.add(_get_template_pipeline_name(network, template, 'polling'))
+        network_prefix = f"snmp-{_sanitize_pipeline_name_component(network.name)}"
+        if network.traps_enabled:
+            names.add(f"{network_prefix}-traps")
+        if network.discovery_enabled:
+            names.add(f"{network_prefix}-discovery")
+    return expected
+
+
+def _orphan_scan_targets(expected_by_connection):
+    """List each Elasticsearch cluster's CPM pipelines once for the SNMP orphan scan.
+
+    Several CENTRALIZED connections can point at one cluster (for example with
+    different API keys). A generated pipeline is only an orphan when no
+    connection on its cluster expects it, so connections are grouped by
+    ``cluster_uuid`` and their expected names combined. Each cluster is read
+    through a connection a network deploys through when there is one.
+    Unreachable connections and clusters are logged and skipped. If a
+    connection that networks deploy through can't be reached, its cluster is
+    unknown and its expected names could be missing from any cluster, so no
+    targets are returned and nothing is deleted.
+
+    Args:
+        expected_by_connection: Result of :func:`_expected_cpm_pipelines_by_connection`.
+
+    Returns:
+        tuple: ``(targets, cluster_of)``. ``targets`` has one dict per
+        reachable cluster with ``connection``, ``es``, ``pipelines`` (the
+        ``get_pipeline()`` result), and ``expected`` (combined names).
+        ``cluster_of`` maps each reachable connection ID to its cluster UUID.
+
+    Examples:
+        >>> targets, cluster_of = _orphan_scan_targets({})  # no CENTRALIZED connections
+        >>> targets, cluster_of
+        ([], {})
+    """
+    groups = {}
+    cluster_of = {}
+    for conn in _orphan_scan_connections():
+        try:
+            es = get_elastic_connection(conn.id)
+            cluster = es.info()['cluster_uuid']
+        except Exception as e:
+            if expected_by_connection.get(conn.id):
+                # Its cluster is unknown, so any cluster's scan could miss its names.
+                logger.warning(
+                    f"Skipping SNMP orphan cleanup: connection {conn.id} has networks but "
+                    f"could not be reached: {e}")
+                return [], cluster_of
+            logger.warning(f"Could not check for orphaned pipelines on connection {conn.id}: {e}")
+            continue
+        cluster_of[conn.id] = cluster
+        group = groups.setdefault(cluster, {'connection': conn, 'es': es, 'expected': set()})
+        if conn.id in expected_by_connection:
+            if group['connection'].id not in expected_by_connection:
+                group.update(connection=conn, es=es)
+            group['expected'] |= expected_by_connection[conn.id]
+
+    targets = []
+    for group in groups.values():
+        try:
+            group['pipelines'] = group['es'].logstash.get_pipeline() or {}
+        except Exception as e:
+            logger.warning(
+                f"Could not check for orphaned pipelines on connection {group['connection'].id}: {e}")
+            continue
+        targets.append(group)
+    return targets, cluster_of
+
+
+def _is_snmp_orphan(pipeline_name, pipeline_data, expected):
+    """Return True for a generated (`[MANAGED]` `snmp-*`) CPM pipeline not in ``expected``.
+
+    Examples:
+        >>> _is_snmp_orphan('snmp-old-discovery', {'description': '[MANAGED] SNMP discovery pipeline'}, set())
+        True
+        >>> _is_snmp_orphan('snmp-test', {'description': 'hand-written'}, set())
+        False
+        >>> _is_snmp_orphan('snmp-old-discovery', {'description': None}, set())
+        False
+    """
+    return (pipeline_name.startswith('snmp-')
+            and '[MANAGED]' in ((pipeline_data or {}).get('description') or '')
+            and pipeline_name not in expected)
+
+
 def _compute_agent_network_diffs(networks, profile_cache=None):
     """Diff generated Agent-mode pipeline configs against Django Pipeline rows.
 
@@ -1965,77 +2082,51 @@ def GetDeployDiff(request):
         # ---- Agent-mode networks: compare generated configs vs Django records ----
         network_diffs.extend(_compute_agent_network_diffs(networks, profile_cache))
 
-        # Check for orphaned pipelines that will be deleted
-        # Build a set of expected pipeline names
-        expected_pipelines = set()
-        for network in networks:
-            if network.deployment_mode == 'AGENT':
-                continue
-            if network.connection:
-                # Add per-template polling pipelines
-                devices = Device.objects.filter(network=network).select_related('device_template')
-                if devices.exists():
-                    templates = _get_unique_templates_for_network(devices)
-                    for template in templates:
-                        pipeline_name = _get_template_pipeline_name(network, template, 'polling')
-                        expected_pipelines.add(pipeline_name)
-                
-                # Add trap pipeline if traps are enabled
-                if network.traps_enabled:
-                    expected_pipelines.add(f"snmp-{_sanitize_pipeline_name_component(network.name)}-traps")
-                # Add discovery pipeline if discovery is enabled
-                if network.discovery_enabled:
-                    expected_pipelines.add(f"snmp-{_sanitize_pipeline_name_component(network.name)}-discovery")
-        
-        # Pipelines already scheduled for an explicit delete by the per-network
-        # branches above (e.g. discovery/traps toggled off). Exclude these from
-        # the orphan scan so the same pipeline doesn't get two delete entries.
-        already_in_diff = {d['pipeline_name'] for d in network_diffs}
+        # Check for orphaned pipelines that will be deleted, on every CENTRALIZED
+        # connection's cluster, so pipelines left behind by a deleted or moved
+        # network are still found.
+        expected_by_connection = _expected_cpm_pipelines_by_connection(networks)
+        orphan_targets, cluster_of = _orphan_scan_targets(expected_by_connection)
+        networks_by_name = {n.name: n for n in networks}
 
-        # Check each connection for orphaned pipelines
-        connections_checked = set()
-        for network in networks:
-            if network.deployment_mode == 'AGENT':
+        # CPM pipelines the per-network branches above already delete (e.g.
+        # discovery/traps toggled off), by cluster, so they don't get a second
+        # delete entry. Only deletes count: a create on another cluster must not
+        # hide the old copy.
+        already_deleted = set()
+        for d in network_diffs:
+            if d.get('action') != 'delete' or d.get('deployment_mode') == 'AGENT':
                 continue
-            if network.connection and network.connection.id not in connections_checked:
-                connections_checked.add(network.connection.id)
-                conn_id = network.connection.id
-                
-                try:
-                    # Fetch ALL pipelines from this connection to find orphans
-                    es_client = get_elastic_connection(conn_id)
-                    all_pipelines = es_client.logstash.get_pipeline()
-                    
-                    # Find orphaned SNMP pipelines
-                    for pipeline_name, pipeline_data in all_pipelines.items():
-                        # Check if it's a managed SNMP pipeline (starts with "snmp-")
-                        if pipeline_name.startswith("snmp-"):
-                            description = pipeline_data.get('description', '')
-                            
-                            if '[MANAGED]' in description and pipeline_name not in expected_pipelines and pipeline_name not in already_in_diff:
-                                # This is an orphaned pipeline - add to diffs as delete
-                                network_diffs.append({
-                                    'network_name': 'Orphaned',
-                                    'pipeline_name': pipeline_name,
-                                    'current': pipeline_data.get('pipeline', ''),
-                                    'new': '',
-                                    'pipeline_type': 'orphaned',
-                                    'action': 'delete',
-                                    'connection_id': conn_id,
-                                    'destination_type': 'cpm',
-                                    'destination_name': network.connection.name,
-                                    'note': 'Pipeline no longer matches any configured network/template'
-                                })
-                except Exception as e:
-                    # Connection error or ES error - skip orphan detection for this connection
-                    logger.warning(f"Could not check for orphaned pipelines on connection {conn_id}: {str(e)}")
+            net = networks_by_name.get(d.get('network_name'))
+            conn_id = d.get('connection_id') or (net.connection.id if net and net.connection else None)
+            already_deleted.add((cluster_of.get(conn_id), d['pipeline_name']))
+
+        for target in orphan_targets:
+            orphan_connection = target['connection']
+            cluster = cluster_of[orphan_connection.id]
+            for pipeline_name, pipeline_data in target['pipelines'].items():
+                if (cluster, pipeline_name) in already_deleted:
+                    continue
+                if not _is_snmp_orphan(pipeline_name, pipeline_data, target['expected']):
+                    continue
+                network_diffs.append({
+                    'network_name': 'Orphaned',
+                    'pipeline_name': pipeline_name,
+                    'current': (pipeline_data or {}).get('pipeline', ''),
+                    'new': '',
+                    'pipeline_type': 'orphaned',
+                    'action': 'delete',
+                    'connection_id': orphan_connection.id,
+                    'destination_type': 'cpm',
+                    'destination_name': orphan_connection.name,
+                    'note': 'Pipeline no longer matches any configured network/template'
+                })
         
         # Enrich centralized (CPM) diff entries with destination + connection info
         # and, for keystore-credential-mode networks, the ${KEY} names the operator
         # must add manually via logstash-keystore. Agent-mode entries already carry
         # their destination from _compute_agent_network_diffs.
         _ref_re = re.compile(r'\$\{([A-Za-z0-9_]+)\}')
-        networks_by_name = {n.name: n for n in networks}
         for d in network_diffs:
             if d.get('deployment_mode') == 'AGENT':
                 continue
@@ -2309,12 +2400,6 @@ def DeployConfiguration(request):
         # Query all networks with their credentials
         networks = Network.objects.select_related('credential', 'discovery_credential', 'connection').all()
 
-        if not networks.exists():
-            return JsonResponse({
-                'success': False,
-                'error': 'No networks configured'
-            }, status=400)
-
         pipelines_created = 0
         pipelines_updated = 0
         pipelines_deleted = 0
@@ -2586,58 +2671,19 @@ def DeployConfiguration(request):
         # Cleanup orphaned pipelines
         # Get all managed SNMP pipelines from Elasticsearch and delete ones that don't match current networks
         try:
-            # Build a set of expected pipeline names
-            expected_pipelines = set()
-            for network in networks:
-                if network.deployment_mode == 'AGENT':
-                    continue
-                if network.connection:
-                    # Add per-template polling pipelines
-                    devices = Device.objects.filter(network=network).select_related('device_template')
-                    if devices.exists():
-                        templates = _get_unique_templates_for_network(devices)
-                        for template in templates:
-                            pipeline_name = _get_template_pipeline_name(network, template, 'polling')
-                            expected_pipelines.add(pipeline_name)
-                    
-                    # Add trap pipeline if traps are enabled
-                    if network.traps_enabled:
-                        expected_pipelines.add(f"snmp-{_sanitize_pipeline_name_component(network.name)}-traps")
-                    # Add discovery pipeline if discovery is enabled
-                    if network.discovery_enabled:
-                        expected_pipelines.add(f"snmp-{_sanitize_pipeline_name_component(network.name)}-discovery")
-
-            # Get all pipelines from Elasticsearch for each connection
-            connections_checked = set()
-            for network in networks:
-                if network.deployment_mode == 'AGENT':
-                    continue
-                if network.connection and network.connection.id not in connections_checked:
-                    connections_checked.add(network.connection.id)
+            expected_by_connection = _expected_cpm_pipelines_by_connection(networks)
+            orphan_targets, _cluster_of = _orphan_scan_targets(expected_by_connection)
+            for target in orphan_targets:
+                for pipeline_name, pipeline_data in target['pipelines'].items():
+                    if not _is_snmp_orphan(pipeline_name, pipeline_data, target['expected']):
+                        continue
                     try:
-                        es = get_elastic_connection(network.connection.id)
-                        all_pipelines = es.logstash.get_pipeline()
-
-                        # Find orphaned SNMP pipelines
-                        for pipeline_name in all_pipelines.keys():
-                            # Check if it's a managed SNMP pipeline (starts with "snmp-")
-                            if pipeline_name.startswith("snmp-"):
-                                # Check if it has the [MANAGED] tag in description
-                                pipeline_data = all_pipelines[pipeline_name]
-                                description = pipeline_data.get('description', '')
-
-                                if '[MANAGED]' in description and pipeline_name not in expected_pipelines:
-                                    # This is an orphaned pipeline, delete it
-                                    try:
-                                        es.logstash.delete_pipeline(id=pipeline_name)
-                                        pipelines_deleted += 1
-                                        logger.info(f"Deleted orphaned pipeline: {pipeline_name}")
-                                    except Exception as delete_err:
-                                        errors.append(
-                                            f"Failed to delete orphaned pipeline '{pipeline_name}': {str(delete_err)}")
-                    except Exception as conn_err:
-                        # Connection error, skip this connection
-                        pass
+                        target['es'].logstash.delete_pipeline(id=pipeline_name)
+                        pipelines_deleted += 1
+                        logger.info(f"Deleted orphaned pipeline: {pipeline_name}")
+                    except Exception as delete_err:
+                        errors.append(
+                            f"Failed to delete orphaned pipeline '{pipeline_name}': {str(delete_err)}")
         except Exception as cleanup_err:
             errors.append(f"Pipeline cleanup error: {str(cleanup_err)}")
 

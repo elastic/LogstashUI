@@ -47,6 +47,7 @@ DELETE /api/snmp/templates/{id}/      template_detail  (admin)
 
 import json
 import logging
+import re
 from decimal import Decimal, InvalidOperation
 
 from django.core.exceptions import ValidationError
@@ -60,7 +61,7 @@ from Common.elastic_utils import get_elastic_connection
 from Common.formatters import _sanitize_pipeline_name_component
 from Common.validators import validate_namespace
 
-from API.auth import api_require_auth, api_require_admin, parse_request_body
+from API.auth import api_require_auth, api_require_admin, parse_request_body, protected_response
 
 logger = logging.getLogger(__name__)
 
@@ -910,6 +911,17 @@ def _profile_list_data(p):
 
 
 def _profile_detail_data(p):
+    """Return one profile, reading official profiles' OIDs from their bundled JSON file.
+
+    Official rows only hold an ``is_official_placeholder`` marker in the database.
+    """
+    profile_data = p.profile_data or {}
+    normalizers = p.normalizers or []
+    if profile_data.get('is_official_placeholder'):
+        from SNMP.snmp_test import load_profile_data
+        official = load_profile_data(p)
+        profile_data = {key: official.get(key) or {} for key in ('get', 'walk', 'table')}
+        normalizers = official.get('normalizers') or normalizers
     return {
         'id': p.id,
         'name': p.name,
@@ -917,8 +929,8 @@ def _profile_detail_data(p):
         'product': p.product or '',
         'description': p.description or '',
         'is_official': p.name.endswith('.json'),
-        'profile_data': p.profile_data or {},
-        'normalizers': p.normalizers or [],
+        'profile_data': profile_data,
+        'normalizers': normalizers,
         'created_at': p.created_at.isoformat(),
         'updated_at': p.updated_at.isoformat(),
     }
@@ -952,6 +964,21 @@ def _list_profiles(request):
     return JsonResponse({'profiles': items, 'total': len(items)})
 
 
+_OFFICIAL_MARKER_ERROR = 'profile_data cannot contain is_official_placeholder; it is reserved for official profiles.'
+
+
+def _claims_official(profile_data):
+    """Return True when user-supplied ``profile_data`` carries the official-row marker.
+
+    Examples:
+        >>> _claims_official({'is_official_placeholder': True})
+        True
+        >>> _claims_official({'get': {}})
+        False
+    """
+    return isinstance(profile_data, dict) and 'is_official_placeholder' in profile_data
+
+
 @api_require_admin
 def _create_profile(request):
     data = parse_request_body(request)
@@ -965,6 +992,8 @@ def _create_profile(request):
     if Profile.objects.filter(name=name).exists():
         # H7/M7 fix: duplicate profile should return 409 Conflict, not 400.
         return JsonResponse({'success': False, 'error': 'A profile with this name already exists.'}, status=409)
+    if _claims_official(data.get('profile_data')):
+        return JsonResponse({'success': False, 'error': _OFFICIAL_MARKER_ERROR}, status=400)
 
     profile = Profile(
         name=name,
@@ -1018,6 +1047,9 @@ def _update_profile(request, profile_id):
     except Profile.DoesNotExist:
         return JsonResponse({'success': False, 'error': 'Profile not found.'}, status=404)
 
+    if p.name.endswith('.json'):
+        return protected_response('Official profiles cannot be modified. Create a custom profile with a new name instead.')
+
     data = parse_request_body(request)
 
     new_name = (data.get('name') or p.name).strip()
@@ -1031,6 +1063,8 @@ def _update_profile(request, profile_id):
     if 'product' in data:
         p.product = data['product'] or ''
     if 'profile_data' in data:
+        if _claims_official(data['profile_data']):
+            return JsonResponse({'success': False, 'error': _OFFICIAL_MARKER_ERROR}, status=400)
         p.profile_data = data['profile_data'] or {}
     if 'normalizers' in data:
         p.normalizers = data['normalizers'] or []
@@ -1059,10 +1093,7 @@ def _delete_profile(request, profile_id):
     # Bug 3 fix: protect ALL official profiles (name ends in .json), not just
     # the two that were hard-coded before.
     if p.name.endswith('.json'):
-        return JsonResponse(
-            {'success': False, 'error': 'Official profiles cannot be deleted.'},
-            status=403,
-        )
+        return protected_response('Official profiles cannot be deleted.')
 
     name = p.name
     p.delete()
@@ -1253,7 +1284,7 @@ def _update_template(request, template_id):
         return JsonResponse({'success': False, 'error': 'Device template not found.'}, status=404)
 
     if t.official:
-        return JsonResponse({'success': False, 'error': 'Official templates cannot be modified.'}, status=403)
+        return protected_response('Official templates cannot be modified.')
 
     data = parse_request_body(request)
     if 'name' in data and data['name']:
@@ -1303,7 +1334,7 @@ def _delete_template(request, template_id):
         return JsonResponse({'success': False, 'error': 'Device template not found.'}, status=404)
 
     if t.official:
-        return JsonResponse({'success': False, 'error': 'Official templates cannot be deleted.'}, status=403)
+        return protected_response('Official templates cannot be deleted.')
 
     name = t.name
     t.delete()  # DeviceTemplate.delete() reassigns devices to the default template
@@ -1342,17 +1373,148 @@ def deploy_diff(request):
     """Compute and return the deployment diff (desired vs actual pipelines).
 
     POST /api/snmp/deploy/diff/
-    Admin only. Caches the plan for 60 seconds so a subsequent
+    Admin only. Caches the full plan for 60 seconds so a subsequent
     POST /api/snmp/deploy/apply/ can reuse it without recomputing.
+
+    Body (all optional):
+        detail: ``full`` (default) returns each entry's raw ``current`` and
+            ``new`` config. ``summary`` returns ``counts`` and one row per
+            change without config. ``changes`` is ``summary`` plus a unified
+            ``diff`` per entry. Secret values in config (community strings,
+            passwords, API keys) are always returned as ``[redacted]``.
+        pipelines: Pipeline names to restrict ``changes``/``full`` entries to.
+            ``counts`` always cover the whole plan.
+
+    Example:
+        curl -X POST -H "Authorization: ApiKey $KEY" -H "Content-Type: application/json" \\
+          -d '{"detail": "changes", "pipelines": ["snmp-lab-discovery"]}' \\
+          https://logstashui.example.com/api/snmp/deploy/diff/
     """
     if request.method != 'POST':
         return JsonResponse({'error': 'Method not allowed'}, status=405)
+    data = parse_request_body(request)
+    detail = data.get('detail') or 'full'
+    if detail not in _DIFF_DETAILS:
+        return JsonResponse({'success': False, 'error': f"detail must be one of: {', '.join(_DIFF_DETAILS)}."}, status=400)
+    names = data.get('pipelines')
+    if names is not None and (not isinstance(names, list) or not all(isinstance(n, str) for n in names)):
+        return JsonResponse({'success': False, 'error': 'pipelines must be a list of pipeline names.'}, status=400)
     try:
         from SNMP.snmp_crud import GetDeployDiff
-        return GetDeployDiff(request)
+        response = GetDeployDiff(request)
+        if response.status_code != 200:
+            return response
+        return JsonResponse(_shape_deploy_diff(json.loads(response.content), detail, names))
     except Exception as exc:
         logger.error("API deploy diff: %s", exc)
         return JsonResponse({'success': False, 'error': 'An internal error occurred. Check server logs.'}, status=500)
+
+
+_DIFF_DETAILS = ('full', 'summary', 'changes')
+
+#: Diff entry keys kept in ``summary`` and ``changes`` rows.
+_DIFF_ROW_KEYS = ('pipeline_name', 'action', 'pipeline_type', 'network_name', 'template_name',
+                  'deployment_mode', 'destination_type', 'destination_name', 'connection_id',
+                  'agent_policy_id', 'manual_keystore_keys', 'note')
+
+_SECRET_KEYS = r'(?:api_key|cloud_auth|community|auth_pass|priv_pass|\w*password)'
+
+#: One LSCL string token, as the Logstash grammar reads it (may span lines).
+_LSCL_STRING = r'''"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*\''''
+
+#: A secret setting (bare or quoted key) and its value: one string or a list of strings.
+_SECRET_SETTING_RE = re.compile(
+    rf'''((?:\b{_SECRET_KEYS}\b|(["']){_SECRET_KEYS}\2)\s*=>\s*)'''
+    rf'''({_LSCL_STRING}|\[\s*(?:(?:{_LSCL_STRING})\s*,?\s*)*\])''',
+    re.DOTALL,
+)
+
+_KEYSTORE_REF_RE = re.compile(r'''(["'])\$\{[^}]*\}\1''')
+
+
+def _mask_string(match):
+    token = match.group(0)
+    return token if _KEYSTORE_REF_RE.fullmatch(token) else f'{token[0]}[redacted]{token[0]}'
+
+
+def _mask_secrets(lscl):
+    """Replace secret values in generated LSCL with ``[redacted]``.
+
+    Every string in a secret setting's value is masked, including list items
+    (the snmptrap ``community`` list), quoted keys, and values that span
+    lines. A value that is exactly a ``${VAR}`` keystore reference is kept.
+
+    Examples:
+        >>> _mask_secrets('community => "public" api_key => "${ES_KEY}"')
+        'community => "[redacted]" api_key => "${ES_KEY}"'
+        >>> _mask_secrets('"community" => ["a", \\'b\\']')
+        '"community" => ["[redacted]", \\'[redacted]\\']'
+    """
+    return _SECRET_SETTING_RE.sub(
+        lambda m: m.group(1) + re.sub(_LSCL_STRING, _mask_string, m.group(3), flags=re.DOTALL),
+        lscl or '',
+    )
+
+
+def _diff_counts(entries):
+    """Count plan entries the way ``snmp_deploy_apply`` reports them.
+
+    Keystore-drift entries are counted as ``keystore_updates`` and error
+    entries as ``errors``; neither adds to the pipeline counts.
+
+    Examples:
+        >>> _diff_counts([{'action': 'update', 'pipeline_type': 'polling'},
+        ...               {'action': 'update', 'pipeline_type': 'keystore'}])
+        {'create': 0, 'update': 1, 'delete': 0, 'keystore_updates': 1, 'errors': 0}
+    """
+    counts = {'create': 0, 'update': 0, 'delete': 0, 'keystore_updates': 0, 'errors': 0}
+    for entry in entries:
+        action = entry.get('action')
+        if action == 'error':
+            counts['errors'] += 1
+        elif entry.get('pipeline_type') == 'keystore':
+            counts['keystore_updates'] += 1
+        elif action in ('create', 'update', 'delete'):
+            counts[action] += 1
+    return counts
+
+
+def _shape_deploy_diff(plan, detail, names):
+    """Reduce a full ``GetDeployDiff`` payload to the requested detail level.
+
+    Args:
+        plan: Decoded full diff payload.
+        detail: ``summary``, ``changes``, or ``full``.
+        names: Optional pipeline names to keep in ``networks``.
+
+    Returns:
+        dict: The payload with ``counts`` added, ``networks`` trimmed, and
+        secret values in ``current``/``new`` config masked.
+    """
+    import difflib
+
+    entries = [{**e, 'current': _mask_secrets(e.get('current')), 'new': _mask_secrets(e.get('new'))}
+               for e in plan.get('networks') or []]
+    shaped = {**plan, 'counts': _diff_counts(entries)}
+    if names is not None:
+        wanted = set(names)
+        entries = [e for e in entries if e.get('pipeline_name') in wanted]
+    if detail == 'full':
+        shaped['networks'] = entries
+        return shaped
+
+    rows = []
+    for entry in entries:
+        row = {key: entry[key] for key in _DIFF_ROW_KEYS if entry.get(key) not in (None, '', [])}
+        if detail == 'changes':
+            row['diff'] = ''.join(difflib.unified_diff(
+                entry['current'].splitlines(keepends=True),
+                entry['new'].splitlines(keepends=True),
+                fromfile='current', tofile='new', n=2,
+            ))
+        rows.append(row)
+    shaped['networks'] = rows
+    return shaped
 
 
 @csrf_exempt

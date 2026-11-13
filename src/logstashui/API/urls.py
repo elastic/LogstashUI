@@ -6,9 +6,14 @@
 
 from django.urls import path
 
-from API import connections_views, security_views, snmp_views, policies_views, pipelines_views
+from API import connections_views, guides, security_views, snmp_views, policies_views, pipelines_views
+from API.mcp import views as mcp_views
 
 urlpatterns = [
+    # MCP — both forms, since clients POST to the exact URL and APPEND_SLASH can't redirect a POST
+    path('mcp', mcp_views.mcp_endpoint, name='api-mcp'),
+    path('mcp/', mcp_views.mcp_endpoint),
+
     # Connections
     path('connections/', connections_views.connection_list, name='api-connections-list'),
     path('connections/<int:connection_id>/', connections_views.connection_detail, name='api-connections-detail'),
@@ -41,10 +46,15 @@ urlpatterns = [
 
     # Pipelines — agent/policy (Django ORM, integer IDs)
     path('pipelines/', pipelines_views.pipeline_list, name='api-pipeline-list'),
+    path('pipelines/find/', pipelines_views.pipeline_find, name='api-pipeline-find'),
+    path('pipelines/recent/', pipelines_views.pipeline_recent, name='api-pipeline-recent'),
     path('pipelines/simulate/', pipelines_views.pipeline_simulate, name='api-pipeline-simulate'),
     path('pipelines/policies/<int:policy_id>/deploy/', pipelines_views.policy_deploy, name='api-pipeline-deploy'),
-    path('pipelines/es/<int:connection_id>/', pipelines_views.es_pipeline_list, name='api-es-pipeline-list'),
-    path('pipelines/es/<int:connection_id>/<str:name>/', pipelines_views.es_pipeline_detail, name='api-es-pipeline-detail'),
+    path('pipelines/centralized/<int:connection_id>/', pipelines_views.centralized_pipeline_list, name='api-centralized-pipeline-list'),
+    path('pipelines/centralized/<int:connection_id>/<str:name>/', pipelines_views.centralized_pipeline_detail, name='api-centralized-pipeline-detail'),
+    # Deprecated alias shipped in v0.5.3; keep for existing clients.
+    path('pipelines/es/<int:connection_id>/', pipelines_views.centralized_pipeline_list),
+    path('pipelines/es/<int:connection_id>/<str:name>/', pipelines_views.centralized_pipeline_detail),
     path('pipelines/<int:pipeline_id>/', pipelines_views.pipeline_detail, name='api-pipeline-detail'),
 
     # Policies
@@ -64,4 +74,8 @@ urlpatterns = [
     path('security/keys/', security_views.key_list, name='api-security-key-list'),
     path('security/keys/<int:key_id>/revoke/', security_views.key_revoke, name='api-security-key-revoke'),
     path('security/keys/<int:key_id>/', security_views.key_detail, name='api-security-key-detail'),
+
+    # Agent guides
+    path('guides/', guides.guide_list, name='api-guides-list'),
+    path('guides/<str:topic>/', guides.guide_detail, name='api-guides-detail'),
 ]

@@ -240,11 +240,12 @@ class TestTemplateUpdate:
         })
         assert list(template.profiles.values_list('id', flat=True)) == [new_profile.id]
 
-    def test_update_official_template_403(self, authenticated_client, official_template):
+    def test_update_official_template_409(self, authenticated_client, official_template):
         r = _put(authenticated_client, f'/api/snmp/templates/{official_template.id}/', {
             'description': 'trying to edit official',
         })
-        assert r.status_code == 403
+        assert r.status_code == 409
+        assert r.json()['code'] == 'protected'
 
     def test_update_404(self, authenticated_client):
         assert _put(authenticated_client, '/api/snmp/templates/99999/', {}).status_code == 404
@@ -269,9 +270,10 @@ class TestTemplateDelete:
         assert r.status_code == 200
         assert not DeviceTemplate.objects.filter(id=tid).exists()
 
-    def test_delete_official_403(self, authenticated_client, official_template):
+    def test_delete_official_409(self, authenticated_client, official_template):
         r = authenticated_client.delete(f'/api/snmp/templates/{official_template.id}/')
-        assert r.status_code == 403
+        assert r.status_code == 409
+        assert r.json()['code'] == 'protected'
         assert DeviceTemplate.objects.filter(id=official_template.id).exists()
 
     def test_delete_returns_success(self, authenticated_client, template):

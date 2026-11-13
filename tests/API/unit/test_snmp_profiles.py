@@ -47,7 +47,7 @@ def profile(db):
 def official_profile(db):
     """Simulate an official profile (name ends with .json)."""
     return Profile.objects.create(
-        name='official_thing.json', vendor='Official',
+        name='official_thing.json', vendor='Official', official_key='official_thing',
         profile_data=SAMPLE_PROFILE_DATA, normalizers=[],
     )
 
@@ -137,6 +137,27 @@ class TestProfileGet:
     def test_get_is_official_true(self, authenticated_client, official_profile):
         assert authenticated_client.get(f'/api/snmp/profiles/{official_profile.id}/').json()['profile']['is_official'] is True
 
+    def test_get_official_placeholder_returns_file_data(self, authenticated_client, settings, tmp_path):
+        settings.BASE_DIR = str(tmp_path)
+        profile_dir = tmp_path / 'SNMP' / 'data' / 'official_profiles'
+        profile_dir.mkdir(parents=True)
+        (profile_dir / 'shipped.json').write_text(json.dumps({
+            'official_key': 'shipped', 'name': 'shipped',
+            'get': {'ups.battery.voltage': '1.3.6.1.2.1.33.1.2.5.0'},
+            'table': {'interface': {'columns': {'index': '1.3.6.1.2.1.2.2.1.1'}}},
+            'normalizers': [{'operation': 'multiply'}],
+        }))
+        placeholder = Profile.objects.create(
+            name='shipped.json', vendor='Any', profile_data={'is_official_placeholder': True},
+        )
+        d = authenticated_client.get(f'/api/snmp/profiles/{placeholder.id}/').json()['profile']
+        assert d['profile_data'] == {
+            'get': {'ups.battery.voltage': '1.3.6.1.2.1.33.1.2.5.0'},
+            'walk': {},
+            'table': {'interface': {'columns': {'index': '1.3.6.1.2.1.2.2.1.1'}}},
+        }
+        assert d['normalizers'] == [{'operation': 'multiply'}]
+
     def test_get_404(self, authenticated_client):
         assert authenticated_client.get('/api/snmp/profiles/99999/').status_code == 404
 
@@ -182,6 +203,57 @@ class TestProfileCreate:
         })
         assert r.status_code == 409
 
+    def test_create_bad_normalizer_400(self, authenticated_client):
+        r = _post(authenticated_client, '/api/snmp/profiles/', {
+            'name': 'bad_norm', 'vendor': 'Acme', 'profile_data': SAMPLE_PROFILE_DATA,
+            'normalizers': [{'operation': 'multiply', 'target': {'scope': 'get', 'field': 'x'},
+                             'params': {'factor': 0.1}}],
+        })
+        assert r.status_code == 400
+        assert "unknown param 'factor'" in json.dumps(r.json()['error'])
+        assert not Profile.objects.filter(name='bad_norm').exists()
+
+    def test_create_stores_comma_separated_field_list_as_list(self, authenticated_client):
+        r = _post(authenticated_client, '/api/snmp/profiles/', {
+            'name': 'sum_norm', 'vendor': 'Acme', 'profile_data': SAMPLE_PROFILE_DATA,
+            'normalizers': [{'operation': 'sum', 'target': {'scope': 'get'},
+                             'params': {'input_fields': 'a, b', 'output_field': 'c'}}],
+        })
+        assert r.status_code == 201, r.json()
+        stored = Profile.objects.get(name='sum_norm').normalizers
+        assert stored[0]['params']['input_fields'] == ['a', 'b']
+
+    @pytest.mark.parametrize('normalizer, message', [
+        ({'operation': ['multiply'], 'target': {'scope': 'get', 'field': 'a'}}, 'unknown operation'),
+        ({'operation': {'op': 'multiply'}, 'target': {'scope': 'get', 'field': 'a'}}, 'unknown operation'),
+        ({'operation': 'multiply', 'target': {'scope': 'get', 'field': ['a']},
+          'params': {'multiply_value': 2}}, 'target.field must be a non-empty string'),
+        ({'operation': 'multiply', 'target': {'scope': 'get', 'field': '  '},
+          'params': {'multiply_value': 2}}, 'target.field must be a non-empty string'),
+        ({'operation': 'sum', 'target': {'scope': 'get'},
+          'params': {'input_fields': ['a', 1], 'output_field': 'c'}}, "'input_fields' must be a list of field names"),
+    ])
+    def test_create_malformed_normalizer_400(self, authenticated_client, normalizer, message):
+        r = _post(authenticated_client, '/api/snmp/profiles/', {
+            'name': 'bad_norm', 'vendor': 'Acme', 'profile_data': SAMPLE_PROFILE_DATA,
+            'normalizers': [normalizer],
+        })
+        assert r.status_code == 400, r.content
+        assert message in json.dumps(r.json()['error'])
+
+    @pytest.mark.parametrize('body, message', [
+        ({'name': 'mine.json'}, 'reserved for official profiles'),
+        ({'name': '../../secrets.json', 'profile_data': {'is_official_placeholder': True}},
+         'is_official_placeholder'),
+    ])
+    def test_create_cannot_claim_official_400(self, authenticated_client, body, message):
+        r = _post(authenticated_client, '/api/snmp/profiles/', {
+            'vendor': 'Acme', 'profile_data': SAMPLE_PROFILE_DATA, **body,
+        })
+        assert r.status_code == 400
+        assert message in json.dumps(r.json()['error'])
+        assert not Profile.objects.filter(name=body['name']).exists()
+
     def test_create_no_auth_401(self, client):
         assert _post(client, '/api/snmp/profiles/', {'name': 'x', 'vendor': 'y'}).status_code == 401
 
@@ -220,6 +292,43 @@ class TestProfileUpdate:
         })
         assert r.status_code == 400
 
+    @pytest.mark.parametrize('body', [
+        {'name': 'mine.json'},
+        {'profile_data': {'is_official_placeholder': True}},
+    ])
+    def test_update_cannot_claim_official_400(self, authenticated_client, profile, body):
+        r = _put(authenticated_client, f'/api/snmp/profiles/{profile.id}/', body)
+        assert r.status_code == 400
+        profile.refresh_from_db()
+        assert not profile.name.endswith('.json')
+        assert 'is_official_placeholder' not in profile.profile_data
+
+    def test_official_file_path_stays_in_official_dir(self, db):
+        placeholder = {'is_official_placeholder': True}
+        assert Profile(name='generic_system.json', profile_data=placeholder).official_file_path() \
+            .endswith('/official_profiles/generic_system.json')
+        assert Profile(name='../../db.json', profile_data=placeholder).official_file_path() is None
+        assert Profile(name='custom', profile_data={'get': {}}).official_file_path() is None
+
+    def test_update_bad_normalizer_400(self, authenticated_client, profile):
+        r = _put(authenticated_client, f'/api/snmp/profiles/{profile.id}/', {
+            'normalizers': [{'operation': 'nope'}],
+        })
+        assert r.status_code == 400
+        profile.refresh_from_db()
+        assert profile.normalizers != [{'operation': 'nope'}]
+
+    def test_update_official_409(self, authenticated_client, db):
+        p = Profile.objects.create(
+            name='generic_system.json', vendor='System',
+            profile_data={'is_official_placeholder': True}, normalizers=[],
+        )
+        r = _put(authenticated_client, f'/api/snmp/profiles/{p.id}/', {'description': 'edited'})
+        assert r.status_code == 409
+        assert r.json()['code'] == 'protected'
+        p.refresh_from_db()
+        assert p.description != 'edited'
+
     def test_update_404(self, authenticated_client):
         assert _put(authenticated_client, '/api/snmp/profiles/99999/', {}).status_code == 404
 
@@ -246,18 +355,21 @@ class TestProfileDelete:
         # Bug 3 fix: only profiles whose name ends in '.json' are protected as
         # "official".  A profile named 'system' (no .json suffix) is a user
         # profile and must be deletable.  The companion test
-        # test_delete_generic_system_json_403 covers the .json protection path.
+        # test_delete_generic_system_json_409 covers the .json protection path.
         sys_profile = Profile.objects.create(
             name='system', vendor='System', profile_data=SAMPLE_PROFILE_DATA, normalizers=[],
         )
         assert authenticated_client.delete(f'/api/snmp/profiles/{sys_profile.id}/').status_code == 200
 
-    def test_delete_generic_system_json_403(self, authenticated_client, db):
+    def test_delete_generic_system_json_409(self, authenticated_client, db):
         p = Profile.objects.create(
-            name='generic_system.json', vendor='System',
+            name='generic_system.json', vendor='System', official_key='generic_system',
             profile_data=SAMPLE_PROFILE_DATA, normalizers=[],
         )
-        assert authenticated_client.delete(f'/api/snmp/profiles/{p.id}/').status_code == 403
+        r = authenticated_client.delete(f'/api/snmp/profiles/{p.id}/')
+        assert r.status_code == 409
+        assert r.json()['code'] == 'protected'
+        assert Profile.objects.filter(id=p.id).exists()
 
     def test_delete_404(self, authenticated_client):
         assert authenticated_client.delete('/api/snmp/profiles/99999/').status_code == 404

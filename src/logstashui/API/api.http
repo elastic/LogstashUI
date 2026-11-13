@@ -628,8 +628,8 @@ Authorization: ApiKey {{apiKey}}
 
 # Pipeline variables
 @pipelineId = 1
-@esPipelineName = my-pipeline
-@esPipelineConnId = 17
+@centralizedPipelineName = my-pipeline
+@centralizedPipelineConnId = 17
 
 ###
 # List pipelines for a policy (user-managed only by default)
@@ -687,49 +687,49 @@ Authorization: ApiKey {{apiKey}}
 Content-Length: 0
 
 ### =====================================================================
-### PIPELINES — Elasticsearch / Centralized
+### PIPELINES — Centralized Pipeline Management (Logstash CPM, not ingest pipelines)
 ### =====================================================================
 
 ###
-# List all ES-managed pipelines for a connection
-GET {{baseUrl}}/api/pipelines/es/{{esPipelineConnId}}/
+# List all CPM pipelines for a CENTRALIZED connection
+GET {{baseUrl}}/api/pipelines/centralized/{{centralizedPipelineConnId}}/
 Authorization: ApiKey {{apiKey}}
 
 ###
-# Get a single ES pipeline by name
-GET {{baseUrl}}/api/pipelines/es/{{esPipelineConnId}}/{{esPipelineName}}/
+# Get a single CPM pipeline by name
+GET {{baseUrl}}/api/pipelines/centralized/{{centralizedPipelineConnId}}/{{centralizedPipelineName}}/
 Authorization: ApiKey {{apiKey}}
 
 ###
-# Create an ES pipeline
-POST {{baseUrl}}/api/pipelines/es/{{esPipelineConnId}}/
+# Create a CPM pipeline
+POST {{baseUrl}}/api/pipelines/centralized/{{centralizedPipelineConnId}}/
 Authorization: ApiKey {{apiKey}}
 Content-Type: application/json
 
 {
-  "name": "{{esPipelineName}}",
+  "name": "{{centralizedPipelineName}}",
   "lscl": "input { beats { port => 5044 } }\nfilter {}\noutput { elasticsearch { hosts => [\"localhost:9200\"] } }",
-  "description": "ES pipeline via API",
+  "description": "CPM pipeline via API",
   "pipeline_workers": 1,
   "pipeline_batch_size": 128,
   "queue_type": "memory"
 }
 
 ###
-# Update an ES pipeline
-PUT {{baseUrl}}/api/pipelines/es/{{esPipelineConnId}}/{{esPipelineName}}/
+# Update a CPM pipeline
+PUT {{baseUrl}}/api/pipelines/centralized/{{centralizedPipelineConnId}}/{{centralizedPipelineName}}/
 Authorization: ApiKey {{apiKey}}
 Content-Type: application/json
 
 {
   "lscl": "input { beats { port => 5044 } }\nfilter { mutate { add_field => { \"env\" => \"prod\" } } }\noutput { elasticsearch { hosts => [\"localhost:9200\"] } }",
-  "description": "Updated ES pipeline",
+  "description": "Updated CPM pipeline",
   "pipeline_workers": 2
 }
 
 ###
-# Delete an ES pipeline
-DELETE {{baseUrl}}/api/pipelines/es/{{esPipelineConnId}}/{{esPipelineName}}/
+# Delete a CPM pipeline
+DELETE {{baseUrl}}/api/pipelines/centralized/{{centralizedPipelineConnId}}/{{centralizedPipelineName}}/
 Authorization: ApiKey {{apiKey}}
 
 ### =====================================================================

@@ -2,12 +2,13 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
-from PipelineManager.models import Connection
-from PipelineManager.simulation import simulation_results, simulation_lock
+from PipelineManager.models import Connection, SimulationResult
+from PipelineManager.simulation import _drop_instrumentation, is_known_run_id, new_run_id
 
 from unittest.mock import patch, MagicMock, Mock
 from django.core.files.uploadedfile import SimpleUploadedFile
-from collections import deque
+from datetime import timedelta
+from django.utils import timezone
 
 import json
 import pytest
@@ -331,13 +332,10 @@ class TestStreamSimulate:
 
     def test_stream_simulate_success(self, client):
         """Test successful event streaming"""
-        # Clear the queue before test
-        with simulation_lock:
-            simulation_results.clear()
-
+        run_id = new_run_id()
         event_data = {
             "message": "test event",
-            "run_id": "test-run-123",
+            "run_id": run_id,
             "simulation": {
                 "step": 1,
                 "id": "filter_1"
@@ -357,14 +355,45 @@ class TestStreamSimulate:
         data = json.loads(response.content)
         assert data['status'] == 'ok'
 
-        # Verify event was stored
-        with simulation_lock:
-            assert len(simulation_results) == 1
-            assert simulation_results[0]['run_id'] == 'test-run-123'
+        stored = SimulationResult.objects.get()
+        assert stored.run_id == run_id
+        assert stored.payload == event_data
+
+    @pytest.mark.parametrize('run_id', [None, 'test-run-123', '6f1c0f7e-0000-4000-8000-000000000000'])
+    def test_stream_simulate_rejects_unknown_run_id(self, client, run_id):
+        """Results are only stored for runs this server started."""
+        response = client.post('/ConnectionManager/StreamSimulate/',
+                               data=json.dumps({'message': 'x', 'run_id': run_id}),
+                               content_type='application/json')
+        assert response.status_code == 403
+        assert not SimulationResult.objects.exists()
+
+    def test_run_id_expires_with_unread_results(self):
+        run_id = new_run_id()
+        assert is_known_run_id(run_id)
+        assert len(run_id) <= 64
+        later = 2_000_000_000 + SimulationResult.MAX_AGE_SECONDS + 1
+        with patch('PipelineManager.simulation.time.time', return_value=2_000_000_000):
+            fresh = new_run_id()
+        with patch('PipelineManager.simulation.time.time', return_value=later):
+            assert not is_known_run_id(fresh)
+        assert not is_known_run_id(fresh[:-1] + ('0' if fresh[-1] != '0' else '1'))
+
+    def test_stream_simulate_caps_results_per_run(self, client):
+        run_id = new_run_id()
+        with patch.object(SimulationResult, 'MAX_PER_RUN', 2):
+            statuses = [
+                client.post('/ConnectionManager/StreamSimulate/',
+                            data=json.dumps({'message': str(i), 'run_id': run_id}),
+                            content_type='application/json').status_code
+                for i in range(3)
+            ]
+        assert statuses == [200, 200, 429]
+        assert SimulationResult.objects.filter(run_id=run_id).count() == 2
 
     def test_stream_simulate_csrf_exempt(self, client):
         """Test that StreamSimulate is CSRF-exempt (can be called without token)"""
-        event_data = {"message": "test", "run_id": "test-123"}
+        event_data = {"message": "test", "run_id": new_run_id()}
 
         # Call without CSRF token - should still work
         response = client.post(
@@ -387,16 +416,22 @@ class TestStreamSimulate:
         data = json.loads(response.content)
         assert 'error' in data
 
+    def test_stream_simulate_non_object_returns_400(self, client):
+        """A JSON array or scalar is not an event and is not stored"""
+        response = client.post(
+            '/ConnectionManager/StreamSimulate/',
+            data='[1, 2]',
+            content_type='application/json'
+        )
+
+        assert response.status_code == 400
+        assert not SimulationResult.objects.exists()
+
     def test_stream_simulate_injection_attempt(self, client):
         """Test StreamSimulate with potential injection payload"""
-        # Clear the queue
-        with simulation_lock:
-            simulation_results.clear()
-
-        # Attempt to inject malicious data
         event_data = {
             "message": "<script>alert('XSS')</script>",
-            "run_id": "test-run-xss",
+            "run_id": new_run_id(),
             "malicious_field": "'; DROP TABLE users; --"
         }
 
@@ -407,13 +442,10 @@ class TestStreamSimulate:
         )
 
         assert response.status_code == 200
-        
-        # Verify data is stored as-is (will be escaped when rendered)
-        with simulation_lock:
-            assert len(simulation_results) == 1
-            stored_event = simulation_results[0]
-            # Data should be stored but will be escaped during rendering
-            assert stored_event['message'] == "<script>alert('XSS')</script>"
+
+        # Data should be stored as-is; it is escaped when rendered
+        stored_event = SimulationResult.objects.get().payload
+        assert stored_event['message'] == "<script>alert('XSS')</script>"
 
     def test_stream_simulate_method_not_allowed(self, client):
         """Test StreamSimulate with GET request"""
@@ -422,6 +454,83 @@ class TestStreamSimulate:
         assert response.status_code == 405
         data = json.loads(response.content)
         assert 'error' in data
+
+
+# ============================================================================
+# Drop Instrumentation Tests
+# ============================================================================
+
+class TestDropInstrumentation:
+    """A drop is only reported when the event is actually dropped"""
+
+    @staticmethod
+    def _drop(config):
+        return {'id': 'filter_drop_0', 'type': 'filter', 'plugin': 'drop', 'config': config}
+
+    @pytest.mark.parametrize('config,expected', [({}, '100'), ({'percentage': 40}, '40'),
+                                                 ({'percentage': '${DROP_PCT}'}, '${DROP_PCT}')])
+    def test_percentage_passed_to_ruby(self, config, expected):
+        mutate, _ = _drop_instrumentation(self._drop(config), 3, 'http://ui:8080')
+        replace = mutate['config']['replace']
+        assert replace['[@metadata][simulation_drop_percentage]'] == expected
+        assert replace['[simulation][step]'] == '3'
+        assert replace['[simulation][id]'] == 'filter_drop_0'
+
+    def test_ruby_only_posts_and_cancels_when_dropped(self):
+        _, ruby = _drop_instrumentation(self._drop({'percentage': 40}), 1, 'http://ui:8080')
+        code = ruby['config']['code']
+        assert 'dropped = percentage >= 100 || rand < (percentage / 100.0)' in code
+        assert 'event.remove("[simulation][final]") unless dropped' in code
+        dropped_branch = code[code.index('if dropped'):]
+        assert 'http.request(request)' in dropped_branch
+        assert 'event.cancel' in dropped_branch
+        assert 'http://ui:8080/ConnectionManager/StreamSimulate/' in code
+
+    def test_ruby_identical_across_drops(self):
+        """Same code for every drop so JRuby compiles it once"""
+        codes = {_drop_instrumentation(self._drop(cfg), step, 'http://ui:8080')[1]['config']['code']
+                 for step, cfg in enumerate([{}, {'percentage': 0}, {'percentage': 75}])}
+        assert len(codes) == 1
+
+    def test_original_drop_plugin_not_included(self):
+        filters = _drop_instrumentation(self._drop({'percentage': 0}), 1, 'http://ui:8080')
+        assert [f['plugin'] for f in filters] == ['mutate', 'ruby']
+
+
+# ============================================================================
+# SimulationResult Tests
+# ============================================================================
+
+@pytest.mark.django_db
+class TestSimulationResult:
+    """Results are stored in the database so every server worker sees them"""
+
+    def test_take_returns_requested_runs_in_arrival_order_and_deletes_them(self):
+        SimulationResult.add({"run_id": "a", "n": 1})
+        SimulationResult.add({"run_id": "b", "n": 2})
+        SimulationResult.add({"run_id": "a", "n": 3})
+
+        taken = SimulationResult.take(["a", "missing"])
+
+        assert [r["n"] for r in taken["a"]] == [1, 3]
+        assert taken["missing"] == []
+        assert list(SimulationResult.objects.values_list("run_id", flat=True)) == ["b"]
+        assert SimulationResult.take(["a"]) == {"a": []}
+
+    def test_add_prunes_results_older_than_max_age(self):
+        SimulationResult.add({"run_id": "old"})
+        SimulationResult.objects.update(
+            created_at=timezone.now() - timedelta(seconds=SimulationResult.MAX_AGE_SECONDS + 1)
+        )
+
+        SimulationResult.add({"run_id": "new"})
+
+        assert list(SimulationResult.objects.values_list("run_id", flat=True)) == ["new"]
+
+    def test_event_without_run_id_is_stored_under_empty_run_id(self):
+        SimulationResult.add({"message": "no run"})
+
+        assert SimulationResult.objects.get().run_id == ""
 
 
 # ============================================================================
@@ -434,21 +543,9 @@ class TestGetSimulationResults:
 
     def test_get_simulation_results_success(self, authenticated_client):
         """Test successful retrieval of simulation results"""
-        # Clear and populate queue
-        with simulation_lock:
-            simulation_results.clear()
-            simulation_results.append({
-                "message": "event 1",
-                "run_id": "test-run-1"
-            })
-            simulation_results.append({
-                "message": "event 2",
-                "run_id": "test-run-1"
-            })
-            simulation_results.append({
-                "message": "event 3",
-                "run_id": "test-run-2"
-            })
+        SimulationResult.add({"message": "event 1", "run_id": "test-run-1"})
+        SimulationResult.add({"message": "event 2", "run_id": "test-run-1"})
+        SimulationResult.add({"message": "event 3", "run_id": "test-run-2"})
 
         response = authenticated_client.get('/ConnectionManager/GetSimulationResults/?run_id=test-run-1')
 
@@ -458,10 +555,8 @@ class TestGetSimulationResults:
         assert len(data['results']) == 2
         assert all(r['run_id'] == 'test-run-1' for r in data['results'])
 
-        # Verify only run-1 events were removed from queue
-        with simulation_lock:
-            assert len(simulation_results) == 1
-            assert simulation_results[0]['run_id'] == 'test-run-2'
+        # Only run-1 events were removed
+        assert list(SimulationResult.objects.values_list('run_id', flat=True)) == ['test-run-2']
 
     def test_get_simulation_results_no_run_id(self, authenticated_client):
         """Test GetSimulationResults without run_id parameter"""
@@ -472,18 +567,11 @@ class TestGetSimulationResults:
         assert 'error' in data
         assert 'run_id' in data['error']
 
-    def test_get_simulation_results_race_condition_safety(self, authenticated_client):
-        """Test GetSimulationResults handles concurrent access safely"""
-        # Populate queue
-        with simulation_lock:
-            simulation_results.clear()
-            for i in range(100):
-                simulation_results.append({
-                    "message": f"event {i}",
-                    "run_id": "test-run-race"
-                })
+    def test_get_simulation_results_are_returned_once(self, authenticated_client):
+        """A second poll for the same run does not return the same events again"""
+        for i in range(100):
+            SimulationResult.add({"message": f"event {i}", "run_id": "test-run-race"})
 
-        # Make multiple concurrent-like requests
         response1 = authenticated_client.get('/ConnectionManager/GetSimulationResults/?run_id=test-run-race')
         response2 = authenticated_client.get('/ConnectionManager/GetSimulationResults/?run_id=test-run-race')
 
@@ -493,20 +581,26 @@ class TestGetSimulationResults:
         data1 = json.loads(response1.content)
         data2 = json.loads(response2.content)
 
-        # First request should get all events, second should get none
         assert len(data1['results']) == 100
         assert len(data2['results']) == 0
 
     def test_get_simulation_results_empty_queue(self, authenticated_client):
         """Test GetSimulationResults when no results exist"""
-        with simulation_lock:
-            simulation_results.clear()
-
         response = authenticated_client.get('/ConnectionManager/GetSimulationResults/?run_id=nonexistent')
 
         assert response.status_code == 200
         data = json.loads(response.content)
         assert data['results'] == []
+
+    def test_get_simulation_results_locked_database_returns_empty(self, authenticated_client):
+        """A locked read is an empty poll, not a 500; the rows stay queued for the next one."""
+        from django.db import OperationalError
+
+        with patch.object(SimulationResult, 'take', side_effect=OperationalError('database is locked')):
+            response = authenticated_client.get('/ConnectionManager/GetSimulationResults/?run_id=r1')
+
+        assert response.status_code == 200
+        assert json.loads(response.content)['results'] == []
 
 
 # ============================================================================

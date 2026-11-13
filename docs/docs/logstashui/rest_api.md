@@ -1,7 +1,8 @@
 # REST API Reference
 
 LogstashUI exposes a JSON REST API under `/api/`. All endpoints require an API key
-unless noted otherwise.
+unless noted otherwise. The same endpoints are available to AI clients as tools through the
+[MCP server](/docs/docs/logstashui/mcp.md).
 
 ---
 
@@ -13,6 +14,7 @@ unless noted otherwise.
 - [SNMP](#snmp-devices)
 - [Policies](#policies)
 - [Pipelines](#pipelines)
+- [Agent guides](#agent-guides)
 
 ---
 
@@ -78,7 +80,7 @@ All endpoints return `application/json`. HTTP status codes are meaningful:
 | `404` | Resource not found |
 | `405` | Wrong HTTP method |
 | `408` | Simulation timeout — agent did not return results within the requested window |
-| `409` | Conflict (e.g. duplicate name at the database level) |
+| `409` | Conflict: a duplicate name, or a write to a protected object (body has `"code": "protected"`) |
 | `502` | Upstream error — Elasticsearch or simulate agent returned an unexpected response |
 
 ---
@@ -142,6 +144,9 @@ POST /api/connections/
 
 The connection is tested before being saved. If the connectivity test fails the record is
 rolled back and an error is returned.
+
+Put the port in `port`, not in `host`. A port written into `host` (`https://es.example.com:9200`)
+is moved to `port`; if `port` is also set to a different value, the request fails with `400`.
 
 **URL + basic auth:**
 
@@ -1189,7 +1194,8 @@ curl -H "Authorization: ApiKey $KEY" \
 GET /api/snmp/profiles/{id}/
 ```
 
-Returns the full profile including `profile_data` and `normalizers`.
+Returns the full profile including `profile_data` and `normalizers`. Official profiles
+(`is_official: true`) return the OIDs and normalizers from the JSON file they ship in.
 
 ```bash
 curl -H "Authorization: ApiKey $KEY" \
@@ -1274,6 +1280,7 @@ PUT /api/snmp/profiles/{id}/
 ```
 
 **Required role:** admin. Renaming is supported via the `name` field; the endpoint checks for conflicts.
+Official profiles (`is_official: true`) cannot be modified (`409`, `"code": "protected"`).
 
 ```bash
 curl -X PUT https://logstashui.example.com/api/snmp/profiles/36/ \
@@ -1302,7 +1309,7 @@ curl -X PUT https://logstashui.example.com/api/snmp/profiles/36/ \
 DELETE /api/snmp/profiles/{id}/
 ```
 
-**Required role:** admin. The built-in `system` and `generic_system.json` profiles cannot be deleted (`403`).
+**Required role:** admin. Official profiles (names ending in `.json`) cannot be deleted (`409`, `"code": "protected"`).
 
 ```bash
 curl -X DELETE https://logstashui.example.com/api/snmp/profiles/36/ \
@@ -1322,7 +1329,7 @@ to automatically classify newly discovered devices. They also control which metr
 collected from a device.
 
 **Official templates** ship with LogstashUI (`official: true`). They cannot be modified
-or deleted — `PUT` and `DELETE` both return `403`.
+or deleted — `PUT` and `DELETE` both return `409` with `"code": "protected"`.
 
 All write operations require **admin** role. Reads require any authenticated user.
 
@@ -1458,7 +1465,7 @@ If any profile ID in `profiles` does not exist, it is silently skipped and the r
 PUT /api/snmp/templates/{id}/
 ```
 
-**Required role:** admin. Returns `403` for official templates.
+**Required role:** admin. Returns `409` with `"code": "protected"` for official templates.
 If `profiles` is provided, the existing profile list is **replaced** (not merged).
 
 ```bash
@@ -1484,7 +1491,7 @@ curl -X PUT https://logstashui.example.com/api/snmp/templates/17/ \
 DELETE /api/snmp/templates/{id}/
 ```
 
-**Required role:** admin. Returns `403` for official templates.
+**Required role:** admin. Returns `409` with `"code": "protected"` for official templates.
 
 ```bash
 curl -X DELETE https://logstashui.example.com/api/snmp/templates/17/ \
@@ -1535,9 +1542,31 @@ POST /api/snmp/deploy/diff/
 **Required role:** admin. Compares the desired pipeline set against what is currently deployed.
 Results are cached for 60 seconds so the subsequent `apply` call can reuse them.
 
+Leftover generated pipelines are found on **every** CENTRALIZED connection, including ones no
+current network uses, and listed as `delete` entries with `pipeline_type: "orphaned"`.
+
+| Body field | Default | Description |
+|---|---|---|
+| `detail` | `full` | `full`: each entry with its raw `current` and `new` config. `summary`: `counts` and one row per entry without config. `changes`: `summary` plus a unified `diff` per entry. |
+| `pipelines` | all | Pipeline names to keep in `networks`. `counts` always cover the whole plan. |
+
+Every response includes `counts` (`create`, `update`, `delete`, `keystore_updates`, `errors`),
+counted the same way `apply` reports them.
+
+Secret values in the generated config (community strings, SNMPv3 passwords, Elasticsearch API
+keys and passwords) are returned as `[redacted]` at every detail level; `${VAR}` keystore
+references are kept. The pipelines `apply` pushes still contain the real values.
+
 ```bash
 curl -X POST https://logstashui.example.com/api/snmp/deploy/diff/ \
   -H "Authorization: ApiKey $KEY"
+```
+
+```bash
+curl -X POST https://logstashui.example.com/api/snmp/deploy/diff/ \
+  -H "Authorization: ApiKey $KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"detail": "changes", "pipelines": ["snmp-office-discovery"]}'
 ```
 
 ```json
@@ -1637,7 +1666,8 @@ a **deploy** snapshots them as a new revision. Agents pull the latest snapshot o
 GET /api/policies/
 ```
 
-Returns all non-EMBEDDED policies with an active agent count.
+Returns all non-EMBEDDED policies with an active agent count. Add `?include_config=false` to
+leave out `logstash_yml`, `jvm_options`, and `log4j2_properties`.
 
 ```bash
 curl -H "Authorization: ApiKey $KEY" https://logstashui.example.com/api/policies/
@@ -1689,7 +1719,8 @@ GET /api/policies/{id}/
 curl -H "Authorization: ApiKey $KEY" https://logstashui.example.com/api/policies/1/
 ```
 
-Returns the same fields as the list. `404` if not found.
+Returns the same fields as the list, and takes the same `?include_config=false`. `404` if not
+found.
 
 ---
 
@@ -1755,6 +1786,7 @@ PUT /api/policies/{id}/
 Pass only the fields you want to change. Two immutability rules apply:
 
 - `policy_type` cannot be changed — send it matching the current value or omit it entirely.
+- `EMBEDDED` policies cannot be updated (`409`, `"code": "protected"`).
 - System `SIMULATE` and `MANAGED` policies are **path-locked**: `settings_path`, `logs_path`,
   `data_path`, and `keystore_env_file` are ignored. `jvm_options`, `logstash_yml`,
   `log4j2_properties`, `logstash_source`, `logstash_version`, and `binary_path` remain editable.
@@ -1781,8 +1813,8 @@ curl -X PUT https://logstashui.example.com/api/policies/5/ \
 DELETE /api/policies/{id}/
 ```
 
-**Required role:** admin. System policies (`is_system: true`) cannot be deleted. A policy
-with one or more assigned agent connections also cannot be deleted.
+**Required role:** admin. System policies (`is_system: true`) cannot be deleted (`409`,
+`"code": "protected"`). A policy with one or more assigned agent connections also cannot be deleted.
 
 ```bash
 curl -X DELETE https://logstashui.example.com/api/policies/5/ \
@@ -1842,7 +1874,7 @@ Type promotion rules:
 - `PACKAGED` or `DEFAULT` source → clone becomes `MANAGED` (paths rewritten to managed scheme)
 - `MANAGED` source → clone is `MANAGED`
 - `SIMULATE` source → clone is `SIMULATE`
-- `EMBEDDED` source → `403` (cannot clone)
+- `EMBEDDED` source → `409` with `"code": "protected"` (cannot clone)
 
 ```bash
 curl -X POST https://logstashui.example.com/api/policies/1/clone/ \
@@ -1875,8 +1907,8 @@ GET /api/policies/{id}/diff/
 
 **Required role:** admin
 
-Compares the current live policy state against the last deployed revision. Returns the full
-`current` and `previous` snapshots and a count of changed sections.
+Compares the current live policy state against the last deployed revision. Returns a count of
+changed sections and, depending on `detail`, the full snapshots or a list of what changed.
 
 Changed sections counted: `logstash_yml`, `jvm_options`, `log4j2_properties`, pipelines,
 keystore entries, keystore password, and global paths (`settings_path`, `logs_path`,
@@ -1910,9 +1942,50 @@ curl -H "Authorization: ApiKey $KEY" \
 }
 ```
 
-When `pending_changes > 0` the `current` and `previous` snapshots can be diffed
-field-by-field to show exactly what changed. `pending_changes: 0` means the live state
-matches the last deployed revision exactly.
+`pending_changes: 0` means the live state matches the last deployed revision exactly.
+
+| Query param | Description |
+|-------------|-------------|
+| `detail` | `full` (default): the `current` and `previous` snapshots shown above. `summary`: a `changes` object naming what changed, without snapshots. `changes`: `summary` plus unified `diffs`. Any other value returns `400`. |
+
+`pending_changes` is the same in every mode. With `detail=summary`, `changes` lists the changed
+config files and paths, the pipelines added, removed, or changed (with the fields that changed),
+and the keystore key names added, removed, or given a new value. Keystore values never appear.
+A pipeline field missing from an older snapshot is not compared.
+
+```bash
+curl -H "Authorization: ApiKey $KEY" \
+  "https://logstashui.example.com/api/policies/5/diff/?detail=changes"
+```
+
+```json
+{
+  "success": true,
+  "policy_name": "my-policy",
+  "current_revision": 5,
+  "last_deployed_revision": 4,
+  "has_undeployed_changes": true,
+  "pending_changes": 3,
+  "changes": {
+    "config_files": ["logstash_yml"],
+    "paths": [],
+    "pipelines": {
+      "added": ["syslog"],
+      "removed": [],
+      "changed": [{"name": "asa", "fields": ["lscl", "pipeline_workers"]}]
+    },
+    "keystore": {"added": [], "removed": [], "changed": ["ES_PW"]},
+    "keystore_password_changed": false,
+    "diffs": {
+      "config_files": {"logstash_yml": "--- a/logstash_yml\n+++ b/logstash_yml\n@@ ..."},
+      "pipelines": {"asa": "--- a/asa\n+++ b/asa\n@@ ...", "syslog": "--- a/syslog\n+++ b/syslog\n@@ ..."}
+    }
+  }
+}
+```
+
+`diffs.pipelines` covers added pipelines and pipelines whose `lscl` changed; a pipeline that
+only changed settings appears in `changes.pipelines.changed` without a diff.
 
 ---
 
@@ -2008,7 +2081,7 @@ curl -X DELETE https://logstashui.example.com/api/policies/5/tokens/2/ \
 Manage Logstash pipelines across two storage backends:
 
 - **Agent pipelines** — stored in the LogstashUI database, scoped to an agent policy, and deployed to Logstash agents on check-in. Identified by an integer `id`.
-- **Elasticsearch pipelines** — stored directly in Elasticsearch via the Logstash pipeline API (`/_logstash/pipeline`). Identified by pipeline name within a connection.
+- **Centralized pipelines** — Logstash pipelines stored through Elasticsearch's Logstash pipeline API (`/_logstash/pipeline`) and pulled by Logstash nodes running Centralized Pipeline Management (CPM). Identified by pipeline name within a `CENTRALIZED` connection. These are not Elasticsearch ingest pipelines.
 
 All write operations require **admin** role. Reads require any authenticated user.
 
@@ -2224,23 +2297,30 @@ curl -X POST https://logstashui.example.com/api/pipelines/policies/1/deploy/ \
 
 ---
 
-## Elasticsearch Pipelines
+## Centralized Pipelines
 
-Manage pipelines stored directly in Elasticsearch via the Logstash pipeline management API.
-These pipelines are delivered to Logstash via centralized pipeline management (CPM), not
-through the agent check-in flow. There is no deploy step — changes are live immediately.
+Manage Logstash pipelines delivered through Centralized Pipeline Management (CPM). LogstashUI
+stores them with Elasticsearch's Logstash pipeline API (`/_logstash/pipeline`), and Logstash
+nodes configured for CPM on that connection pull them. They do not go through the agent
+check-in flow and have no deploy step. These are Logstash pipelines (LSCL), not Elasticsearch
+ingest pipelines.
 
-### List Elasticsearch pipelines
+> [!NOTE]
+> `/api/pipelines/es/...` is a deprecated alias for `/api/pipelines/centralized/...` and will
+> be removed in a future release.
+
+### List centralized pipelines
 
 ```
-GET /api/pipelines/es/{connection_id}/
+GET /api/pipelines/centralized/{connection_id}/
 ```
 
-Returns all pipelines stored in Elasticsearch for the given connection.
+Returns all CPM pipelines for the given connection. Add `?include_lscl=false` to leave out
+each pipeline's `lscl`, which keeps the response small on connections with many pipelines.
 
 ```bash
 curl -H "Authorization: ApiKey $KEY" \
-  https://logstashui.example.com/api/pipelines/es/17/
+  https://logstashui.example.com/api/pipelines/centralized/17/
 ```
 
 ```json
@@ -2269,15 +2349,15 @@ curl -H "Authorization: ApiKey $KEY" \
 
 ---
 
-### Get an Elasticsearch pipeline
+### Get a centralized pipeline
 
 ```
-GET /api/pipelines/es/{connection_id}/{name}/
+GET /api/pipelines/centralized/{connection_id}/{name}/
 ```
 
 ```bash
 curl -H "Authorization: ApiKey $KEY" \
-  https://logstashui.example.com/api/pipelines/es/17/apache-logs/
+  https://logstashui.example.com/api/pipelines/centralized/17/apache-logs/
 ```
 
 ```json
@@ -2295,21 +2375,21 @@ curl -H "Authorization: ApiKey $KEY" \
 }
 ```
 
-`404` if the pipeline does not exist in Elasticsearch.
+`404` if the pipeline does not exist.
 
 ---
 
-### Create an Elasticsearch pipeline
+### Create a centralized pipeline
 
 ```
-POST /api/pipelines/es/{connection_id}/
+POST /api/pipelines/centralized/{connection_id}/
 ```
 
-**Required role:** admin. Creates or replaces a pipeline in Elasticsearch immediately —
-no deploy step required.
+**Required role:** admin. Creates or replaces the CPM pipeline. Logstash nodes pick it up
+without a deploy step.
 
 ```bash
-curl -X POST https://logstashui.example.com/api/pipelines/es/17/ \
+curl -X POST https://logstashui.example.com/api/pipelines/centralized/17/ \
   -H "Authorization: ApiKey $KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -2328,7 +2408,7 @@ curl -X POST https://logstashui.example.com/api/pipelines/es/17/ \
 
 | Field | Required | Notes |
 |-------|----------|-------|
-| `name` | yes | Pipeline name in Elasticsearch |
+| `name` | yes | Logstash pipeline ID |
 | `lscl` | yes | Full Logstash config text |
 | `description` | no | |
 | `pipeline_workers` | no | Default `1` |
@@ -2340,17 +2420,17 @@ curl -X POST https://logstashui.example.com/api/pipelines/es/17/ \
 
 ---
 
-### Update an Elasticsearch pipeline
+### Update a centralized pipeline
 
 ```
-PUT /api/pipelines/es/{connection_id}/{name}/
+PUT /api/pipelines/centralized/{connection_id}/{name}/
 ```
 
 **Required role:** admin. Fetches the existing pipeline first and merges — unspecified
-settings retain their current values. Changes are live immediately.
+settings retain their current values. Logstash nodes pick up the change without a deploy step.
 
 ```bash
-curl -X PUT https://logstashui.example.com/api/pipelines/es/17/apache-logs/ \
+curl -X PUT https://logstashui.example.com/api/pipelines/centralized/17/apache-logs/ \
   -H "Authorization: ApiKey $KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -2363,26 +2443,118 @@ curl -X PUT https://logstashui.example.com/api/pipelines/es/17/apache-logs/ \
 {"success": true, "name": "apache-logs", "message": "Pipeline updated."}
 ```
 
-`404` if the pipeline does not exist in Elasticsearch.
+`404` if the pipeline does not exist.
 
 ---
 
-### Delete an Elasticsearch pipeline
+### Delete a centralized pipeline
 
 ```
-DELETE /api/pipelines/es/{connection_id}/{name}/
+DELETE /api/pipelines/centralized/{connection_id}/{name}/
 ```
 
-**Required role:** admin. Removes the pipeline from Elasticsearch immediately.
+**Required role:** admin. Removes the CPM pipeline; Logstash nodes stop running it.
 
 ```bash
-curl -X DELETE https://logstashui.example.com/api/pipelines/es/17/apache-logs/ \
+curl -X DELETE https://logstashui.example.com/api/pipelines/centralized/17/apache-logs/ \
   -H "Authorization: ApiKey $KEY"
 ```
 
 ```json
 {"success": true, "message": "Pipeline 'apache-logs' deleted."}
 ```
+
+---
+
+## Find a pipeline by name
+
+Search agent pipelines in every policy (embedded policies excluded) and CPM pipelines on every
+`CENTRALIZED` connection. `name` can be part of a name or a topic such as `asa`; pipelines whose
+names contain it come back under `similar`.
+
+```
+GET /api/pipelines/find/?name={name}
+```
+
+**Required role:** any authenticated user
+
+```bash
+curl -H "Authorization: ApiKey $KEY" \
+  "https://logstashui.example.com/api/pipelines/find/?name=asa-new"
+```
+
+```json
+{
+  "success": true,
+  "name": "asa-new",
+  "matches": [
+    {"type": "cpm", "name": "asa-new", "connection_id": 2, "connection_name": "Homelab",
+     "last_modified": "2026-10-12T15:03:11.204Z"}
+  ],
+  "similar": [
+    {"type": "cpm", "name": "asa-new-fixed", "connection_id": 2, "connection_name": "Homelab",
+     "last_modified": "2026-10-14T09:41:52.118Z"},
+    {"type": "agent", "name": "asa", "pipeline_id": 14, "policy_id": 1, "policy_name": "Default",
+     "managed_by": "user", "last_modified": "2026-09-30T18:22:05.441000+00:00"}
+  ],
+  "unreachable": []
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `matches` | Pipelines named exactly `name` |
+| `similar` | Up to 10 other pipelines with close or overlapping names, closest first |
+| `unreachable` | `CENTRALIZED` connections whose pipelines couldn't be listed, with `connection_id`, `connection_name`, and `error`. A pipeline may exist there |
+
+Each pipeline's ID fields are what the other pipeline endpoints take: `connection_id` + `name`
+for a CPM pipeline, `pipeline_id` for an agent pipeline. Connections are queried in parallel
+with a 10-second timeout each.
+
+`400` — `name` is missing.
+
+---
+
+## Recently modified pipelines
+
+List agent pipelines in every policy (embedded policies excluded) and CPM pipelines on every
+`CENTRALIZED` connection, most recently modified first. This reads the `last_modified` each
+pipeline already has; it doesn't record who changed what.
+
+```
+GET /api/pipelines/recent/?limit={n}&since={timestamp}
+```
+
+**Required role:** any authenticated user
+
+| Query parameter | Default | Description |
+|---|---|---|
+| `limit` | `20` | Maximum pipelines to return, up to 200 |
+| `since` | none | ISO 8601 date or timestamp; only pipelines modified at or after it |
+
+```bash
+curl -H "Authorization: ApiKey $KEY" \
+  "https://logstashui.example.com/api/pipelines/recent/?since=2026-11-01"
+```
+
+```json
+{
+  "success": true,
+  "pipelines": [
+    {"type": "cpm", "name": "asa-new-fixed", "connection_id": 2, "connection_name": "Homelab",
+     "last_modified": "2026-11-03T09:41:52.118Z"},
+    {"type": "agent", "name": "asa", "pipeline_id": 14, "policy_id": 1, "policy_name": "Default",
+     "managed_by": "user", "last_modified": "2026-11-02T18:22:05.441000+00:00"}
+  ],
+  "total": 2,
+  "unreachable": []
+}
+```
+
+`total` counts every pipeline that matched `since`, before `limit`. Entries use the same form as
+[Find a pipeline by name](#find-a-pipeline-by-name).
+
+`400` — `limit` isn't an integer or `since` isn't a valid timestamp.
 
 ---
 
@@ -2430,7 +2602,7 @@ curl -X POST https://logstashui.example.com/api/pipelines/simulate/ \
 {
   "success": true,
   "run_id": "f3a1b2c4-...",
-  "slot_id": "3",
+  "slot_id": 3,
   "count": 1,
   "elapsed_ms": 1240,
   "results": [
@@ -2457,19 +2629,155 @@ curl -X POST https://logstashui.example.com/api/pipelines/simulate/ \
 
 | Field | Required | Notes |
 |-------|----------|-------|
-| `lscl` | one of | Raw Logstash config. Mutually exclusive with `pipeline_id` |
+| `lscl` | one of | Raw Logstash config |
 | `pipeline_id` | one of | Load LSCL from a saved agent pipeline |
-| `event` | yes | Sample log line or JSON string to process |
+| `connection_id` + `name` | one of | Load LSCL from a CPM pipeline on a CENTRALIZED connection. Send both |
+| `event` | one of | Sample log line or JSON string to process. Mutually exclusive with `events` |
+| `events` | one of | Bulk mode: list of up to 100 log lines or JSON events. Mutually exclusive with `event` |
 | `sim_connection_id` | no | Specific simulate-agent connection ID. Defaults to the session-sticky agent |
 | `policy_id` | no | Source policy for keystore sync when the pipeline uses `${var}` references |
-| `timeout` | no | Seconds to wait for results. Default `30`, maximum `180` |
+| `timeout` | no | Seconds to wait for all results once the simulation slot is ready (getting a slot on a cold agent can take longer). Default `30`, maximum `180` |
+| `detail` | no | `full` (default), `steps`, or `final`. See **Detail levels** below |
+
+Send exactly one config source: `lscl`, `pipeline_id`, or `connection_id` + `name`. Only the
+filter section is simulated; input and output blocks are ignored.
+
+**Detail levels:**
+
+`detail` sets how much comes back for each event. `full` returns the raw `results` shown
+above, where every snapshot repeats the whole event. The other two levels replace `results`
+and `count` with smaller fields and strip the fields the simulation harness adds (`run_id`,
+`slot`, `simulation`, `snapshots`, and the harness's `event.original`):
+
+| `detail` | Fields per event |
+|----------|------------------|
+| `final` | `final` (the event after the last filter, or `null` if it didn't finish), `dropped`, and `dropped_by` when a `drop` filter ended it. When no filter ran (for example, every filter is inside a conditional the event didn't match), the run still completes and `steps` is empty |
+| `steps` | The `final` fields plus `filter_ms` and `steps`, one entry per filter run, in order |
+
+Each `steps` entry has `step`, `plugin`, `component` (the parser's ID), `id` (the `id` set in
+your config, if any), and `ms`. It lists only what that filter did: `added` and `changed`
+(field reference to new value), and `removed` (field references). Top-level fields keep their
+name (`message`, or a literal dotted `event.code`), and nested fields use bracket form
+(`[log][syslog][priority]`). Values longer than 200 characters are cut. `branches` appears
+when the conditional path changes.
+
+```json
+{
+  "success": true,
+  "run_id": "f3a1b2c4-...",
+  "slot_id": 3,
+  "complete": true,
+  "elapsed_ms": 1240,
+  "detail": "steps",
+  "final": {"message": "192.168.1.1 - frank ...", "clientip": "192.168.1.1", "env": "prod"},
+  "dropped": false,
+  "filter_ms": 1.9,
+  "steps": [
+    {"step": 1, "plugin": "grok", "component": "filter_grok_0", "ms": 1.4,
+     "added": {"clientip": "192.168.1.1", "verb": "GET"}},
+    {"step": 2, "plugin": "mutate", "component": "filter_mutate_1", "ms": 0.5,
+     "added": {"env": "prod"}}
+  ]
+}
+```
+
+MCP clients get `steps` by default.
+
+**Simulating a CPM pipeline by name:**
+
+```bash
+curl -X POST https://logstashui.example.com/api/pipelines/simulate/ \
+  -H "Authorization: ApiKey $KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"connection_id": 17, "name": "asa-new", "event": "<164>%ASA-4-106023: Deny tcp ..."}'
+```
+
+**Bulk simulation:**
+
+Send `events` instead of `event` to run several events in one request. The first event
+allocates a simulation slot and the rest reuse it, like multi-document simulation in the
+editor. Items can be log lines (strings) or JSON objects. `timeout` covers the whole batch.
+
+```bash
+curl -X POST https://logstashui.example.com/api/pipelines/simulate/ \
+  -H "Authorization: ApiKey $KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "pipeline_id": 10,
+    "events": [
+      "192.168.1.1 - frank [10/Oct/2000:13:55:36 -0700] \"GET /apache_pb.gif HTTP/1.0\" 200 2326",
+      {"message": "10.0.0.5 - - [10/Oct/2000:13:55:40 -0700] \"GET / HTTP/1.1\" 404 0"}
+    ],
+    "timeout": 60
+  }'
+```
+
+```json
+{
+  "success": true,
+  "slot_id": 3,
+  "count": 2,
+  "complete_count": 2,
+  "elapsed_ms": 2310,
+  "events": [
+    {"index": 0, "run_id": "f3a1b2c4-...", "complete": true, "results": [{"...": "..."}]},
+    {"index": 1, "run_id": "9c0d7e21-...", "complete": true, "results": [{"...": "..."}]}
+  ]
+}
+```
+
+`events` is in input order. Each entry carries the same detail fields as a single-event
+response (`results` for `full`). An entry that didn't finish has `complete: false` and an
+`error`. The response is
+`200` if at least one event completed, and `408` if none did.
 
 **Error responses:**
 
-`400` — missing required fields or pipeline has no filter plugins.
+`400` — missing required fields, an unknown `detail`, more than one config source, `connection_id` without `name`
+(or the reverse), both `event` and `events` sent, `events` empty, longer than 100, or
+containing an item that is not a non-empty string or object, or pipeline has no filter
+plugins.
 
-`404` — `pipeline_id` not found.
+`404` — `pipeline_id`, the connection, or the CPM pipeline `name` not found.
 
-`408` — timeout. The agent may still be starting; retry with a longer `timeout` or preallocate a slot via the UI first.
+`408` — no results within `timeout`. The simulate agent may still be loading the pipeline;
+retry once. Repeated timeouts mean the simulate agent is not returning results.
 
-`502` — the simulate agent rejected the pipeline or is unreachable.
+`502` — the simulate agent rejected the pipeline or is unreachable, or sending the event to it
+failed and no results arrived (`error` has the reason).
+
+---
+
+## Agent guides
+
+Short Markdown how-tos for AI agents working with LogstashUI. They are the same files as
+[`agent_guides/`](/docs/docs/logstashui/agent_guides/concepts.md) in these docs, and are also
+served by the `guides_*` MCP tools.
+
+**Required role:** any authenticated user
+
+### List guides
+
+```
+GET /api/guides/
+```
+
+```json
+{
+  "success": true,
+  "count": 6,
+  "guides": [
+    {"topic": "concepts", "description": "Vocabulary and objects: ..."}
+  ]
+}
+```
+
+### Get a guide
+
+```
+GET /api/guides/{topic}/
+```
+
+Returns `topic`, `description`, and `content` (Markdown). An unknown topic returns `404` with
+the list of valid topics; a known topic whose file is missing from the install also returns
+`404`.

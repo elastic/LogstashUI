@@ -1,0 +1,241 @@
+<!-- MCP Connection Modal -->
+<div id="mcpModal" class="hidden fixed inset-0 flex items-center justify-center z-[10001] p-4">
+    <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="McpModal.close()"></div>
+    <div class="bg-gray-800 rounded-lg w-full max-w-2xl relative z-10 border border-gray-700 shadow-2xl">
+        <!-- Modal Header -->
+        <div class="p-4 border-b border-gray-700 flex justify-between items-center">
+            <h3 class="text-lg font-semibold text-white">Connect an MCP client</h3>
+            <button onclick="McpModal.close()" class="text-gray-400 hover:text-white transition-colors">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+
+        <!-- Modal Body -->
+        <div class="p-4 space-y-4">
+            <p class="text-sm text-gray-400">
+                Use LogstashUI from Cursor, Claude, VS Code, or any MCP client. Tool calls run as the
+                owner of the API key, so a read-only key can only use read tools.
+            </p>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-300 mb-2">Toolsets</label>
+                <div id="mcpToolsets" class="flex flex-wrap gap-x-4 gap-y-2">
+                    {% for toolset in mcp_toolsets %}
+                    <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+                        <input type="checkbox" value="{{ toolset.name }}" checked onchange="McpModal.render()"
+                               class="checkbox checkbox-sm checkbox-primary">
+                        {{ toolset.name }}
+                    </label>
+                    {% endfor %}
+                </div>
+                <p class="text-xs text-gray-500 mt-1">Fewer tools keeps your client's tool list manageable.</p>
+                <details class="mt-2">
+                    <summary class="text-xs text-gray-400 cursor-pointer hover:text-gray-200 select-none">
+                        Show the <span id="mcpToolCount"></span> tools in the selected toolsets
+                    </summary>
+                    <p class="text-xs text-gray-500 mt-2">Write tools need an admin API key.</p>
+                    <div class="mt-2 max-h-64 overflow-y-auto bg-gray-900 border border-gray-700 rounded-md divide-y divide-gray-700">
+                        {% for toolset in mcp_toolsets %}
+                        <div data-toolset="{{ toolset.name }}" class="p-2">
+                            <div class="text-xs font-semibold text-gray-400 mb-1">{{ toolset.name }}</div>
+                            <ul class="space-y-1">
+                                {% for tool in toolset.tools %}
+                                <li class="flex items-baseline gap-2 text-xs">
+                                    <code class="font-mono text-gray-200 whitespace-nowrap">{{ tool.name }}</code>
+                                    {% if tool.writes %}
+                                    <span class="px-1.5 rounded bg-amber-900/40 text-amber-300">write</span>
+                                    {% else %}
+                                    <span class="px-1.5 rounded bg-gray-700 text-gray-300">read</span>
+                                    {% endif %}
+                                    <span class="text-gray-500 truncate" title="{{ tool.summary }}">{{ tool.summary }}</span>
+                                </li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </details>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-300 mb-2">MCP URL</label>
+                <div class="flex gap-2">
+                    <input id="mcpUrl" type="text" readonly
+                           class="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-sm text-white font-mono">
+                    <button type="button" onclick="McpModal.copy('mcpUrl')"
+                            class="px-4 py-2 text-sm font-medium text-white bg-gray-700 border border-gray-600 rounded-md hover:bg-gray-600 transition-colors">
+                        Copy
+                    </button>
+                </div>
+            </div>
+
+            <div>
+                <label for="mcpApiKey" class="block text-sm font-medium text-gray-300 mb-2">API Key</label>
+                <div class="flex gap-2">
+                    <input id="mcpApiKey" type="text" placeholder="lsui_..." autocomplete="off" spellcheck="false"
+                           oninput="McpModal.render()"
+                           class="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-sm text-white font-mono">
+                    <a href="{% url 'ApiTokens' %}"
+                       class="px-4 py-2 text-sm font-medium text-white bg-gray-700 border border-gray-600 rounded-md hover:bg-gray-600 transition-colors">
+                        + Create
+                    </a>
+                </div>
+                <p class="text-xs text-gray-500 mt-1">
+                    Paste a key to fill in the configuration below. It stays in your browser and is never sent anywhere.
+                </p>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-300 mb-2">Client configuration</label>
+                <div id="mcpClients" class="flex flex-wrap gap-1 mb-2">
+                    <button type="button" data-client="cursor" onclick="McpModal.pick('cursor')">Cursor</button>
+                    <button type="button" data-client="claude" onclick="McpModal.pick('claude')">Claude Code</button>
+                    <button type="button" data-client="vscode" onclick="McpModal.pick('vscode')">VS Code / Copilot</button>
+                    <button type="button" data-client="codex" onclick="McpModal.pick('codex')">Codex</button>
+                    <button type="button" data-client="other" onclick="McpModal.pick('other')">Other</button>
+                </div>
+                <div class="flex justify-between items-center gap-2 mb-2">
+                    <p id="mcpConfigWhere" class="text-xs text-gray-400"></p>
+                    <button type="button" onclick="McpModal.copy('mcpConfig')"
+                            class="px-3 py-1 text-xs font-medium text-white bg-gray-700 border border-gray-600 rounded-md hover:bg-gray-600 transition-colors">
+                        Copy
+                    </button>
+                </div>
+                <pre id="mcpConfig" class="px-3 py-2 bg-gray-900 border border-gray-700 rounded-md text-xs text-gray-200 font-mono overflow-x-auto whitespace-pre"></pre>
+                <p class="text-xs text-gray-500 mt-2">
+                    To check it works, reload your client and ask: "List the LogstashUI guides."
+                    Keep files that contain your API key out of source control.
+                </p>
+            </div>
+
+            <div class="flex items-start gap-2 p-3 bg-blue-900/20 border border-blue-600/40 rounded-md">
+                <svg class="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p class="text-sm text-blue-300">
+                    Using LogstashUI's self-signed certificate? Download the
+                    <a href="/.well-known/logstashui/ca.crt" class="underline">CA certificate</a>
+                    and trust it in your client, e.g. <code class="font-mono">NODE_EXTRA_CA_CERTS=/path/to/ca.crt</code>
+                    for Node-based clients.
+                </p>
+            </div>
+        </div>
+
+        <!-- Modal Footer -->
+        <div class="p-4 border-t border-gray-700 flex justify-end">
+            <button type="button" onclick="McpModal.close()"
+                    class="px-5 py-2 text-sm font-medium text-gray-300 bg-gray-700 rounded-md hover:bg-gray-600 transition-colors">
+                Close
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+window.McpModal = {
+    open: function() {
+        this.render();
+        document.getElementById('mcpModal').classList.remove('hidden');
+    },
+
+    close: function() {
+        document.getElementById('mcpModal').classList.add('hidden');
+        document.getElementById('mcpApiKey').value = '';
+        this.render();
+    },
+
+    render: function() {
+        const boxes = Array.from(document.querySelectorAll('#mcpToolsets input[type=checkbox]'));
+        const selected = boxes.filter(b => b.checked).map(b => b.value);
+        // No toolsets in the URL means the client gets all of them.
+        const listed = selected.length ? selected : boxes.map(b => b.value);
+        let toolCount = 0;
+        document.querySelectorAll('#mcpModal [data-toolset]').forEach(group => {
+            const shown = listed.includes(group.dataset.toolset);
+            group.classList.toggle('hidden', !shown);
+            if (shown) toolCount += group.querySelectorAll('li').length;
+        });
+        document.getElementById('mcpToolCount').textContent = toolCount;
+        let url = window.location.origin + '/api/mcp';
+        if (selected.length && selected.length < boxes.length) {
+            url += '?toolsets=' + selected.join(',');
+        }
+        const apiKey = document.getElementById('mcpApiKey').value.trim() || '<your API key>';
+        document.getElementById('mcpUrl').value = url;
+        const client = this.clients[this.client];
+        document.querySelectorAll('#mcpClients [data-client]').forEach(button => {
+            const active = button.dataset.client === this.client;
+            button.className = 'px-3 py-1 text-xs font-medium rounded-md border transition-colors ' + (active
+                ? 'bg-blue-600 border-blue-500 text-white'
+                : 'bg-gray-700 border-gray-600 text-gray-300 hover:bg-gray-600');
+        });
+        document.getElementById('mcpConfigWhere').textContent = client.where;
+        document.getElementById('mcpConfig').textContent = client.config(url, 'ApiKey ' + apiKey);
+    },
+
+    client: 'cursor',
+
+    // Each client spells a remote server differently; keep these in step with docs/docs/logstashui/mcp.md.
+    clients: {
+        cursor: {
+            where: 'Add to ~/.cursor/mcp.json, or .cursor/mcp.json in a project.',
+            config: (url, auth) => JSON.stringify({
+                mcpServers: { logstashui: { url: url, headers: { Authorization: auth } } }
+            }, null, 2),
+        },
+        claude: {
+            where: 'Run in a terminal. Add --scope user to use it in every project.',
+            config: (url, auth) =>
+                `claude mcp add --transport http logstashui "${url}" \\\n  --header "Authorization: ${auth}"`,
+        },
+        vscode: {
+            where: 'Add to ~/.copilot/mcp-config.json, or .mcp.json at the workspace root.',
+            config: (url, auth) => JSON.stringify({
+                mcpServers: { logstashui: { type: 'http', url: url, headers: { Authorization: auth } } }
+            }, null, 2),
+        },
+        codex: {
+            where: 'Add to ~/.codex/config.toml.',
+            config: (url, auth) =>
+                `[mcp_servers.logstashui]\nurl = ${JSON.stringify(url)}\nhttp_headers = { "Authorization" = ${JSON.stringify(auth)} }`,
+        },
+        other: {
+            where: 'Any client that supports remote (Streamable HTTP) MCP servers with a custom header.',
+            config: (url, auth) => `Transport: Streamable HTTP\nURL:       ${url}\nHeader:    Authorization: ${auth}`,
+        },
+    },
+
+    pick: function(client) {
+        this.client = client;
+        this.render();
+    },
+
+    copy: function(elementId) {
+        const el = document.getElementById(elementId);
+        const text = el.value !== undefined ? el.value : el.textContent;
+        const done = () => showToast('Copied to clipboard', 'success');
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(text).then(done);
+            return;
+        }
+        const area = document.createElement('textarea');
+        area.value = text;
+        document.body.appendChild(area);
+        area.select();
+        document.execCommand('copy');
+        area.remove();
+        done();
+    }
+};
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        const modal = document.getElementById('mcpModal');
+        if (modal && !modal.classList.contains('hidden')) {
+            McpModal.close();
+        }
+    }
+});
+</script>

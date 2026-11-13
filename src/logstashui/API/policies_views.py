@@ -19,6 +19,7 @@ POST   /api/policies/{id}/tokens/         policy_tokens   (admin)
 DELETE /api/policies/{id}/tokens/{tid}/   policy_token_detail (admin)
 """
 
+import difflib
 import json
 import logging
 import secrets
@@ -31,6 +32,7 @@ from django.views.decorators.csrf import csrf_exempt
 from PipelineManager.models import (
     Connection as ConnectionTable,
     EnrollmentToken,
+    Pipeline,
     Policy,
     Revision,
 )
@@ -42,7 +44,7 @@ from PipelineManager.policies_crud import (
 from PipelineManager.agent_policies import _strip_nonuser_from_snapshot
 from PipelineManager.system_policy_defaults import set_path_logs
 
-from API.auth import api_require_admin, parse_request_body
+from API.auth import api_require_admin, parse_request_body, protected_response
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +52,9 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Serialization helpers
 # ---------------------------------------------------------------------------
+
+_CONFIG_FILE_FIELDS = ('logstash_yml', 'jvm_options', 'log4j2_properties')
+
 
 def _policy_data(policy, active_agent_count=None):
     """Serialize a Policy instance to a JSON-safe dict.
@@ -135,7 +140,8 @@ def policy_list(request):
 
     GET  /api/policies/
         Returns all non-EMBEDDED policies with active agent count.
-        Admin only.
+        ``?include_config=false`` omits ``logstash_yml``, ``jvm_options``,
+        and ``log4j2_properties``. Admin only.
 
     POST /api/policies/
         Create a new policy (PACKAGED, MANAGED, or SIMULATE).
@@ -158,9 +164,13 @@ def _list_policies(request):
         )
     ).exclude(policy_type=Policy.PolicyType.EMBEDDED).order_by('name')
 
+    include_config = request.GET.get('include_config', 'true').lower() != 'false'
     policies = []
     for p in qs:
         d = _policy_data(p, active_agent_count=p.active_agent_count)
+        if not include_config:
+            for key in _CONFIG_FILE_FIELDS:
+                d.pop(key)
         policies.append(d)
 
     return JsonResponse({'success': True, 'policies': policies, 'total': len(policies)})
@@ -301,7 +311,8 @@ def _create_policy(request):
 def policy_detail(request, policy_id):
     """Read, update, or delete a single policy.
 
-    GET    /api/policies/{id}/   admin only
+    GET    /api/policies/{id}/   admin only; ``?include_config=false`` omits
+                                 ``logstash_yml``, ``jvm_options``, and ``log4j2_properties``
     PUT    /api/policies/{id}/   admin only; type immutable, system path-lock enforced
     DELETE /api/policies/{id}/   admin only; non-system, no connections
     """
@@ -320,7 +331,11 @@ def _get_policy(request, policy_id):
         policy = Policy.objects.get(pk=policy_id)
     except Policy.DoesNotExist:
         return JsonResponse({'success': False, 'error': 'Policy not found.'}, status=404)
-    return JsonResponse({'success': True, 'policy': _policy_data(policy)})
+    data = _policy_data(policy)
+    if request.GET.get('include_config', 'true').lower() == 'false':
+        for key in _CONFIG_FILE_FIELDS:
+            data.pop(key)
+    return JsonResponse({'success': True, 'policy': data})
 
 
 @api_require_admin
@@ -334,9 +349,7 @@ def _update_policy(request, policy_id):
         return JsonResponse({'success': False, 'error': 'Policy not found.'}, status=404)
 
     if policy.policy_type == Policy.PolicyType.EMBEDDED:
-        return JsonResponse(
-            {'success': False, 'error': 'Cannot update EMBEDDED policy (immutable).'}, status=403
-        )
+        return protected_response('Cannot update EMBEDDED policy (immutable).')
 
     data = parse_request_body(request)
 
@@ -425,9 +438,7 @@ def _delete_policy(request, policy_id):
         return JsonResponse({'success': False, 'error': 'Policy not found.'}, status=404)
 
     if policy.is_system:
-        return JsonResponse(
-            {'success': False, 'error': f"Cannot delete system policy '{policy.name}'."}, status=403
-        )
+        return protected_response(f"Cannot delete system policy '{policy.name}'.")
 
     connections_count = policy.connections.count()
     if connections_count > 0:
@@ -488,9 +499,7 @@ def _do_deploy(request, policy_id):
             'logs_path': policy.logs_path,
             'binary_path': policy.binary_path,
             'pipelines': list(
-                policy.pipelines.filter(managed_by='user').values(
-                    'name', 'description', 'lscl', 'no_input', 'non_reloadable'
-                )
+                policy.pipelines.filter(managed_by='user').values(*Pipeline.SNAPSHOT_FIELDS)
             ),
             'keystore': list(
                 policy.keystore_entries.filter(managed_by='user').values('key_name', 'key_value')
@@ -557,9 +566,7 @@ def _do_clone(request, policy_id):
         return JsonResponse({'success': False, 'error': 'Policy not found.'}, status=404)
 
     if source.policy_type == Policy.PolicyType.EMBEDDED:
-        return JsonResponse(
-            {'success': False, 'error': 'Cannot clone EMBEDDED policy.'}, status=403
-        )
+        return protected_response('Cannot clone EMBEDDED policy.')
 
     data = parse_request_body(request)
     new_name = (data.get('new_name') or '').strip()
@@ -671,18 +678,155 @@ def _do_clone(request, policy_id):
 def policy_diff(request, policy_id):
     """Return current vs last-deployed policy state (user artifacts only).
 
-    GET /api/policies/{id}/diff/
-        Returns ``current`` and ``previous`` snapshots and a pending change
-        count across yml, jvm, log4j2, pipelines, keystore, paths.
-        Admin only.
+    GET /api/policies/{id}/diff/?detail=full|summary|changes
+        Every mode returns the revision header and a pending change count
+        across yml, jvm, log4j2, pipelines, keystore, paths. ``full`` (the
+        default) adds the ``current`` and ``previous`` snapshots; ``summary``
+        adds a ``changes`` object naming what changed; ``changes`` also adds
+        unified ``diffs`` for config files and pipeline LSCL. Admin only.
     """
     if request.method != 'GET':
         return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
     return _do_diff(request, policy_id)
 
 
+_DIFF_DETAILS = ('full', 'summary', 'changes')
+_PATH_FIELDS = ('settings_path', 'logs_path', 'binary_path')
+
+
+def _pipeline_changes(current, previous):
+    """Name the user pipelines that were added, removed, or changed since the last deploy.
+
+    Compares :attr:`Pipeline.DIFF_FIELDS` (config and performance settings).
+    A field missing from an older snapshot is not compared, so upgrading
+    doesn't flag every policy as changed.
+
+    Args:
+        current: Current pipeline dicts.
+        previous: Pipeline dicts from the last revision snapshot.
+
+    Returns:
+        dict: ``added`` and ``removed`` name lists, and ``changed`` as
+        ``[{'name': ..., 'fields': [...]}]``.
+
+    Examples:
+        >>> _pipeline_changes([{'name': 'a', 'lscl': 'x', 'pipeline_workers': 2}, {'name': 'b', 'lscl': 'y'}],
+        ...                   [{'name': 'a', 'lscl': 'x', 'pipeline_workers': 1}, {'name': 'c', 'lscl': 'z'}])
+        {'added': ['b'], 'removed': ['c'], 'changed': [{'name': 'a', 'fields': ['pipeline_workers']}]}
+    """
+    prev_by_name = {p['name']: p for p in previous if 'name' in p and 'lscl' in p}
+    curr_names = {p['name'] for p in current}
+    changed = []
+    for pipe in sorted(current, key=lambda p: p['name']):
+        prev = prev_by_name.get(pipe['name'])
+        if prev is None:
+            continue
+        fields = [f for f in Pipeline.DIFF_FIELDS if f in prev and prev[f] != pipe.get(f)]
+        if fields:
+            changed.append({'name': pipe['name'], 'fields': fields})
+    return {
+        'added': sorted(curr_names - set(prev_by_name)),
+        'removed': sorted(set(prev_by_name) - curr_names),
+        'changed': changed,
+    }
+
+
+def _pipelines_changed(current, previous):
+    """Return True when user pipelines differ from the last deployed snapshot.
+
+    Args:
+        current: Current pipeline dicts.
+        previous: Pipeline dicts from the last revision snapshot.
+
+    Examples:
+        >>> _pipelines_changed([{'name': 'a', 'lscl': 'x', 'pipeline_workers': 2}],
+        ...                    [{'name': 'a', 'lscl': 'x', 'pipeline_workers': 1}])
+        True
+        >>> _pipelines_changed([{'name': 'a', 'lscl': 'x', 'pipeline_workers': 2}],
+        ...                    [{'name': 'a', 'lscl': 'x'}])
+        False
+    """
+    return any(_pipeline_changes(current, previous).values())
+
+
+def _keystore_changes(current, previous):
+    """Name the keystore entries added, removed, or given a new value. Values are never returned.
+
+    Examples:
+        >>> _keystore_changes([{'key_name': 'A', 'key_value': '1'}, {'key_name': 'B', 'key_value': '2'}],
+        ...                   [{'key_name': 'A', 'key_value': '0'}, {'key_name': 'C', 'key_value': '3'}])
+        {'added': ['B'], 'removed': ['C'], 'changed': ['A']}
+    """
+    curr = {e['key_name']: e['key_value'] for e in current}
+    prev = {e['key_name']: e.get('key_value', '') for e in previous if 'key_name' in e}
+    return {
+        'added': sorted(set(curr) - set(prev)),
+        'removed': sorted(set(prev) - set(curr)),
+        'changed': sorted(k for k in set(curr) & set(prev) if curr[k] != prev[k]),
+    }
+
+
+def _unified_diff(before, after, name):
+    """Return a unified diff of two texts, labelled ``a/<name>`` and ``b/<name>``.
+
+    Examples:
+        >>> print(_unified_diff('x\\ny\\n', 'x\\nz\\n', 'logstash_yml'), end='')
+        --- a/logstash_yml
+        +++ b/logstash_yml
+        @@ -1,2 +1,2 @@
+         x
+        -y
+        +z
+    """
+    return ''.join(difflib.unified_diff(
+        (before or '').splitlines(keepends=True), (after or '').splitlines(keepends=True),
+        fromfile=f'a/{name}', tofile=f'b/{name}',
+    ))
+
+
+def _diff_changes(current, previous, pipelines, keystore, with_diffs):
+    """Build the ``changes`` object for ``detail=summary`` and ``detail=changes``.
+
+    Args:
+        current: Current policy state.
+        previous: Last deployed state.
+        pipelines: Result of :func:`_pipeline_changes`.
+        keystore: Result of :func:`_keystore_changes`.
+        with_diffs: Add unified ``diffs`` for changed config files and for
+            added or changed pipeline LSCL.
+
+    Returns:
+        dict: ``config_files``, ``paths``, ``pipelines``, ``keystore``,
+        ``keystore_password_changed``, and ``diffs`` when requested.
+    """
+    config_files = [f for f in _CONFIG_FILE_FIELDS if current[f] != previous.get(f, '')]
+    changes = {
+        'config_files': config_files,
+        'paths': [f for f in _PATH_FIELDS if current[f] != previous.get(f, '')],
+        'pipelines': pipelines,
+        'keystore': keystore,
+        'keystore_password_changed': current['keystore_password_hash'] != previous.get('keystore_password_hash', ''),
+    }
+    if with_diffs:
+        prev_lscl = {p['name']: p['lscl'] for p in previous.get('pipelines', []) if 'name' in p and 'lscl' in p}
+        lscl_changed = set(pipelines['added']) | {c['name'] for c in pipelines['changed'] if 'lscl' in c['fields']}
+        changes['diffs'] = {
+            'config_files': {f: _unified_diff(previous.get(f, ''), current[f], f) for f in config_files},
+            'pipelines': {
+                p['name']: _unified_diff(prev_lscl.get(p['name'], ''), p['lscl'], p['name'])
+                for p in sorted(current['pipelines'], key=lambda p: p['name']) if p['name'] in lscl_changed
+            },
+        }
+    return changes
+
+
 @api_require_admin
 def _do_diff(request, policy_id):
+    detail = request.GET.get('detail', 'full')
+    if detail not in _DIFF_DETAILS:
+        return JsonResponse(
+            {'success': False, 'error': f"detail must be one of: {', '.join(_DIFF_DETAILS)}."}, status=400
+        )
     try:
         policy = Policy.objects.get(pk=policy_id)
     except Policy.DoesNotExist:
@@ -696,9 +840,7 @@ def _do_diff(request, policy_id):
         'logs_path': policy.logs_path,
         'binary_path': policy.binary_path,
         'pipelines': list(
-            policy.pipelines.filter(managed_by='user').values(
-                'name', 'description', 'lscl', 'no_input', 'non_reloadable'
-            )
+            policy.pipelines.filter(managed_by='user').values(*Pipeline.SNAPSHOT_FIELDS)
         ),
         'keystore': list(
             policy.keystore_entries.filter(managed_by='user').values('key_name', 'key_value')
@@ -727,58 +869,37 @@ def _do_diff(request, policy_id):
         }
         last_deployed_revision = 0
 
+    pipelines = _pipeline_changes(current_state['pipelines'], previous_state.get('pipelines', []))
+    keystore = _keystore_changes(current_state['keystore'], previous_state.get('keystore', []))
+
     # Count changed sections
-    pending_changes = 0
-    for field in ('logstash_yml', 'jvm_options', 'log4j2_properties'):
-        if current_state[field] != previous_state.get(field, ''):
-            pending_changes += 1
-
-    curr_pipes = sorted(
-        [{'name': p['name'], 'lscl': p['lscl']} for p in current_state['pipelines']],
-        key=lambda x: x['name'],
+    pending_changes = sum(
+        current_state[field] != previous_state.get(field, '') for field in _CONFIG_FILE_FIELDS
     )
-    prev_pipes = sorted(
-        [{'name': p['name'], 'lscl': p['lscl']} for p in previous_state.get('pipelines', [])
-         if 'name' in p and 'lscl' in p],
-        key=lambda x: x['name'],
-    )
-    if curr_pipes != prev_pipes:
-        pending_changes += 1
-
-    curr_ks = sorted(
-        [{'key_name': e['key_name'], 'key_value': e['key_value']} for e in current_state['keystore']],
-        key=lambda x: x['key_name'],
-    )
-    prev_ks = sorted(
-        [{'key_name': e['key_name'], 'key_value': e.get('key_value', '')} for e in previous_state.get('keystore', [])
-         if 'key_name' in e],
-        key=lambda x: x['key_name'],
-    )
-    if curr_ks != prev_ks:
-        pending_changes += 1
-
-    if current_state['keystore_password_hash'] != previous_state.get('keystore_password_hash', ''):
-        pending_changes += 1
-
-    if (current_state['settings_path'] != previous_state.get('settings_path', '') or
-            current_state['logs_path'] != previous_state.get('logs_path', '') or
-            current_state['binary_path'] != previous_state.get('binary_path', '')):
-        pending_changes += 1
+    pending_changes += any(pipelines.values())
+    pending_changes += any(keystore.values())
+    pending_changes += current_state['keystore_password_hash'] != previous_state.get('keystore_password_hash', '')
+    pending_changes += any(current_state[f] != previous_state.get(f, '') for f in _PATH_FIELDS)
 
     # Bug 7 fix: derive has_undeployed_changes from the computed pending_changes
     # count so the two fields are always consistent.  The stored flag can lag
     # (e.g. it starts True on a brand-new policy) but the diff calculation is
     # always authoritative.
-    return JsonResponse({
+    payload = {
         'success': True,
         'policy_name': policy.name,
         'current_revision': policy.current_revision_number,
         'last_deployed_revision': last_deployed_revision,
         'has_undeployed_changes': pending_changes > 0,
         'pending_changes': pending_changes,
-        'current': current_state,
-        'previous': previous_state,
-    })
+    }
+    if detail == 'full':
+        payload.update(current=current_state, previous=previous_state)
+    else:
+        payload['changes'] = _diff_changes(
+            current_state, previous_state, pipelines, keystore, with_diffs=detail == 'changes'
+        )
+    return JsonResponse(payload)
 
 
 # ---------------------------------------------------------------------------

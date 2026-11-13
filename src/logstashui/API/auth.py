@@ -56,6 +56,26 @@ def api_require_admin(view_func):
     return wrapper
 
 
+def protected_response(message):
+    """Return the 409 JSON for writes to an object LogstashUI owns.
+
+    Official SNMP profiles and templates, system policies, and embedded policies
+    can't be changed by any role, so this is a conflict with the object's state
+    rather than a permission problem. 403 stays reserved for role denials.
+
+    Args:
+        message: What was refused and why, shown to the caller.
+
+    Returns:
+        JsonResponse: Status 409 with ``code`` set to ``'protected'``.
+
+    Example:
+        >>> protected_response('Official templates cannot be deleted.').status_code
+        409
+    """
+    return JsonResponse({'success': False, 'code': 'protected', 'error': message}, status=409)
+
+
 def parse_request_body(request):
     """Return request data as a plain dict.
 

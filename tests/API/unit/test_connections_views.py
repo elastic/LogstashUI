@@ -165,6 +165,36 @@ class TestConnectionCreate:
         )
         assert Connection.objects.filter(name='Persist Test').exists()
 
+    @pytest.mark.parametrize('host, port, saved_host, saved_port', [
+        ('https://es.example.com:9200', None, 'https://es.example.com', 9200),
+        ('https://es.example.com:9200', 9200, 'https://es.example.com', 9200),
+        ('https://es.example.com', 9243, 'https://es.example.com', 9243),
+    ])
+    @patch('API.connections_views.manager_views.test_connectivity')
+    def test_create_moves_port_out_of_host(self, mock_test, authenticated_client,
+                                           host, port, saved_host, saved_port):
+        mock_test.return_value = (True, 'ok')
+        body = {'name': 'Port Conn', 'connection_type': 'CENTRALIZED', 'connection_mode': 'url',
+                'auth_type': 'basic', 'host': host, 'username': 'elastic', 'password': 'x'}
+        if port:
+            body['port'] = port
+        response = authenticated_client.post('/api/connections/', data=json.dumps(body),
+                                             content_type='application/json')
+        assert response.status_code == 201
+        conn = Connection.objects.get(name='Port Conn')
+        assert (conn.host, conn.port) == (saved_host, saved_port)
+
+    @patch('API.connections_views.manager_views.test_connectivity')
+    def test_create_conflicting_ports_400(self, mock_test, authenticated_client):
+        response = authenticated_client.post('/api/connections/', data=json.dumps({
+            'name': 'Clash', 'connection_type': 'CENTRALIZED', 'connection_mode': 'url',
+            'auth_type': 'basic', 'host': 'https://es.example.com:9200', 'port': 9243,
+            'username': 'elastic', 'password': 'x',
+        }), content_type='application/json')
+        assert response.status_code == 400
+        assert 'port' in json.dumps(response.json()).lower()
+        mock_test.assert_not_called()
+
     @patch('API.connections_views.manager_views.test_connectivity')
     def test_create_connectivity_fail_returns_422(self, mock_test, authenticated_client):
         mock_test.return_value = (False, 'Connection timed out')

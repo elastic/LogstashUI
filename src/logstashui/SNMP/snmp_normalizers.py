@@ -4,6 +4,136 @@
 
 """Logstash filter fragments for SNMP profile normalizers (multiply, ratio, translate)."""
 
+import functools
+import json
+import os
+
+_INPUT_TYPES = {
+    'float': ((int, float), 'a number'),
+    'string': (str, 'a string'),
+    'field_selector': (str, 'a field name'),
+    'field_list': (list, 'a list of field names'),
+    'key_value_pairs': (dict, 'an object of value mappings'),
+}
+
+
+@functools.cache
+def normalizer_definitions():
+    """Return the operation definitions from ``SNMP/data/normalizers.json``."""
+    path = os.path.join(os.path.dirname(__file__), 'data', 'normalizers.json')
+    with open(path, encoding='utf-8') as fh:
+        return json.load(fh)
+
+
+def split_field_list(value):
+    """Return a ``field_list`` param as a list, splitting a comma-separated string.
+
+    The profile editor saves ``field_list`` params from a text box, so older
+    profiles hold ``"a, b"`` instead of ``["a", "b"]``.
+
+    Examples:
+        >>> split_field_list('cpu.user, cpu.system')
+        ['cpu.user', 'cpu.system']
+        >>> split_field_list(['cpu.user'])
+        ['cpu.user']
+    """
+    if isinstance(value, str):
+        return [part.strip() for part in value.split(',') if part.strip()]
+    return value
+
+
+def coerce_field_lists(normalizers):
+    """Rewrite comma-separated ``field_list`` params in place as lists.
+
+    Args:
+        normalizers: The profile's ``normalizers`` list; anything else is left alone.
+
+    Examples:
+        >>> norms = [{'operation': 'sum', 'params': {'input_fields': 'a, b', 'output_field': 'c'}}]
+        >>> coerce_field_lists(norms)
+        >>> norms[0]['params']['input_fields']
+        ['a', 'b']
+    """
+    if not isinstance(normalizers, list):
+        return
+    definitions = normalizer_definitions()
+    for norm in normalizers:
+        if not isinstance(norm, dict) or not isinstance(norm.get('params'), dict):
+            continue
+        spec = definitions.get(norm.get('operation')) if isinstance(norm.get('operation'), str) else None
+        for name, definition in (spec or {}).get('inputs', {}).items():
+            if definition.get('type') == 'field_list' and name in norm['params']:
+                norm['params'][name] = split_field_list(norm['params'][name])
+
+
+def validate_normalizers(normalizers):
+    """Check profile normalizers against ``normalizers.json``.
+
+    Args:
+        normalizers: The profile's ``normalizers`` list.
+
+    Returns:
+        list[str]: One message per problem; empty when valid.
+
+    Examples:
+        >>> validate_normalizers([{'operation': 'multiply',
+        ...                        'target': {'scope': 'get', 'field': 'ups.voltage'},
+        ...                        'params': {'multiply_value': 0.1}}])
+        []
+        >>> validate_normalizers([{'operation': 'multiply',
+        ...                        'target': {'scope': 'get', 'field': 'ups.voltage'},
+        ...                        'params': {'factor': 0.1}}])
+        ["normalizers[0] (multiply): unknown param 'factor'; allowed: multiply_value."]
+    """
+    if not normalizers:
+        return []
+    if not isinstance(normalizers, list):
+        return ['normalizers must be a list.']
+    definitions = normalizer_definitions()
+    errors = []
+    for i, norm in enumerate(normalizers):
+        where = f'normalizers[{i}]'
+        if not isinstance(norm, dict):
+            errors.append(f'{where} must be an object.')
+            continue
+        operation = norm.get('operation')
+        spec = definitions.get(operation) if isinstance(operation, str) else None
+        if spec is None:
+            errors.append(f"{where}: unknown operation {operation!r}; use one of: {', '.join(definitions)}.")
+            continue
+        where = f'{where} ({operation})'
+
+        target = norm.get('target')
+        if not isinstance(target, dict):
+            errors.append(f'{where}: target must be an object with a scope.')
+        else:
+            scope = target.get('scope')
+            if scope not in spec['applies_to']:
+                errors.append(f"{where}: target.scope must be one of: {', '.join(spec['applies_to'])}.")
+            field = target.get('field')
+            if spec.get('has_target_field') and not (isinstance(field, str) and field.strip()):
+                errors.append(f'{where}: target.field must be a non-empty string.')
+
+        params = norm.get('params', {})
+        if not isinstance(params, dict):
+            errors.append(f'{where}: params must be an object.')
+            continue
+        inputs = spec.get('inputs', {})
+        for name, value in params.items():
+            if name not in inputs:
+                errors.append(f"{where}: unknown param {name!r}; allowed: {', '.join(inputs)}.")
+                continue
+            input_type = inputs[name].get('type')
+            expected, label = _INPUT_TYPES.get(input_type, (object, 'a value'))
+            if (not isinstance(value, expected) or isinstance(value, bool)
+                    or (input_type == 'field_list'
+                        and not all(isinstance(f, str) and f.strip() for f in value))):
+                errors.append(f'{where}: param {name!r} must be {label}.')
+        for name, definition in inputs.items():
+            if definition.get('required') and params.get(name) in (None, '', [], {}):
+                errors.append(f'{where}: param {name!r} is required.')
+    return errors
+
 
 def _next_id(base, counter):
     """Return `base` plus an incrementing suffix, mutating `counter` in place.
@@ -360,7 +490,7 @@ def _generate_sum_get_filter(normalizers, scope='get', id_counter=None):
 
     for normalizer in normalizers:
         params = normalizer.get('params', {})
-        input_fields = params.get('input_fields', [])
+        input_fields = split_field_list(params.get('input_fields', []))
         output_field = params.get('output_field', '').strip()
 
         if not input_fields or not output_field:

@@ -10,15 +10,16 @@ from django.contrib.auth.decorators import login_required
 from django.template.loader import get_template
 from django.views.decorators.csrf import csrf_exempt
 from django.conf import settings
+from django.db import OperationalError
+from django.utils.crypto import constant_time_compare, salted_hmac
 from Common import logstash_config_parse
 
 from Common.decorators import require_admin_role
 from PipelineManager.agent_modes import list_simulation_targets, resolve_simulation_target
 from datetime import datetime, timezone as dt_timezone
-from PipelineManager.models import Connection as ConnectionTable
+from PipelineManager.models import Connection as ConnectionTable, SimulationResult
 
-from collections import deque
-from threading import Lock
+from dataclasses import dataclass
 
 import json
 import os
@@ -35,33 +36,168 @@ from PipelineManager.agent_client import agent_auth_headers
 
 logger = logging.getLogger(__name__)
 
-# Global storage for simulation results (in-memory for now)
-simulation_results = deque(maxlen=1000)
-simulation_lock = Lock()
+_RUN_ID_SALT = 'PipelineManager.simulation.run_id'
+
+
+def _run_id_mac(value):
+    return salted_hmac(_RUN_ID_SALT, value).hexdigest()[:16]
+
+
+def new_run_id():
+    """Return a fresh simulation run id that :func:`StreamSimulate` will accept.
+
+    The id is a UUID, its creation time, and a short HMAC under ``SECRET_KEY``,
+    so any worker can tell a run this server started from a made-up one
+    without shared state, and an id stops being accepted once its results
+    would be pruned anyway.
+
+    Examples:
+        >>> is_known_run_id(new_run_id())
+        True
+        >>> is_known_run_id('6f1c0f7e-0000-4000-8000-000000000000')
+        False
+    """
+    value = f"{uuid.uuid4()}-{int(time.time()):08x}"
+    return f"{value}-{_run_id_mac(value)}"
+
+
+def is_known_run_id(run_id):
+    """Return True when ``run_id`` came from :func:`new_run_id` and hasn't expired.
+
+    Args:
+        run_id: The ``run_id`` a posted event carries.
+    """
+    value, _, mac = str(run_id).rpartition('-')
+    _, _, created = value.rpartition('-')
+    try:
+        age = time.time() - int(created, 16)
+    except ValueError:
+        return False
+    return 0 <= age <= SimulationResult.MAX_AGE_SECONDS and constant_time_compare(mac, _run_id_mac(value))
+
+
+# Identical for every drop plugin so JRuby compiles it once. The drop decision
+# matches logstash-filter-drop: percentage == 100 || rand < percentage / 100.
+_DROP_CODE = """
+require "net/http"
+require "uri"
+require "json"
+
+percentage = event.get("[@metadata][simulation_drop_percentage]").to_f
+event.remove("[@metadata][simulation_drop_percentage]")
+dropped = percentage >= 100 || rand < (percentage / 100.0)
+event.remove("[simulation][final]") unless dropped
+
+# Create snapshot of current event state for the drop plugin
+snapshot = {}
+event.to_hash.each do |key, value|
+  # Skip metadata and snapshots field itself to avoid recursion
+  next if key.start_with?("@metadata") || key == "snapshots"
+  snapshot[key] = value
+end
+
+plugin_id = event.get("[simulation][id]")
+event.set("[snapshots][#{plugin_id}]", snapshot)
+
+if dropped
+  # A dropped event never reaches the output, so report it here
+  uri = URI.parse("__CALLBACK_URL__/ConnectionManager/StreamSimulate/")
+  http = Net::HTTP.new(uri.host, uri.port)
+  http.use_ssl = (uri.scheme == "https")
+  http.verify_mode = OpenSSL::SSL::VERIFY_NONE if http.use_ssl?
+
+  request = Net::HTTP::Post.new(uri.path, {"Content-Type" => "application/json"})
+  request.body = event.to_hash.to_json
+
+  begin
+    response = http.request(request)
+    puts "Drop plugin HTTP response: #{response.code} #{response.message}"
+  rescue => e
+    puts "Drop plugin HTTP error: #{e.class} - #{e.message}"
+    puts e.backtrace.join("\\n")
+  end
+  event.cancel
+end
+""".strip()
+
+
+def _drop_instrumentation(plugin, step, callback_url):
+    """Return the filters that stand in for a ``drop`` plugin during simulation.
+
+    A dropped event never reaches the output, so the Ruby filter posts it to
+    ``StreamSimulate`` (marked ``simulation.final``) and cancels it. With
+    ``percentage`` below 100 the event may survive; then nothing is posted,
+    the marker is removed, and the event continues to the next filter. The
+    original drop plugin is left out because the Ruby filter already decided.
+
+    Args:
+        plugin: The parsed ``drop`` component.
+        step: This plugin's step number in the run.
+        callback_url: LogstashUI base URL the simulate agent can reach.
+
+    Returns:
+        list: A ``mutate`` that sets step metadata, then the ``ruby`` filter.
+
+    Examples:
+        >>> mutate, ruby = _drop_instrumentation(
+        ...     {'id': 'filter_drop_2', 'plugin': 'drop', 'config': {'percentage': 40}},
+        ...     3, 'https://ui:8443')
+        >>> mutate['config']['replace']['[@metadata][simulation_drop_percentage]']
+        '40'
+    """
+    percentage = (plugin.get('config') or {}).get('percentage', 100)
+    return [
+        {
+            "type": "filter",
+            "plugin": "mutate",
+            "config": {
+                # replace, not add_field, so repeated drops don't build arrays
+                "replace": {
+                    "[simulation][step]": str(step),
+                    "[simulation][id]": plugin['id'],
+                    "[simulation][final]": "true",
+                    "[@metadata][simulation_drop_percentage]": str(percentage),
+                }
+            }
+        },
+        {
+            "type": "filter",
+            "plugin": "ruby",
+            "config": {"code": _DROP_CODE.replace("__CALLBACK_URL__", callback_url)},
+        },
+    ]
 
 
 def _sim_agent_url(request):
-    """Resolve the LogstashAgent base URL for simulation traffic.
-
-    Prefer explicit ``connection_id`` (POST/GET); else sticky session /
-    single target; fall back to ``settings.LOGSTASH_AGENT_URL`` when no
-    enrolled sim agents exist (legacy embedded static URL).
-
-    Returns:
-        ``(base_url, target_dict_or_None, error_or_None)``.
-    """
+    """Resolve the simulate agent for ``request``; see :func:`_resolve_sim_agent`."""
     connection_id = (
         request.POST.get("sim_connection_id")
         or request.GET.get("sim_connection_id")
         or request.POST.get("connection_id")
     )
-    # Avoid colliding with other connection_id uses if body is JSON later
+    return _resolve_sim_agent(connection_id, request.session)
+
+
+def _resolve_sim_agent(connection_id, session):
+    """Resolve the LogstashAgent base URL for simulation traffic.
+
+    Prefer explicit ``connection_id``; else sticky session / single target;
+    fall back to ``settings.LOGSTASH_AGENT_URL`` when no enrolled sim agents
+    exist (legacy embedded static URL).
+
+    Args:
+        connection_id: Simulate-agent connection, or empty for the default.
+        session: Session-like dict; the chosen target is stored back on it.
+
+    Returns:
+        ``(base_url, target_dict_or_None, error_or_None)``.
+    """
     if connection_id in (None, "", "null", "undefined"):
         connection_id = None
 
-    target, err = resolve_simulation_target(connection_id, session=request.session)
+    target, err = resolve_simulation_target(connection_id, session=session)
     if target and target.get("base_url"):
-        request.session["sim_connection_id"] = target["connection_id"]
+        session["sim_connection_id"] = target["connection_id"]
         try:
             ConnectionTable.objects.filter(pk=target["connection_id"]).update(
                 last_selected_at=datetime.now(dt_timezone.utc)
@@ -156,6 +292,41 @@ def SelectSimulationTarget(request):
     )
 
 
+@dataclass
+class SimulationStart:
+    """Outcome of :func:`start_simulation`.
+
+    Attributes:
+        run_id: Tracks this event's results (``"preallocation"`` for a
+            slot-only request); ``None`` if the run never started.
+        slot_id: Agent slot holding the instrumented pipeline.
+        reused: The agent reused a slot with the same config.
+        filter_count: Filters instrumented, including nested ones.
+        agent_url: Simulate agent the event went to.
+        agent_headers: Auth headers for ``agent_url``; pass them to
+            :func:`send_simulation_event` for later events in the slot.
+        error: Display message when the run did not start.
+        level: ``error``, ``warning``, or ``info`` for ``error``.
+        pipeline_failed: The agent rejected the pipeline or slot; the editor
+            stops polling for pipeline status.
+        queued: The agent queued the event while Logstash restarts.
+        forward_error: Sending the event failed or timed out; results may
+            still arrive.
+    """
+
+    run_id: str | None = None
+    slot_id: int | None = None
+    reused: bool = False
+    filter_count: int = 0
+    agent_url: str | None = None
+    agent_headers: dict | None = None
+    error: str | None = None
+    level: str = 'error'
+    pipeline_failed: bool = False
+    queued: bool = False
+    forward_error: str | None = None
+
+
 @require_admin_role
 def SimulatePipeline(request):
     """Run a pipeline simulation with per-filter Ruby instrumentation.
@@ -180,29 +351,112 @@ def SimulatePipeline(request):
     if request.method != 'POST':
         return JsonResponse({"error": "Method not allowed"}, status=405)
 
+    components_json = request.POST.get('components')
+    if not components_json:
+        return HttpResponse('<div class="text-red-400">Error: No pipeline components provided</div>')
     try:
-        # Get the components from the request
-        components_json = request.POST.get('components')
-        log_text = request.POST.get('log_text', '').strip()
+        components = json.loads(components_json)
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse components JSON: {e}")
+        return HttpResponse('<div class="text-red-400">Error: Invalid components data</div>')
 
-        if not components_json:
-            return HttpResponse('<div class="text-red-400">Error: No pipeline components provided</div>')
+    log_text = request.POST.get('log_text', '').strip()
+    start = start_simulation(
+        components,
+        log_text,
+        ui_base_url=request.build_absolute_uri("/").rstrip("/"),
+        session=request.session,
+        sim_connection_id=(
+            request.POST.get("sim_connection_id")
+            or request.GET.get("sim_connection_id")
+            or request.POST.get("connection_id")
+        ),
+        session_slot_raw=request.POST.get("slot_id") or request.POST.get("session_slot_id"),
+        policy_id=request.POST.get('policy_id') or request.GET.get('policy_id'),
+        ls_id=request.POST.get('ls_id') or request.GET.get('ls_id'),
+        pipeline_text=request.POST.get('pipeline_text', '') or '',
+        pipeline_name=request.GET.get('pipeline', 'simulation') or request.POST.get('pipeline', 'simulation'),
+    )
 
-        # Parse components
-        try:
-            components = json.loads(components_json)
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse components JSON: {e}")
-            return HttpResponse(f'<div class="text-red-400">Error: Invalid components data</div>')
+    if start.error:
+        color = {'error': 'red', 'warning': 'yellow', 'info': 'gray'}[start.level]
+        attrs = ''
+        if start.pipeline_failed:
+            attrs = (f' data-slot-id="{start.slot_id}"' if start.slot_id else '') + ' data-pipeline-failed="true"'
+        return HttpResponse(f'<div class="text-{color}-400"{attrs}>{_html_escape(start.error)}</div>')
 
+    if not log_text:
+        return HttpResponse(f'''
+            <div class="p-4 bg-blue-900/30 border border-blue-600 rounded-lg" data-slot-id="{start.slot_id}">
+                <h3 class="text-lg font-semibold text-blue-400 mb-2">✓ Slot Allocated</h3>
+                <p class="text-blue-200">Slot {start.slot_id} {"(reused - same config)" if start.reused else "(new)"} with {len(components.get('filter', []))} instrumented filter(s)</p>
+            </div>
+            ''')
+
+    # Results are streamed via StreamSimulate; the template polls for them.
+    context = {
+        'filter_count': start.filter_count,
+        'slot_id': start.slot_id,
+        'reused': start.reused,
+        'run_id': start.run_id,
+    }
+    if start.queued:
+        context['queued'] = True
+    if start.forward_error:
+        context['forward_error'] = start.forward_error
+    result_html = get_template('components/pipeline_editor/simulation_results.html').render(context, request)
+    if start.forward_error:
+        # Visible error marker the FE can parse, then the normal results
+        # bootstrap (initSimulationResults(run_id)).
+        result_html = (
+            f'<div class="text-yellow-400" data-sim-forward-error="true" '
+            f'data-run-id="{start.run_id}" data-slot-id="{start.slot_id}">'
+            f'Warning: simulation forward timed out or failed '
+            f'({_html_escape(start.forward_error[:200])}); polling for results…'
+            f'</div>'
+            + result_html
+        )
+    return HttpResponse(result_html)
+
+
+def start_simulation(components, log_text, *, ui_base_url, session, sim_connection_id=None,
+                     session_slot_raw=None, policy_id=None, ls_id=None, pipeline_text='',
+                     pipeline_name='simulation'):
+    """Instrument ``components``, get a slot on a simulate agent, and send ``log_text``.
+
+    Results arrive asynchronously at ``StreamSimulate`` and are read with
+    :meth:`~PipelineManager.models.SimulationResult.take`.
+
+    Args:
+        components: Parsed pipeline components (``{'filter': [...]}``).
+        log_text: One event (log line or JSON text). Empty only allocates a slot.
+        ui_base_url: This LogstashUI's base URL, for the agent's result callback.
+        session: Session-like dict holding the sticky ``sim_connection_id``.
+        sim_connection_id: Simulate-agent connection to use.
+        session_slot_raw: Session slot to reuse if it is still loaded on that agent.
+        policy_id: Policy whose keystore backs ``${VAR}`` references.
+        ls_id: Legacy policy reference for keystore sync.
+        pipeline_text: Raw LSCL, scanned for keystore references.
+        pipeline_name: Name sent with the slot allocation.
+
+    Returns:
+        SimulationStart: Check ``error`` first.
+
+    Examples:
+        >>> start = start_simulation({'filter': [...]}, 'a log line',
+        ...                          ui_base_url='https://ui:8443', session={})
+        >>> start.error or start.run_id
+        'a3f0…'
+    """
+    try:
         # Extract filter plugins from components
         filter_plugins = components.get('filter', [])
 
         if not filter_plugins and not log_text:
-            return HttpResponse('<div class="text-gray-400">No filters to simulate</div>')
+            return SimulationStart(error='No filters to simulate', level='info')
 
         if not filter_plugins:
-            return HttpResponse('<div class="text-yellow-400">Warning: No filter plugins found in pipeline</div>')
+            return SimulationStart(error='Warning: No filter plugins found in pipeline', level='warning')
 
         # Generate run_id for this simulation
         # For slot preallocation (empty log_text), use a deterministic ID to ensure consistent hashing
@@ -211,27 +465,23 @@ def SimulatePipeline(request):
             run_id = "preallocation"
             logger.info(f"[FE->BE] Slot preallocation request - {len(filter_plugins)} filter plugins: {[p.get('plugin', 'unknown') for p in filter_plugins]}")
         else:
-            run_id = str(uuid.uuid4())
+            run_id = new_run_id()
             logger.info(f"[FE->BE] Starting simulation with run_id: {run_id} - {len(filter_plugins)} filter plugins: {[p.get('plugin', 'unknown') for p in filter_plugins]}")
 
         # Get logstashagent URL early so we can use it in instrumentation
-        logstash_agent_url, sim_target, sim_err = _sim_agent_url(request)
+        logstash_agent_url, sim_target, sim_err = _resolve_sim_agent(sim_connection_id, session)
         if not logstash_agent_url:
-            return HttpResponse(
-                f'<div class="text-red-400">Error: {sim_err or "No simulation agent available"}</div>'
-            )
+            return SimulationStart(error=f'Error: {sim_err or "No simulation agent available"}')
         agent_headers = _sim_agent_headers(sim_target)
 
         # Clone source-policy keystore onto the simulate agent when ${...} vars appear
         try:
             from PipelineManager.sim_keystore import maybe_sync_keystore_for_simulation
 
-            ls_id = request.POST.get('ls_id') or request.GET.get('ls_id')
-            policy_id = request.POST.get('policy_id') or request.GET.get('policy_id')
             maybe_sync_keystore_for_simulation(
                 agent_base_url=logstash_agent_url,
                 components=components,
-                pipeline_text=request.POST.get('pipeline_text', '') or '',
+                pipeline_text=pipeline_text,
                 ls_id=ls_id,
                 policy_id=policy_id,
                 agent_headers=agent_headers,
@@ -242,16 +492,15 @@ def SimulatePipeline(request):
             # non-secret paths still work — surface error if components have refs
             from PipelineManager.sim_keystore import find_keystore_refs_in_obj
             if find_keystore_refs_in_obj(components):
-                return HttpResponse(
-                    f'<div class="text-red-400">Error: Failed to sync keystore to simulation agent: '
-                    f'{ks_err}</div>'
+                return SimulationStart(
+                    error=f'Error: Failed to sync keystore to simulation agent: {ks_err}'
                 )
 
         # Callback URL for Ruby instrumentation posts (remote simulate agents need
         # a reachable LogstashUI URL; prefer agent-reported enroll URL later).
         policy_type = (sim_target or {}).get("policy_type") or ""
         if policy_type == "SIMULATE":
-            logstash_ui_url = request.build_absolute_uri("/").rstrip("/")
+            logstash_ui_url = ui_base_url
         elif policy_type == "EMBEDDED":
             logstash_ui_url = os.environ.get(
                 "LOGSTASHUI_SIMULATION_CALLBACK_URL",
@@ -260,7 +509,7 @@ def SimulatePipeline(request):
         else:
             logstash_ui_url = (
                 os.environ.get("LOGSTASHUI_SIMULATION_CALLBACK_URL")
-                or request.build_absolute_uri("/")
+                or ui_base_url
             ).rstrip("/")
 
         from LogstashUI.insecure_http import force_http_url
@@ -357,89 +606,8 @@ def SimulatePipeline(request):
                     step_counter[0] += 1
                     current_step = step_counter[0]
 
-                    # Check if this is a drop plugin - if so, add Ruby code to send event to API before drop
                     if plugin.get('plugin') == 'drop':
-                        # Drop plugins are special - they need to send the event to the API before dropping
-                        # We don't use the normal timing instrumentation for drop plugins
-                        # Instead, we create a snapshot and send it directly via HTTP POST
-                        
-                        # Add mutate filter to set step and id metadata
-                        # Use replace instead of add_field to avoid array accumulation
-                        drop_metadata_plugin = {
-                            "type": "filter",
-                            "plugin": "mutate",
-                            "config": {
-                                "replace": {
-                                    "[simulation][step]": str(current_step),
-                                    "[simulation][id]": plugin['id'],
-                                    "[simulation][final]": "true"
-                                }
-                            }
-                        }
-                        instrumented.append(drop_metadata_plugin)
-                        
-                        # This code is now IDENTICAL for all drop plugins, allowing JRuby to compile once and reuse
-                        pre_drop_code = f"""
-require "net/http"
-require "uri"
-require "json"
-
-# Create snapshot of current event state for the drop plugin
-snapshot = {{}}
-event.to_hash.each do |key, value|
-  # Skip metadata and snapshots field itself to avoid recursion
-  next if key.start_with?("@metadata") || key == "snapshots"
-  snapshot[key] = value
-end
-
-# Get plugin ID from event field
-plugin_id = event.get("[simulation][id]")
-event.set("[snapshots][#{{plugin_id}}]", snapshot)
-
-# Note: run_id is added to the event at runtime via the simulate endpoint
-# Do NOT hardcode it here as it would change the pipeline hash for each simulation
-
-# Convert event to hash and send to API
-event_hash = event.to_hash
-
-# Debug: Log run_id to verify it exists
-run_id_value = event.get("run_id")
-puts "Drop plugin: run_id = #{{run_id_value.inspect}}"
-
-# Send HTTP POST to StreamSimulate endpoint
-uri = URI.parse("{logstash_ui_url}/ConnectionManager/StreamSimulate/")
-http = Net::HTTP.new(uri.host, uri.port)
-http.use_ssl = (uri.scheme == "https")
-http.verify_mode = OpenSSL::SSL::VERIFY_NONE if http.use_ssl?
-
-request = Net::HTTP::Post.new(uri.path, {{"Content-Type" => "application/json"}})
-request.body = event_hash.to_json
-
-begin
-  response = http.request(request)
-  # Log response for debugging
-  puts "Drop plugin HTTP response: #{{response.code}} #{{response.message}}"
-rescue => e
-  # Log error for debugging
-  puts "Drop plugin HTTP error: #{{e.class}} - #{{e.message}}"
-  puts e.backtrace.join("\\n")
-end
-""".strip()
-
-                        pre_drop_plugin = {
-                            "type": "filter",
-                            "plugin": "ruby",
-                            "config": {
-                                "code": pre_drop_code
-                            }
-                        }
-                        instrumented.append(pre_drop_plugin)
-
-                        # Add the actual drop plugin
-                        instrumented.append(plugin)
-
-                        # Skip the normal timing instrumentation for drop plugins
-                        # The event is already sent to the API, and the drop will prevent any further processing
+                        instrumented.extend(_drop_instrumentation(plugin, current_step, logstash_ui_url))
                     else:
                         # Regular plugin - add normal timing instrumentation
                         # Add pre-plugin timing instrumentation
@@ -588,11 +756,7 @@ end
         # simulate-1 "slot 1". Never skip allocate unless *this* agent both has
         # the slot in its table AND has the named pipeline loaded (bus address).
         # Otherwise simulate-start send_to storms ("address was unavailable").
-        session_slot_raw = (
-            request.POST.get("slot_id")
-            or request.POST.get("session_slot_id")
-            or ""
-        ).strip()
+        session_slot_raw = str(session_slot_raw or "").strip()
         slot_id = None
         reused = False
         use_session_slot = False
@@ -698,16 +862,15 @@ end
                         list(slots_data.keys()) if isinstance(slots_data, dict) else slots_data,
                     )
             except (TypeError, ValueError) as e:
-                return HttpResponse(
-                    f'<div class="text-red-400" data-pipeline-failed="true">'
-                    f'Error: invalid session slot_id {session_slot_raw!r}: {e}</div>'
+                return SimulationStart(
+                    error=f'Error: invalid session slot_id {session_slot_raw!r}: {e}',
+                    pipeline_failed=True,
                 )
 
         if not use_session_slot:
             # Allocate a slot - the logstashagent will detect if config changed
             slot_allocation_body = {
-                "pipeline_name": request.GET.get('pipeline', 'simulation')
-                or request.POST.get('pipeline', 'simulation'),
+                "pipeline_name": pipeline_name,
                 "pipelines": [pipeline_data]
             }
 
@@ -785,14 +948,7 @@ end
                         logger.error(f"Could not extract slot_id from error detail: {extract_error}")
                         logger.error(traceback.format_exc())
 
-                # Build error response with slot_id if we have it
-                slot_id_attr = f' data-slot-id="{slot_id}"' if slot_id else ""
-                # Mark that the pipeline failed so JavaScript doesn't re-check status
-                failed_attr = ' data-pipeline-failed="true"'
-
-                if slot_id:
-                    logger.debug(f"Including slot_id {slot_id} in error response for logs access")
-                else:
+                if not slot_id:
                     logger.warning("No slot_id available for error response - logs will not be accessible")
 
                 # Prefer agent detail message for the chip/tooltip when present
@@ -802,13 +958,14 @@ end
                     human = str(agent_detail)
                 else:
                     human = str(e)
-                human_esc = _html_escape(human[:300])
-                error_html = (
-                    f'<div class="text-red-400"{slot_id_attr}{failed_attr}>'
-                    f'Error allocating slot: {human_esc}</div>'
+                # slot_id lets the editor open the agent logs; pipeline_failed
+                # stops it re-checking pipeline status.
+                return SimulationStart(
+                    error=f'Error allocating slot: {human[:300]}',
+                    slot_id=slot_id,
+                    agent_url=logstash_agent_url,
+                    pipeline_failed=True,
                 )
-                logger.debug(f"Returning error HTML: {error_html}")
-                return HttpResponse(error_html)
 
         # Use the slot-based pipeline name
         pipeline_name = f"slot{slot_id}-filter1"
@@ -817,133 +974,82 @@ end
         # performs comprehensive verification with polling and retries. If we got here,
         # the pipelines are guaranteed to be loaded and ready.
 
-        # If log_text is provided, send it through the pipeline
+        started = SimulationStart(
+            run_id=run_id, slot_id=slot_id, reused=reused,
+            filter_count=total_plugin_count, agent_url=logstash_agent_url,
+            agent_headers=agent_headers,
+        )
         if log_text:
-            # Send the user's log input via logstashagent's simulate endpoint
-            # This proxies the request to the local Logstash HTTP input on port 9449
-            simulation_input_url = f"{logstash_agent_url}/_logstash/simulate"
-            try:
-                # Parse log_text as JSON if it looks like JSON, otherwise send as message field
-                try:
-                    log_data = json.loads(log_text)
-                except json.JSONDecodeError:
-                    # Not JSON, wrap it in a message field
-                    log_data = {"message": log_text}
-
-                # Add slot field for routing in simulate_start.conf
-                log_data["slot"] = slot_id
-                # Add run_id for tracking this specific simulation run
-                log_data["run_id"] = run_id
-
-                # Send simulation to logstashagent.
-                # Agent may wait up to ~20s for pipeline-bus readiness then retry
-                # forward to Logstash (1s+2s+3s). UI must not time out before that,
-                # or the browser sees no run_id and paints Failed.
-                response = requests.post(
-                    simulation_input_url,
-                    json=log_data,
-                    headers=agent_headers,
-                    verify=agent_requests_verify(),
-                    timeout=45,
-                )
-
-                # Check if request was queued (202 status)
-                if response.status_code == 202:
-                    logger.warning(
-                        "Simulation request queued - Logstash is restarting (run_id=%s)",
-                        run_id,
-                    )
-                    # Still return run_id shell so FE can poll StreamSimulate
-                    template = get_template(
-                        'components/pipeline_editor/simulation_results.html'
-                    )
-                    result_html = template.render(
-                        {
-                            'filter_count': total_plugin_count,
-                            'slot_id': slot_id,
-                            'reused': reused,
-                            'run_id': run_id,
-                            'queued': True,
-                        },
-                        request,
-                    )
-                    return HttpResponse(result_html)
-
-                response.raise_for_status()
+            started.queued, started.forward_error = send_simulation_event(
+                logstash_agent_url, slot_id, run_id, log_text,
+                agent_headers=agent_headers,
+            )
+            if not started.forward_error:
                 logger.info(f"Sent simulation input to pipeline '{pipeline_name}'")
-
-            except requests.exceptions.RequestException as e:
-                # Forward failed/timed out — but agent may still deliver the event
-                # (or already accepted it) after our client timeout. Always return
-                # the run_id shell so the UI can poll instead of "no run_id".
-                logger.error(
-                    "Failed to send simulation input (run_id=%s slot=%s): %s",
-                    run_id,
-                    slot_id,
-                    e,
-                )
-                template = get_template(
-                    'components/pipeline_editor/simulation_results.html'
-                )
-                result_html = template.render(
-                    {
-                        'filter_count': total_plugin_count,
-                        'slot_id': slot_id,
-                        'reused': reused,
-                        'run_id': run_id,
-                        'forward_error': str(e),
-                    },
-                    request,
-                )
-                # Prefix a visible error marker the FE can parse, then the
-                # normal results bootstrap (initSimulationResults(run_id)).
-                return HttpResponse(
-                    f'<div class="text-yellow-400" data-sim-forward-error="true" '
-                    f'data-run-id="{run_id}" data-slot-id="{slot_id}">'
-                    f'Warning: simulation forward timed out or failed '
-                    f'({_html_escape(str(e)[:200])}); polling for results…'
-                    f'</div>'
-                    + result_html
-                )
-
-        # If no log_text was provided, this was just a slot allocation - return simple success message
-        if not log_text:
-            result_html = f'''
-            <div class="p-4 bg-blue-900/30 border border-blue-600 rounded-lg" data-slot-id="{slot_id}">
-                <h3 class="text-lg font-semibold text-blue-400 mb-2">✓ Slot Allocated</h3>
-                <p class="text-blue-200">Slot {slot_id} {"(reused - same config)" if reused else "(new)"} with {len(filter_plugins)} instrumented filter(s)</p>
-            </div>
-            '''
-            return HttpResponse(result_html)
-
-        # Return success message - results will be streamed via StreamSimulate endpoint
-        # Render the template with context
-        template = get_template('components/pipeline_editor/simulation_results.html')
-        context = {
-            'filter_count': total_plugin_count,
-            'slot_id': slot_id,
-            'reused': reused,
-            'run_id': run_id
-        }
-        result_html = template.render(context, request)
-
-        return HttpResponse(result_html)
+        return started
 
     except Exception as e:
         logger.error(f"Error in SimulatePipeline: {e}")
         logger.error(traceback.format_exc())
-        return HttpResponse(f'<div class="text-red-400">Error: {str(e)}</div>')
+        return SimulationStart(error=f'Error: {e}')
+
+def send_simulation_event(agent_url, slot_id, run_id, log_text, agent_headers=None):
+    """Send one event into an allocated simulation slot.
+
+    Args:
+        agent_url: Simulate agent base URL.
+        slot_id: Slot whose instrumented pipeline should process the event.
+        run_id: Identifier the results will carry.
+        log_text: Log line, or JSON text for a structured event.
+        agent_headers: Auth headers for the agent, from ``_sim_agent_headers``.
+
+    Returns:
+        tuple: ``(queued, forward_error)``. ``queued`` is True when the agent
+        accepted the event while Logstash restarts. ``forward_error`` is the
+        error text if sending failed; the agent may still deliver results.
+    """
+    try:
+        log_data = json.loads(log_text)
+    except json.JSONDecodeError:
+        log_data = {"message": log_text}
+    if not isinstance(log_data, dict):
+        log_data = {"message": log_text}
+    # slot routes the event in simulate_start.conf; run_id tags its results.
+    log_data["slot"] = slot_id
+    log_data["run_id"] = run_id
+
+    try:
+        # Agent may wait up to ~20s for pipeline-bus readiness then retry
+        # forward to Logstash (1s+2s+3s). Don't time out before that.
+        response = requests.post(
+            f"{agent_url}/_logstash/simulate",
+            json=log_data,
+            headers=agent_headers,
+            verify=agent_requests_verify(),
+            timeout=45,
+        )
+        if response.status_code == 202:
+            logger.warning("Simulation request queued - Logstash is restarting (run_id=%s)", run_id)
+            return True, None
+        response.raise_for_status()
+        return False, None
+    except requests.exceptions.RequestException as e:
+        logger.error("Failed to send simulation input (run_id=%s slot=%s): %s", run_id, slot_id, e)
+        return False, str(e)
 
 
 @csrf_exempt
 def StreamSimulate(request):
     """Receive one simulated event from Logstash HTTP output and enqueue it.
 
-    Called by the instrumented pipeline's output for each event.
+    Called by the instrumented pipeline's output for each event. The endpoint
+    is unauthenticated, so only events whose ``run_id`` passes
+    :func:`is_known_run_id` are stored, up to ``SimulationResult.MAX_PER_RUN``
+    per run.
 
     Examples:
         # POST JSON (from the agent / Ruby http output)
-        event = {"run_id": "<uuid>", "snapshots": {"plugin-id": {...}}, ...}
+        event = {"run_id": "<new_run_id()>", "snapshots": {"plugin-id": {...}}, ...}
         # {"status": "ok"}
     """
     if request.method != 'POST':
@@ -953,10 +1059,14 @@ def StreamSimulate(request):
         # Parse the incoming event data
         event_data = json.loads(request.body)
 
-        # Store the event in the global results queue
-        with simulation_lock:
-            simulation_results.append(event_data)
-            queue_size = len(simulation_results)
+        if not isinstance(event_data, dict):
+            return JsonResponse({"error": "Event must be a JSON object"}, status=400)
+        if not is_known_run_id(event_data.get('run_id')):
+            logger.warning("StreamSimulate: rejected event for unknown or expired run_id %r",
+                           str(event_data.get('run_id'))[:64])
+            return JsonResponse({"error": "Unknown or expired run_id"}, status=403)
+        if not SimulationResult.add(event_data):
+            return JsonResponse({"error": "Too many results for this run"}, status=429)
 
         # Log detailed information about the received event
         event_run_id = event_data.get('run_id', 'MISSING')
@@ -974,7 +1084,7 @@ def StreamSimulate(request):
                 list(event_data.keys())[:30],
             )
         snapshot_count = len(snapshots) if isinstance(snapshots, dict) else 0
-        logger.info(f"[AGENT->BE] Received event with run_id={event_run_id}, snapshots={snapshot_count}, queue size now: {queue_size}")
+        logger.info(f"[AGENT->BE] Received event with run_id={event_run_id}, snapshots={snapshot_count}")
         if snapshots:
             logger.debug(f"[AGENT->BE] Snapshot keys: {list(snapshots.keys()) if isinstance(snapshots, dict) else 'NOT A DICT'}")
         logger.debug(f"StreamSimulate: Event data keys: {list(event_data.keys())}")
@@ -1008,28 +1118,13 @@ def GetSimulationResults(request):
         if not run_id:
             return JsonResponse({"error": "Missing run_id parameter"}, status=400)
 
-        # Filter results by run_id and remove them from the queue
-        with simulation_lock:
+        try:
+            matching_results = SimulationResult.take([run_id])[run_id]
+        except OperationalError as exc:
+            # SQLite raises "database is locked" when a result is written mid-read.
+            # take() rolled back, so the next poll gets these rows.
+            logger.warning("GetSimulationResults: could not read results this poll: %s", exc)
             matching_results = []
-            remaining_results = deque(maxlen=1000)
-            
-            # Debug: Log all run_ids in the queue
-            queue_run_ids = [r.get('run_id', 'MISSING') for r in simulation_results]
-            logger.debug(f"GetSimulationResults: Queue has {len(simulation_results)} events with run_ids: {queue_run_ids}")
-            logger.debug(f"GetSimulationResults: Looking for run_id: {run_id}")
-
-            for result in simulation_results:
-                result_run_id = result.get('run_id')
-                if result_run_id == run_id:
-                    matching_results.append(result)
-                    logger.debug(f"GetSimulationResults: MATCH found for run_id {run_id}")
-                else:
-                    remaining_results.append(result)
-                    logger.debug(f"GetSimulationResults: No match - result has run_id={result_run_id}, looking for {run_id}")
-
-            # Replace the queue with non-matching results
-            simulation_results.clear()
-            simulation_results.extend(remaining_results)
 
         # Log snapshot counts for each event being returned
         snapshot_info = []
