@@ -32,7 +32,7 @@ missing_wheels() {
 }
 
 py_ok() {
-    "$1" -c 'import sys; assert sys.version_info[:2] == (3, 12) and sys.maxsize > 2**32'
+    "$1" -c 'import platform, sys; sys.exit(0 if (sys.version_info[:2] == (3, 12) and sys.implementation.name == "cpython" and platform.machine().lower() in ("x86_64", "amd64") and sys.maxsize > 2**32) else 1)'
 }
 
 discover_python() {
@@ -136,7 +136,9 @@ case "$ACTION" in
             printf '%s\n' "error: no existing virtualenv found to upgrade" >&2
             exit 1
         fi
-        if [ -f "$DATA_DIR/gunicorn.pid" ] && kill -0 $(cat "$DATA_DIR/gunicorn.pid") 2>/dev/null; then
+        PID_DIR=$(LOGSTASHUI_DATA_DIR="$DATA_DIR" "$VENV/bin/python" -c "from LogstashUI.paths import resolve_data_dir; print(resolve_data_dir(migrate_legacy=False))" 2>/dev/null || true)
+        PID_DIR=${PID_DIR:-$DATA_DIR}
+        if [ -f "$PID_DIR/gunicorn.pid" ] && kill -0 $(cat "$PID_DIR/gunicorn.pid") 2>/dev/null; then
             printf '%s\n' "error: logstashui server is running. Stop server before upgrading." >&2
             exit 1
         fi

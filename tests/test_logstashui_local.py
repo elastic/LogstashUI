@@ -5,9 +5,11 @@
 # acceptance #6
 import json
 import os
+import pwd
 import shutil
 import subprocess
 import sys
+import uuid
 import zipfile
 from pathlib import Path
 
@@ -39,6 +41,14 @@ args = sys.argv[1:]
 if args[:1] == ["-c"]:
     log()
     code = args[1]
+    if "resolve_data_dir" in code:
+        # The product's data-dir resolver: run the REAL module so the resolved
+        # path is the application's own answer, not a test-side guess.
+        sys.path.insert(0, os.environ["SHIM_SRC"])
+        from LogstashUI.paths import resolve_data_dir
+
+        print(resolve_data_dir(migrate_legacy=False))
+        sys.exit(0)
     fake = (3, @MINOR@, 0, "final", 0)
 
     class FakeVersion:
@@ -52,6 +62,13 @@ if args[:1] == ["-c"]:
 
     sys.version_info = FakeVersion()
     sys.maxsize = @MAXSIZE@
+    sys.implementation = types.SimpleNamespace(name="@IMPL@")
+    # The product's validation imports platform and asks it the machine name;
+    # a module-level stub is what makes the architecture faked rather than the
+    # host's real x86_64 answering for every candidate.
+    platform_mod = types.ModuleType("platform")
+    platform_mod.machine = lambda: "@MACHINE@"
+    sys.modules["platform"] = platform_mod
     exec(compile(code, "<shim>", "exec"), {"__name__": "__main__"})
     sys.exit(0)
 if args[:2] == ["-m", "venv"]:
@@ -102,10 +119,23 @@ def tools_dir(tmp: Path) -> str:
     return str(bindir)
 
 
-def write_shim(directory: Path, name: str = "python3.12", minor: int = 11, maxsize: int = 2 ** 63 - 1) -> Path:
+def write_shim(
+    directory: Path,
+    name: str = "python3.12",
+    minor: int = 11,
+    maxsize: int = 2 ** 63 - 1,
+    impl: str = "cpython",
+    machine: str = "x86_64",
+) -> Path:
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / name
-    path.write_text(SHIM.replace("@PYTHON@", BASE_PYTHON).replace("@MINOR@", str(minor)).replace("@MAXSIZE@", str(maxsize)))
+    path.write_text(
+        SHIM.replace("@PYTHON@", BASE_PYTHON)
+        .replace("@MINOR@", str(minor))
+        .replace("@MAXSIZE@", str(maxsize))
+        .replace("@IMPL@", impl)
+        .replace("@MACHINE@", machine)
+    )
     path.chmod(0o755)
     return path
 
@@ -158,6 +188,9 @@ def env_for(tmp: Path, tools: str, *, path_prefix=None, python=None, data_dir=No
         "HOME": str(tmp),
         "TMPDIR": str(tmp),
         "SHIM_LOG": str(tmp / "shim.log"),
+        # the shim imports the real LogstashUI package for the resolver probe
+        "SHIM_SRC": str(ROOT / "src" / "logstashui"),
+        "PYTHONPATH": str(ROOT / "src"),
     }
     if python:
         env["PYTHON"] = python
@@ -247,20 +280,32 @@ def test_python_validation(tmp_path):
     bundle = tmp_path / "bundle"
     script = copy_script(bundle)
     make_wheels(bundle)
-    shim = write_shim(tmp_path / "shims", minor=11)
-    env = env_for(tmp_path, tools_dir(tmp_path), path_prefix=shim.parent, python=str(shim))
-    proc = run(script, ["--install"], env, other_cwd(tmp_path))
-    assert proc.returncode == 1
-    assert "need CPython 3.12 x86_64" in proc.stderr
-    assert not (bundle / ".venv").exists()
-    assert pip_rows(read_log(tmp_path / "shim.log")) == []
-    # the 64-bit clause is the script's own too
-    shim32 = write_shim(tmp_path / "shims32", minor=12, maxsize=2 ** 31 - 1)
-    env = env_for(tmp_path, tools_dir(tmp_path), path_prefix=shim32.parent, python=str(shim32))
-    proc = run(script, ["--install"], env, other_cwd(tmp_path))
-    assert proc.returncode == 1
-    assert "need CPython 3.12 x86_64" in proc.stderr
-    assert not (bundle / ".venv").exists()
+    tools = tools_dir(tmp_path)
+    cwd = other_cwd(tmp_path)
+    # one candidate per rejection category: version, implementation, the two
+    # 64-bit ARM names, and 32-bit pointer size
+    candidates = {
+        "version": {"minor": 11},
+        "implementation": {"minor": 12, "impl": "pypy"},
+        "aarch64": {"minor": 12, "machine": "aarch64"},
+        "arm64": {"minor": 12, "machine": "arm64"},
+        "maxsize": {"minor": 12, "maxsize": 2 ** 32 - 1},
+    }
+    for label, kwargs in candidates.items():
+        shim = write_shim(tmp_path / f"shims-{label}", **kwargs)
+        for optimize in (None, "1"):
+            env = env_for(tmp_path, tools, path_prefix=shim.parent, python=str(shim))
+            if optimize:
+                env["PYTHONOPTIMIZE"] = optimize
+            proc = run(script, ["--install"], env, cwd)
+            ctx = f"{label} PYTHONOPTIMIZE={optimize}"
+            assert proc.returncode == 1, (ctx, proc.stdout, proc.stderr)
+            assert "need CPython 3.12 x86_64" in proc.stderr, ctx
+            assert not (bundle / ".venv").exists(), ctx
+            assert pip_rows(read_log(tmp_path / "shim.log")) == [], ctx
+    # the categories are distinct because the script's own code decides: each
+    # faked value above is the only failing clause, so a py_ok replaced by
+    # `sys.exit(0)` (or one missing any single clause) accepts a candidate here.
 
 
 # acceptance #6
@@ -488,19 +533,35 @@ def test_upgrade_running_server_guard_preset_env(tmp_path):
     script, shim, archive = _guard_bundle(tmp_path)
     here = Path(here_of(script))
     plant_venv(here / ".venv", shim)
-    # leading tilde preset must expand to $HOME before the pid guard looks
-    live_pid(tmp_path / "logstashui_data" / "gunicorn.pid")
-    env = env_for(
-        tmp_path,
-        tools_dir(tmp_path),
-        path_prefix=shim.parent,
-        python=str(shim),
-        data_dir="~/logstashui_data",
-    )
-    proc = run(script, ["--upgrade", str(archive)], env, other_cwd(tmp_path))
-    assert proc.returncode == 1
-    assert "error: logstashui server is running. Stop server before upgrading." in proc.stderr
-    assert pip_rows(read_log(tmp_path / "shim.log")) == []
+    tools = tools_dir(tmp_path)
+    cwd = other_cwd(tmp_path)
+    account = pwd.getpwuid(os.getuid())
+    # a unique leaf under the real home of the account `~<name>` names
+    named_dir = Path(account.pw_dir) / f"logstashui_data-s1-{os.getpid()}-{uuid.uuid4().hex[:8]}"
+    spaced = tmp_path / "spaced data"
+    cases = {
+        # leading tilde: $HOME is tmp_path in env_for
+        "tilde": ("~/logstashui_data", tmp_path / "logstashui_data"),
+        # named user home: only resolve_data_dir expands `~user`
+        "named-user": (f"~{account.pw_name}/{named_dir.name}", named_dir),
+        # absolute path padded with whitespace
+        "padded": (f"  {spaced}  ", spaced),
+    }
+    try:
+        for label, (preset, pid_dir) in cases.items():
+            pid_dir.mkdir(parents=True, exist_ok=True)
+            live_pid(pid_dir / "gunicorn.pid")
+            log = tmp_path / f"shim-{label}.log"
+            env = env_for(tmp_path, tools, path_prefix=shim.parent, python=str(shim), data_dir=preset)
+            env["SHIM_LOG"] = str(log)
+            proc = run(script, ["--upgrade", str(archive)], env, cwd)
+            ctx = f"{label} preset={preset!r}"
+            assert proc.returncode == 1, (ctx, proc.stdout, proc.stderr)
+            assert "error: logstashui server is running. Stop server before upgrading." in proc.stderr, ctx
+            assert pip_rows(read_log(log)) == [], ctx
+            shutil.rmtree(pid_dir)
+    finally:
+        shutil.rmtree(named_dir, ignore_errors=True)
 
 
 def _upgrade_ready(tmp: Path):
