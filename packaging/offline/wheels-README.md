@@ -14,11 +14,30 @@ uv is **not** required.
 ## Install and run
 
 ```sh
+./logstashui_local.sh --install
+./logstashui_local.sh serve
+```
+
+`logstashui_local.sh --install` creates `.venv` and installs the bundled wheels. `serve` starts the server from that `.venv` and installs first if `.venv` is missing. Pass-through arguments go to the server: `./logstashui_local.sh serve --host 127.0.0.1`.
+
+Upgrade from a newer archive or directory, in place:
+
+```sh
+./logstashui_local.sh --upgrade <archive>
+```
+
+`--upgrade` reuses the existing `.venv`, refuses to run while the server is running (stop it first; pid file `gunicorn.pid` in the data directory), and applies database migrations in place.
+
+`--install-path <DIR>` installs into `<DIR>/.venv` instead of this directory. The default data directory resolves to `$INSTALL_DIR/logstashui_data`; set `LOGSTASHUI_DATA_DIR` to keep a custom data directory. Upgrades never delete, move, or replace files under it.
+
+`install.sh` remains in this archive for backward compatibility:
+
+```sh
 ./install.sh
 .venv/bin/logstashui serve
 ```
 
-Override the interpreter with `PYTHON=/path/to/python3.12 ./install.sh`.
+Override the interpreter with `PYTHON=/path/to/python3.12 ./logstashui_local.sh --install` (or `PYTHON=/path/to/python3.12 ./install.sh`).
 
 HTTPS UI is **:8443**. Data dir default is `$(pwd)/logstashui_data` (`LOGSTASHUI_DATA_DIR`). Same env vars as a normal install (`LOGSTASHUI_*`, `LOGSTASHUI_DB_*`).
 

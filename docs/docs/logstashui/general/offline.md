@@ -10,7 +10,7 @@ This is **not** the default packaging path and **not** the recommended install w
 
 | Zip | Isolated host needs | Run |
 |---|---|---|
-| `logstashui-*-offline-wheels-linux-x86_64-cp312.zip` | CPython **3.12** x86_64 + venv | `./install.sh` then `.venv/bin/logstashui serve` |
+| `logstashui-*-offline-wheels-linux-x86_64-cp312.zip` | CPython **3.12** x86_64 + venv | `./logstashui_local.sh --install` then `./logstashui_local.sh serve` (or `./install.sh` then `.venv/bin/logstashui serve`) |
 | `logstashui-*-offline-docker-linux-x86_64.zip` | Docker Engine | `./load.sh` then `docker compose -f compose.offline.yml up -d` |
 
 All three include `LogstashUI[databases]` (psycopg + PyMySQL) and `LogstashUI[otel]` (inert until `LOGSTASHUI_OTEL=true`). SQLite remains the runtime default. **LogstashAgent is not bundled.** arm64 and Windows are later freeze invocations, not this zip.
@@ -42,7 +42,15 @@ Optional CI: `.github/workflows/offline-freeze.yml` is `workflow_dispatch` only 
 
 Same env as a normal install: `LOGSTASHUI_DATA_DIR` (default `$(pwd)/logstashui_data`, but can be set using `LOCAL_LOGSTASHUI_DATA_DIR`), `LOGSTASHUI_*`, `LOGSTASHUI_DB_*`. HTTPS on **:8443**. Product CA is created on first start under the data dir — do not expect CA files inside the zip.
 
-**Wheels:** Debian/Ubuntu need `python3.12` and `python3.12-venv`. `install.sh` uses `pip install --no-index --find-links ./wheels 'LogstashUI[databases,otel]'`. It does **not** upgrade pip (that would hit PyPI). uv is not required.
+**Wheels:** Debian/Ubuntu need `python3.12` and `python3.12-venv`. The zip ships `logstashui_local.sh` at its root:
+
+```sh
+./logstashui_local.sh --install              # create .venv from ./wheels
+./logstashui_local.sh serve                  # start (installs first if .venv is missing)
+./logstashui_local.sh --upgrade <archive>    # upgrade in place from a newer zip or directory
+```
+
+`--install-path <DIR>` installs into `<DIR>/.venv` instead of the zip directory. The default data directory resolves to `$INSTALL_DIR/logstashui_data` (with the default `--install-path`, the zip directory); set `LOGSTASHUI_DATA_DIR` to keep a custom data directory, which `serve` and the `--upgrade` migrations export unchanged. `--upgrade` refuses to run while the server is running and never deletes, moves, or replaces files under the data directory. `install.sh` remains in the zip for backward compatibility: it runs `pip install --no-index --find-links ./wheels 'LogstashUI[databases,otel]'`. Neither script upgrades pip (that would hit PyPI). uv is not required.
 
 **Docker:** UI-only compose (no Agent, no `embedded` profile). Set `ALLOWED_HOSTS` / `LOGSTASHUI_HOST_*` / `LOGSTASHUI_DB_*` as needed. After a local image build, optional extra check: `IMAGE=<tag> bin/test_docker_otel.sh` (imports the OTEL packages; does not start serve).
 
