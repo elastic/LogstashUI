@@ -161,8 +161,12 @@ freeze_wheels() {
         "$TEMPLATES/download_wheels.py" "$req_plain" "$wheels")
 
     subst "$TEMPLATES/wheels-install.sh" "$stage/install.sh"
+    # acceptance #2: bundle logstashui_local.sh into the wheelhouse before
+    # SHA256SUMS.txt is generated, so the checksum covers the script.
+    subst "$TEMPLATES/logstashui_local.sh" "$stage/logstashui_local.sh"
     subst "$TEMPLATES/wheels-README.md" "$stage/README.md"
     chmod +x "$stage/install.sh"
+    chmod +x "$stage/logstashui_local.sh"
     cp "$ROOT/LICENSE.txt" "$stage/LICENSE.txt"
     cp "$ROOT/NOTICE.txt" "$stage/NOTICE.txt"
     cp "$req" "$stage/requirements-offline.txt"
