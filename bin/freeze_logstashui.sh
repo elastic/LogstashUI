@@ -162,7 +162,9 @@ freeze_wheels() {
 
     subst "$TEMPLATES/wheels-install.sh" "$stage/install.sh"
     subst "$TEMPLATES/wheels-README.md" "$stage/README.md"
+    subst "$TEMPLATES/logstashui_local.sh" "$stage/logstashui_local.sh"
     chmod +x "$stage/install.sh"
+    chmod +x "$stage/logstashui_local.sh"
     cp "$ROOT/LICENSE.txt" "$stage/LICENSE.txt"
     cp "$ROOT/NOTICE.txt" "$stage/NOTICE.txt"
     cp "$req" "$stage/requirements-offline.txt"
