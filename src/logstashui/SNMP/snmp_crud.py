@@ -38,6 +38,7 @@ from .snmp_pipeline_generator import (
 from PipelineManager.models import Connection, Pipeline, Keystore
 
 from .models import Credential, Network, Profile, Device, DeviceTemplate, SNMPDeploymentState
+from .deploy_fingerprint import compute_input_fingerprint
 
 from datetime import datetime, timedelta, timezone
 
@@ -1694,9 +1695,10 @@ def GetNetworkPipelineName(request, network_id):
 
 
 def CheckUndeployedChanges(request):
-    """Return whether SNMP config looks dirty using deployment timestamps.
+    """Return whether SNMP config differs from the last deploy.
 
-    Uses `SNMPDeploymentState.has_undeployed_changes` instead of a full reconcile.
+    Uses `SNMPDeploymentState.has_undeployed_changes` (an input fingerprint
+    compare) instead of a full reconcile.
 
     Returns:
         JSON `{success, has_changes}`. On error, `has_changes` is True.
@@ -1743,6 +1745,10 @@ def GetDeployDiff(request):
         }
     """
     try:
+        # Taken before any rows are read so an edit made while the diff is
+        # building is never recorded as deployed.
+        input_fingerprint = compute_input_fingerprint()
+
         # Clear the official profile cache to ensure we load fresh data from disk
         # This is important when profile JSON files have been edited
         global _OFFICIAL_PROFILE_CACHE
@@ -2194,17 +2200,19 @@ def GetDeployDiff(request):
         logger.debug(f"has_actual_changes={has_actual_changes}")
         
         if not has_actual_changes:
-            # No actual changes found - sync timestamps to clear the indicator
-            # This handles the "change then revert" scenario
-            state, _ = SNMPDeploymentState.objects.get_or_create(id=1)
-            state.last_deployment = state.last_config_change
-            state.save(update_fields=['last_deployment'])
+            # Live pipelines already match this config (also covers drift that
+            # was fixed outside LogstashUI), so record it as deployed.
+            SNMPDeploymentState.mark_deployed(input_fingerprint)
             logger.info("No actual changes found in diff - cleared deployment indicator")
         
         # Cache the deployment plan for reuse when user clicks "Confirm Deploy"
         # Short timeout (60 seconds) - just long enough for user to review and click deploy
         from django.core.cache import cache
-        cache.set('snmp_deployment_plan', network_diffs, timeout=60)
+        cache.set(
+            'snmp_deployment_plan',
+            {'diffs': network_diffs, 'fingerprint': input_fingerprint},
+            timeout=60,
+        )
         logger.info(f"Cached deployment plan with {len(network_diffs)} pipeline changes")
         
         return JsonResponse({
@@ -2246,9 +2254,11 @@ def DeployConfiguration(request):
     try:
         # Try to use cached deployment plan from GetDeployDiff
         from django.core.cache import cache
-        cached_plan = cache.get('snmp_deployment_plan')
+        cached = cache.get('snmp_deployment_plan')
         
-        if cached_plan:
+        if cached:
+            cached_plan = cached['diffs']
+            input_fingerprint = cached['fingerprint']
             logger.info(f"Using cached deployment plan with {len(cached_plan)} pipeline changes")
             # Clear cache immediately to prevent reuse
             cache.delete('snmp_deployment_plan')
@@ -2344,12 +2354,7 @@ def DeployConfiguration(request):
                         'error': 'Failed to deploy any pipelines. Errors: ' + '; '.join(errors)
                     }, status=500)
                 else:
-                    # No pipeline changes needed — still stamp last_deployment so
-                    # has_undeployed_changes() returns False (config matches deployed state).
-                    from django.utils import timezone
-                    state, _ = SNMPDeploymentState.objects.get_or_create(id=1)
-                    state.last_deployment = timezone.now()
-                    state.save(update_fields=['last_deployment'])
+                    SNMPDeploymentState.mark_deployed(input_fingerprint)
                     return JsonResponse({
                         'success': True,
                         'message': 'All pipelines are already up to date - no changes needed',
@@ -2373,11 +2378,7 @@ def DeployConfiguration(request):
             if errors:
                 message += f". Warnings: {'; '.join(errors)}"
             
-            # Mark deployment as successful
-            from django.utils import timezone
-            state, _ = SNMPDeploymentState.objects.get_or_create(id=1)
-            state.last_deployment = timezone.now()
-            state.save(update_fields=['last_deployment'])
+            SNMPDeploymentState.mark_deployed(input_fingerprint)
             logger.info("Deployment completed successfully using cached plan")
             
             return JsonResponse({
@@ -2391,6 +2392,7 @@ def DeployConfiguration(request):
         
         # No cached plan - fall back to full reconciliation
         logger.info("No cached deployment plan found, performing full reconciliation")
+        input_fingerprint = compute_input_fingerprint()
         
         # Clear the official profile cache to ensure we load fresh data from disk
         # This is important when profile JSON files have been edited
@@ -2710,12 +2712,7 @@ def DeployConfiguration(request):
                     'error': 'Failed to deploy any pipelines. Errors: ' + '; '.join(errors)
                 }, status=500)
             else:
-                # No changes needed — still stamp last_deployment so
-                # has_undeployed_changes() returns False (config matches deployed state).
-                from django.utils import timezone
-                state, _ = SNMPDeploymentState.objects.get_or_create(id=1)
-                state.last_deployment = timezone.now()
-                state.save(update_fields=['last_deployment'])
+                SNMPDeploymentState.mark_deployed(input_fingerprint)
                 return JsonResponse({
                     'success': True,
                     'message': 'All pipelines are already up to date - no changes needed',
@@ -2740,11 +2737,7 @@ def DeployConfiguration(request):
         if errors:
             message += f". Warnings: {'; '.join(errors)}"
 
-        # Mark deployment as successful to clear the indicator
-        from django.utils import timezone
-        state, _ = SNMPDeploymentState.objects.get_or_create(id=1)
-        state.last_deployment = timezone.now()
-        state.save(update_fields=['last_deployment'])
+        SNMPDeploymentState.mark_deployed(input_fingerprint)
         logger.info("Deployment completed successfully - updated deployment timestamp")
 
         return JsonResponse({

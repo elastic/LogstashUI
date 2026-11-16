@@ -845,7 +845,12 @@ class DeviceTemplate(models.Model):
 
 
 class SNMPDeploymentState(models.Model):
-    """Singleton timestamps used to cheaply detect undeployed SNMP config changes."""
+    """Singleton used to cheaply detect undeployed SNMP config changes.
+
+    ``deployed_fingerprint`` is the input fingerprint
+    (``SNMP.deploy_fingerprint``) at the last deploy. The timestamps remain as
+    a fallback for installs that have not deployed since it was added.
+    """
     last_deployment = models.DateTimeField(
         null=True, 
         blank=True,
@@ -855,6 +860,12 @@ class SNMPDeploymentState(models.Model):
         null=True,
         blank=True,
         help_text="Timestamp of last configuration change"
+    )
+    deployed_fingerprint = models.CharField(
+        max_length=64,
+        null=True,
+        blank=True,
+        help_text="Input fingerprint of the configuration that was last deployed"
     )
     
     class Meta:
@@ -871,22 +882,37 @@ class SNMPDeploymentState(models.Model):
         state.save(update_fields=['last_config_change'])
     
     @classmethod
+    def mark_deployed(cls, fingerprint):
+        """Record a successful deploy (or an empty diff) of ``fingerprint``.
+
+        Args:
+            fingerprint: ``compute_input_fingerprint()`` taken before the plan
+                was built, so edits made while deploying stay pending.
+        """
+        from django.utils import timezone
+        state, _ = cls.objects.get_or_create(id=1)
+        state.last_deployment = timezone.now()
+        state.deployed_fingerprint = fingerprint
+        state.save(update_fields=['last_deployment', 'deployed_fingerprint'])
+
+    @classmethod
     def has_undeployed_changes(cls):
-        """Return True if config has changed since the last successful deploy.
+        """Return True if the SNMP config differs from what was last deployed.
 
-        Never-deployed state is treated as dirty.
-
-        Note:
-            Change-then-revert can still look dirty (false positive). Opening the deploy
-            diff with no actual pipeline changes clears the indicator.
+        Never-deployed state is treated as dirty. Once a deploy has stored a
+        fingerprint, the current inputs are fingerprinted and compared, so a
+        change that is reverted reads as clean. Before that, the timestamp
+        comparison is used.
         """
         state = cls.objects.filter(id=1).first()
-        
-        # Never deployed or no state
+
         if not state or not state.last_deployment:
             return True
-        
-        # Compare timestamps
+
+        if state.deployed_fingerprint:
+            from .deploy_fingerprint import compute_input_fingerprint
+            return compute_input_fingerprint() != state.deployed_fingerprint
+
         if not state.last_config_change:
             return False
         return state.last_config_change > state.last_deployment

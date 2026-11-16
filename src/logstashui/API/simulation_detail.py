@@ -1,3 +1,7 @@
+#Copyright Elasticsearch B.V. and/or licensed to Elasticsearch B.V. under one
+#or more contributor license agreements. Licensed under the Elastic License;
+#you may not use this file except in compliance with the Elastic License.
+
 """Shape raw simulation results to a chosen level of detail.
 
 A simulation run produces a step-0 copy of the input and a final event whose

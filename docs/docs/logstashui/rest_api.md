@@ -1508,7 +1508,7 @@ curl -X DELETE https://logstashui.example.com/api/snmp/templates/17/ \
 
 Three endpoints control the SNMP deployment lifecycle. The recommended flow is:
 
-1. **Check status** — fast timestamp comparison, no ES round-trip.
+1. **Check status** — compares a fingerprint of the SNMP configuration against the last deploy; no ES round-trip.
 2. **Compute diff** — reconciles desired pipelines against ES CPM / agent records and caches the plan for 60 seconds.
 3. **Apply** — executes the cached plan (or falls back to a fresh reconciliation if the cache expired).
 

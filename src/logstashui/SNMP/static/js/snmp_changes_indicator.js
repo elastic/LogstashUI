@@ -6,7 +6,7 @@
 
 /**
  * Check for undeployed SNMP changes and update the indicator
- * Uses lightweight timestamp-based check for performance
+ * Uses a fingerprint compare on the server instead of a full reconcile
  */
 async function checkForUndeployedSNMPChanges() {
     const indicator = document.getElementById('snmpUndeployedIndicator');
@@ -14,7 +14,7 @@ async function checkForUndeployedSNMPChanges() {
     if (!indicator) return;
 
     try {
-        // Use lightweight endpoint that checks timestamps instead of full reconciliation
+        // Lightweight endpoint: fingerprint compare instead of full reconciliation
         const response = await fetch('/SNMP/CheckUndeployedChanges/', {
             method: 'POST',
             headers: {

@@ -4,7 +4,9 @@ SNMP configuration in LogstashUI is **staged**: adding a device, editing a netwo
 
 ## The Undeployed Changes Badge
 
-Any create, update, or delete across SNMP configuration (devices, networks, credentials, templates, profiles) marks the configuration as changed. An orange **"Undeployed changes"** badge with a pulsing dot appears next to the **Deploy Changes** button on every SNMP page and stays there until a deploy succeeds.
+An orange **"Undeployed changes"** badge with a pulsing dot appears next to the **Deploy Changes** button on every SNMP page when the SNMP configuration (devices, networks, credentials, templates, profiles) differs from what was last deployed. LogstashUI compares a fingerprint of the settings that feed pipeline generation against the one stored at deploy time, so saving without edits, re-entering the same password, or changing a setting and changing it back does not show the badge. Fields that don't affect generated pipelines, such as a template's description or matching rules, are ignored.
+
+The badge clears when a deploy succeeds, or when you open the diff and nothing needs deploying. If a deploy reports warnings for some pipelines, open the diff again to see what is still pending. Upgrading LogstashUI shows the badge once, because generated pipelines can change between versions; open the diff to confirm. Changes made outside LogstashUI, such as editing a generated pipeline directly in Elasticsearch, are not detected until you open the diff.
 
 ## The Deploy Flow
 
