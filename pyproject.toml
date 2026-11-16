@@ -9,6 +9,18 @@ description = "A control plane and UI for Logstash!"
 readme = "README.md"
 license = { file = "LICENSE.txt" }
 requires-python = ">=3.12"
+authors = [{ name = "Elastic" }]
+keywords = ["logstash", "control-plane", "management", "ui"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Web Environment",
+    "Framework :: Django",
+    "Intended Audience :: System Administrators",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: System :: Systems Administration",
+]
 dependencies = [
     "cryptography>=46.0.6",
     "django>=6.0.8,<6.1",
@@ -34,6 +46,9 @@ logstashui = "LogstashUI.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/elastic/LogstashUI"
+Documentation = "https://github.com/elastic/LogstashUI#readme"
+Repository = "https://github.com/elastic/LogstashUI.git"
+Issues = "https://github.com/elastic/LogstashUI/issues"
 
 [project.optional-dependencies]
 postgres = [
