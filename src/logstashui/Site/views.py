@@ -11,6 +11,8 @@ from django.shortcuts import render
 
 from packaging import version
 
+from Management.models import Settings
+
 import requests
 import threading
 import logging
@@ -162,14 +164,35 @@ def get_latest_version():
     return cached_version
 
 
+def update_check_enabled():
+    """Return whether the Docker Hub update check is turned on in ``Settings``.
+
+    Defaults to True when the settings table is not available yet
+    (fresh install before migrations).
+
+    Returns:
+        ``Settings.check_for_updates``, or True if it cannot be read.
+    """
+    try:
+        return Settings.get_settings().check_for_updates
+    except Exception:
+        return True
+
+
 def check_for_update():
     """Compare the running version to the cached Docker Hub latest.
+
+    Does nothing (and makes no network call) when the
+    ``check_for_updates`` setting is off.
 
     Returns:
         Dict with ``current_version``, ``latest_version``,
         ``update_available``, and ``release_url`` when an update exists;
         otherwise ``None``.
     """
+    if not update_check_enabled():
+        return None
+
     current_version_str = getattr(settings, '__VERSION__', None)
     if not current_version_str:
         logger.warning("Current version not found in settings")

@@ -52,6 +52,13 @@ class Settings(models.Model):
     """
 
     experimental_mode = models.BooleanField(default=False)
+    check_for_updates = models.BooleanField(
+        default=True,
+        help_text=(
+            "Periodically query Docker Hub for newer LogstashUI releases "
+            "and show a notice in the nav."
+        ),
+    )
     agent_ui_url = models.CharField(
         max_length=512,
         blank=True,

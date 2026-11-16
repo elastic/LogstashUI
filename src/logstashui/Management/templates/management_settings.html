@@ -12,58 +12,69 @@
     event.detail.headers['X-CSRFToken'] = '{{ csrf_token }}';
   });
 </script>
-<div class="p-6 max-w-5xl">
-  <div class="mb-6">
+<div class="p-6 space-y-8">
+  <div>
     <h1 class="text-2xl font-bold text-white">Settings</h1>
     <p class="text-gray-400">Configure application settings, agent callback URL, and HTTPS certificates</p>
   </div>
 
-  <form method="post" id="settings-form" class="space-y-6">
+  <form method="post" id="settings-form" class="space-y-8" autocomplete="off">
     {% csrf_token %}
 
-    <div class="bg-gray-800 rounded-lg shadow-xl overflow-hidden">
-      <div class="divide-y divide-gray-700">
-        <!-- Experimental Mode -->
-        <div class="flex items-start justify-between p-6">
-          <div class="flex-1 pr-8">
-            <h3 class="text-lg font-semibold text-white mb-2">Experimental Mode</h3>
-            <p class="text-sm text-gray-400 mb-2">
+    <!-- General -->
+    <section>
+      <div class="mb-3">
+        <h2 class="text-xl font-bold text-white">General</h2>
+        <p class="text-sm text-gray-400 mt-1">Feature flags and background behavior for this LogstashUI instance.</p>
+      </div>
+      <div class="bg-gray-800 rounded-lg shadow-xl divide-y divide-gray-700">
+        <label for="experimental_mode" class="flex items-start justify-between gap-8 p-6 cursor-pointer">
+          <div class="flex-1">
+            <h3 class="text-base font-semibold text-white">Experimental Mode</h3>
+            <p class="text-sm text-gray-400 mt-1">
               Enable access to experimental features that are under active development.
               These features may be unstable and are subject to change.
             </p>
-            <div class="text-xs text-gray-500 font-mono">Default: false</div>
+            <div class="text-xs text-gray-500 font-mono mt-2">Default: false</div>
           </div>
-          <div class="flex items-center">
-            <label class="swap swap-flip text-2xl">
-              <input type="checkbox" name="experimental_mode" id="experimental_mode"
-                     {% if app_settings.experimental_mode %}checked{% endif %}
-                     onchange="markAsModified()">
-              <div class="swap-on">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-              <div class="swap-off">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-            </label>
-          </div>
-        </div>
+          <input type="checkbox" name="experimental_mode" id="experimental_mode" data-setting
+                 class="toggle toggle-primary mt-1"
+                 {% if app_settings.experimental_mode %}checked{% endif %}>
+        </label>
 
-        <!-- Agent callback URL -->
+        <label for="check_for_updates" class="flex items-start justify-between gap-8 p-6 cursor-pointer">
+          <div class="flex-1">
+            <h3 class="text-base font-semibold text-white">Check Docker Hub for updates</h3>
+            <p class="text-sm text-gray-400 mt-1">
+              Enables an intermittent check to Docker Hub so your UI can notify you when a
+              new version of LogstashUI has been released.
+            </p>
+            <div class="text-xs text-gray-500 font-mono mt-2">Default: true</div>
+          </div>
+          <input type="checkbox" name="check_for_updates" id="check_for_updates" data-setting
+                 class="toggle toggle-primary mt-1"
+                 {% if app_settings.check_for_updates %}checked{% endif %}>
+        </label>
+      </div>
+    </section>
+
+    <!-- Agents & artifacts -->
+    <section>
+      <div class="mb-3">
+        <h2 class="text-xl font-bold text-white">Agents &amp; artifacts</h2>
+        <p class="text-sm text-gray-400 mt-1">How agents reach LogstashUI and where Logstash releases are downloaded from.</p>
+      </div>
+      <div class="bg-gray-800 rounded-lg shadow-xl divide-y divide-gray-700">
         <div class="p-6">
-          <h3 class="text-lg font-semibold text-white mb-2">Agent callback URL</h3>
-          <p class="text-sm text-gray-400 mb-3">
+          <label for="agent_ui_url" class="block text-base font-semibold text-white">Agent callback URL</label>
+          <p class="text-sm text-gray-400 mt-1 mb-3">
             Base URL that <strong class="text-gray-300">agents</strong> use to reach LogstashUI (backend channel).
             Prefills <code class="text-gray-300">--logstash-ui-url</code> in generated enrollment commands.
             May differ from the browser reverse-proxy URL; they can also be the same.
           </p>
-          <input type="url" name="agent_ui_url" id="agent_ui_url"
+          <input type="url" name="agent_ui_url" id="agent_ui_url" data-setting
                  value="{{ app_settings.agent_ui_url|default:'' }}"
                  placeholder="https://10.0.0.50:8443 or https://logstashui-internal"
-                 oninput="markAsModified()"
                  class="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded-md text-gray-200 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500">
           <p class="text-xs text-gray-500 mt-2">
             Product CA for agents is published at
@@ -71,19 +82,17 @@
           </p>
         </div>
 
-        <!-- Logstash tarball source -->
         <div class="p-6">
-          <h3 class="text-lg font-semibold text-white mb-2">Logstash tarball source</h3>
-          <p class="text-sm text-gray-400 mb-3">
+          <label for="logstash_artifact_base_url" class="block text-base font-semibold text-white">Logstash tarball source</label>
+          <p class="text-sm text-gray-400 mt-1 mb-3">
             Where LogstashUI fetches Logstash release tarballs for the
             <a href="/Management/LogstashArtifacts/" class="text-blue-400 hover:underline">tarball proxy</a>.
             Leave blank to use Elastic's artifact host. Point it at an internal mirror to
             keep fetches inside your network.
           </p>
-          <input type="url" name="logstash_artifact_base_url" id="logstash_artifact_base_url"
+          <input type="url" name="logstash_artifact_base_url" id="logstash_artifact_base_url" data-setting
                  value="{{ app_settings.logstash_artifact_base_url|default:'' }}"
                  placeholder="https://artifacts.elastic.co/downloads/logstash"
-                 oninput="markAsModified()"
                  class="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded-md text-gray-200 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500">
           <p class="text-xs text-gray-500 mt-2">
             Tarballs are read as <code class="text-gray-400">&lt;base&gt;/logstash-&lt;version&gt;-linux-x86_64.tar.gz</code>,
@@ -91,21 +100,21 @@
           </p>
         </div>
       </div>
-    </div>
+    </section>
 
-    <div class="flex items-center justify-between bg-gray-800 rounded-lg p-6 shadow-xl">
-      <div class="text-sm text-gray-400">
-        <span id="unsaved-changes" class="hidden text-warning font-semibold">You have unsaved changes</span>
+    <div id="save-bar" class="hidden sticky bottom-4 z-10">
+      <div class="flex items-center justify-end gap-4 bg-gray-800 border border-gray-700 rounded-lg shadow-xl px-6 py-3">
+        <span class="text-sm text-warning font-semibold">You have unsaved changes</span>
+        <button type="submit" id="save-button" class="btn btn-primary btn-sm">
+          Save Changes
+        </button>
       </div>
-      <button type="submit" id="save-button" class="btn btn-primary" disabled>
-        Save Changes
-      </button>
     </div>
   </form>
 
   <!-- HTTPS / TLS section (separate forms: upload / revert) -->
-  <div class="mt-10 space-y-4">
-    <div>
+  <section>
+    <div class="mb-3">
       <h2 class="text-xl font-bold text-white">HTTPS certificate</h2>
       <p class="text-sm text-gray-400 mt-1">
         Certificate presented by LogstashUI to browsers and agents on the UI HTTPS listener.
@@ -113,57 +122,61 @@
       </p>
     </div>
 
-    <div class="bg-gray-800 rounded-lg shadow-xl p-6 space-y-4">
-      {% if tls_status.insecure_http %}
-      <div class="p-3 rounded border border-amber-700 bg-amber-900/40 text-amber-200 text-sm">
-        LOGSTASHUI_INSECURE_HTTP is on. The UI is serving HTTP and will not generate a product CA or UI certificate. Automatic TLS is the supported path.
-      </div>
-      {% endif %}
-      <div class="flex flex-wrap items-center gap-3">
-        <span class="text-sm text-gray-400">Current mode:</span>
-        {% if tls_status.insecure_http or tls_status.mode == 'disabled' %}
-        <span class="px-2 py-1 text-xs font-semibold rounded bg-amber-900/40 text-amber-200 border border-amber-700">HTTP (insecure)</span>
-        {% elif tls_status.mode == 'custom' %}
-        <span class="px-2 py-1 text-xs font-semibold rounded bg-blue-900/50 text-blue-300 border border-blue-700">Custom certificate</span>
-        {% else %}
-        <span class="px-2 py-1 text-xs font-semibold rounded bg-amber-900/40 text-amber-200 border border-amber-700">Product CA (default)</span>
+    <div class="bg-gray-800 rounded-lg shadow-xl divide-y divide-gray-700">
+      <div class="p-6 space-y-4">
+        {% if tls_status.insecure_http %}
+        <div class="p-3 rounded border border-amber-700 bg-amber-900/40 text-amber-200 text-sm">
+          LOGSTASHUI_INSECURE_HTTP is on. The UI is serving HTTP and will not generate a product CA or UI certificate. Automatic TLS is the supported path.
+        </div>
         {% endif %}
-      </div>
-
-      {% if tls_status.certificate %}
-      <div class="text-sm text-gray-300 space-y-1 font-mono bg-gray-900/60 rounded-md p-4 border border-gray-700">
-        <div><span class="text-gray-500">Subject CN:</span> {{ tls_status.certificate.subject_cn }}</div>
-        <div><span class="text-gray-500">Issuer:</span> {{ tls_status.certificate.issuer }}</div>
-        <div><span class="text-gray-500">Valid until:</span> {{ tls_status.certificate.not_after }}</div>
-        <div><span class="text-gray-500">SANs:</span>
-          {% if tls_status.certificate.sans %}
-            {{ tls_status.certificate.sans|join:", " }}
+        <div class="flex flex-wrap items-center gap-3">
+          <h3 class="text-base font-semibold text-white">Current mode</h3>
+          {% if tls_status.insecure_http or tls_status.mode == 'disabled' %}
+          <span class="px-2 py-1 text-xs font-semibold rounded bg-amber-900/40 text-amber-200 border border-amber-700">HTTP (insecure)</span>
+          {% elif tls_status.mode == 'custom' %}
+          <span class="px-2 py-1 text-xs font-semibold rounded bg-blue-900/50 text-blue-300 border border-blue-700">Custom certificate</span>
           {% else %}
-            <span class="text-gray-500">(none)</span>
+          <span class="px-2 py-1 text-xs font-semibold rounded bg-amber-900/40 text-amber-200 border border-amber-700">Product CA (default)</span>
           {% endif %}
         </div>
-        <div class="text-xs text-gray-500 break-all"><span class="text-gray-500">Fingerprint:</span> {{ tls_status.certificate.fingerprint_sha256 }}</div>
-      </div>
-      {% elif tls_status.certificate_error %}
-      <p class="text-sm text-red-400">Could not parse certificate: {{ tls_status.certificate_error }}</p>
-      {% else %}
-      <p class="text-sm text-gray-400">No UI server certificate on disk yet (will be generated on demand).</p>
-      {% endif %}
 
-      <div class="text-xs text-gray-500 whitespace-pre-wrap font-mono bg-gray-900/40 p-3 rounded border border-gray-700">{{ tls_status.nginx_hint }}</div>
-      <p class="text-xs text-gray-500">
-        Product CA fingerprint (agents pin this via enrollment token):
-        <code class="text-gray-400">{{ tls_status.product_ca_fingerprint }}</code>
-      </p>
+        {% if tls_status.certificate %}
+        <div class="text-sm text-gray-300 space-y-1 font-mono bg-gray-900/60 rounded-md p-4 border border-gray-700">
+          <div><span class="text-gray-500">Subject CN:</span> {{ tls_status.certificate.subject_cn }}</div>
+          <div><span class="text-gray-500">Issuer:</span> {{ tls_status.certificate.issuer }}</div>
+          <div><span class="text-gray-500">Valid until:</span> {{ tls_status.certificate.not_after }}</div>
+          <div><span class="text-gray-500">SANs:</span>
+            {% if tls_status.certificate.sans %}
+              {{ tls_status.certificate.sans|join:", " }}
+            {% else %}
+              <span class="text-gray-500">(none)</span>
+            {% endif %}
+          </div>
+          <div class="text-xs text-gray-500 break-all"><span class="text-gray-500">Fingerprint:</span> {{ tls_status.certificate.fingerprint_sha256 }}</div>
+        </div>
+        {% elif tls_status.certificate_error %}
+        <p class="text-sm text-red-400">Could not parse certificate: {{ tls_status.certificate_error }}</p>
+        {% else %}
+        <p class="text-sm text-gray-400">No UI server certificate on disk yet (will be generated on demand).</p>
+        {% endif %}
+
+        <div class="text-xs text-gray-500 whitespace-pre-wrap font-mono bg-gray-900/40 p-3 rounded border border-gray-700">{{ tls_status.nginx_hint }}</div>
+        <p class="text-xs text-gray-500">
+          Product CA fingerprint (agents pin this via enrollment token):
+          <code class="text-gray-400">{{ tls_status.product_ca_fingerprint }}</code>
+        </p>
+      </div>
 
       {% if not tls_status.insecure_http %}
-      <form id="tls-upload-form" class="space-y-4 border-t border-gray-700 pt-4" enctype="multipart/form-data">
+      <form id="tls-upload-form" class="p-6 space-y-4" enctype="multipart/form-data">
         {% csrf_token %}
-        <h3 class="text-md font-semibold text-white">Use custom certificate</h3>
-        <p class="text-sm text-gray-400">
-          Upload a certificate from a recognized CA (e.g. Let’s Encrypt) or your corporate PKI.
-          Provide the leaf PEM and matching private key. Optional chain/intermediates PEM.
-        </p>
+        <div>
+          <h3 class="text-base font-semibold text-white">Use custom certificate</h3>
+          <p class="text-sm text-gray-400 mt-1">
+            Upload a certificate from a recognized CA (e.g. Let’s Encrypt) or your corporate PKI.
+            Provide the leaf PEM and matching private key. Optional chain/intermediates PEM.
+          </p>
+        </div>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
           <label class="block text-sm text-gray-300">
             Certificate (PEM)
@@ -181,51 +194,50 @@
                    class="mt-1 block w-full text-sm text-gray-400 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:bg-gray-700 file:text-gray-200">
           </label>
         </div>
-        <button type="submit" class="btn btn-primary btn-sm">Upload &amp; install</button>
+        <div class="flex justify-end">
+          <button type="submit" class="btn btn-primary btn-sm">Upload &amp; install</button>
+        </div>
       </form>
 
-      <div class="border-t border-gray-700 pt-4">
+      <div class="flex items-start justify-between gap-8 p-6">
+        <div class="flex-1">
+          <h3 class="text-base font-semibold text-white">Revert to product default</h3>
+          <p class="text-sm text-gray-400 mt-1">
+            Regenerates a product-CA-signed certificate (self-signed path for OOTB).
+            After upload or revert, restart the UI so gunicorn reloads
+            <code class="text-gray-400">$LOGSTASHUI_DATA_DIR/tls/ui-server.*</code>
+            (use <code class="text-gray-400">bin/start_logstashui.sh</code> so host TLS SANs stay on the leaf).
+          </p>
+        </div>
         <button type="button" id="tls-revert-btn" class="btn btn-outline btn-sm text-amber-200 border-amber-700 hover:bg-amber-900/30">
-          Revert to product default
+          Revert
         </button>
-        <p class="text-xs text-gray-500 mt-2">
-          Regenerates a product-CA-signed certificate (self-signed path for OOTB).
-          After upload or revert, restart the UI so gunicorn reloads
-          <code class="text-gray-400">$LOGSTASHUI_DATA_DIR/tls/ui-server.*</code>
-          (use <code class="text-gray-400">bin/start_logstashui.sh</code> so host TLS SANs stay on the leaf).
-        </p>
       </div>
       {% endif %}
     </div>
-  </div>
+  </section>
 </div>
 
 <script>
-    let originalExperimentalMode = {{ app_settings.experimental_mode|yesno:"true,false" }};
-    let originalAgentUiUrl = "{{ app_settings.agent_ui_url|default:''|escapejs }}";
-    let originalArtifactBaseUrl = "{{ app_settings.logstash_artifact_base_url|default:''|escapejs }}";
+    const settingsForm = document.getElementById('settings-form');
+    const settingFields = Array.from(settingsForm.querySelectorAll('[data-setting]'));
+    const fieldValue = (el) => el.type === 'checkbox' ? el.checked : el.value.trim();
+    let originalValues = {};
 
-    function markAsModified() {
-        const currentExperimentalMode = document.getElementById('experimental_mode').checked;
-        const currentAgentUiUrl = document.getElementById('agent_ui_url').value.trim();
-        const currentArtifactBaseUrl = document.getElementById('logstash_artifact_base_url').value.trim();
-        const isModified =
-            originalExperimentalMode !== currentExperimentalMode ||
-            originalAgentUiUrl !== currentAgentUiUrl ||
-            originalArtifactBaseUrl !== currentArtifactBaseUrl;
-
-        const saveButton = document.getElementById('save-button');
-        const unsavedChanges = document.getElementById('unsaved-changes');
-        if (isModified) {
-            saveButton.disabled = false;
-            unsavedChanges.classList.remove('hidden');
-        } else {
-            saveButton.disabled = true;
-            unsavedChanges.classList.add('hidden');
-        }
+    function snapshotOriginalValues() {
+        originalValues = Object.fromEntries(settingFields.map(el => [el.id, fieldValue(el)]));
     }
 
-    document.getElementById('settings-form').addEventListener('submit', function(e) {
+    function markAsModified() {
+        const isModified = settingFields.some(el => fieldValue(el) !== originalValues[el.id]);
+        document.getElementById('save-bar').classList.toggle('hidden', !isModified);
+    }
+
+    snapshotOriginalValues();
+    settingsForm.addEventListener('input', markAsModified);
+    settingsForm.addEventListener('change', markAsModified);
+
+    settingsForm.addEventListener('submit', function(e) {
         e.preventDefault();
         const formData = new FormData(this);
         const saveButton = document.getElementById('save-button');
@@ -242,9 +254,8 @@
         .then(data => {
             if (data.success) {
                 showToast(data.message || 'Settings saved successfully', 'success');
-                originalExperimentalMode = document.getElementById('experimental_mode').checked;
-                originalAgentUiUrl = document.getElementById('agent_ui_url').value.trim();
-                originalArtifactBaseUrl = document.getElementById('logstash_artifact_base_url').value.trim();
+                snapshotOriginalValues();
+                saveButton.innerHTML = originalText;
                 markAsModified();
                 setTimeout(() => window.location.reload(), 800);
             } else {

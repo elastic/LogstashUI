@@ -395,8 +395,8 @@ def LogsDownload(request):
 def SettingsView(request):
     """Show and save singleton settings, including TLS status for the UI cert.
 
-    POST updates experimental mode, agent callback URL, and the tarball
-    source. Changing ``agent_ui_url`` may re-issue the product UI leaf so
+    POST updates experimental mode, the Docker Hub update check, agent
+    callback URL, and the tarball source. Changing ``agent_ui_url`` may re-issue the product UI leaf so
     SANs match the new callback host.
     """
     app_settings = Settings.get_settings()
@@ -404,6 +404,7 @@ def SettingsView(request):
     if request.method == 'POST':
         try:
             experimental_mode = request.POST.get('experimental_mode') == 'on'
+            check_for_updates = request.POST.get('check_for_updates') == 'on'
             agent_ui_url = (request.POST.get('agent_ui_url') or '').strip()
             artifact_base_url = (
                 request.POST.get('logstash_artifact_base_url') or ''
@@ -420,13 +421,15 @@ def SettingsView(request):
             app_settings = Settings.get_settings()
             previous_url = (app_settings.agent_ui_url or "").strip()
             app_settings.experimental_mode = experimental_mode
+            app_settings.check_for_updates = check_for_updates
             app_settings.agent_ui_url = agent_ui_url
             app_settings.logstash_artifact_base_url = artifact_base_url
             app_settings.save()
 
             logger.info(
                 f"User '{request.user.username}' updated settings "
-                f"(experimental_mode={experimental_mode}, agent_ui_url={agent_ui_url!r}, "
+                f"(experimental_mode={experimental_mode}, "
+                f"check_for_updates={check_for_updates}, agent_ui_url={agent_ui_url!r}, "
                 f"logstash_artifact_base_url={artifact_base_url!r})"
             )
 

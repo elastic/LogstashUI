@@ -352,6 +352,45 @@ def test_check_for_update_result_contains_expected_keys(mock_settings, mock_glv)
 
 
 # ============================================================================
+# check_for_update — Settings.check_for_updates gate
+# ============================================================================
+
+@pytest.mark.django_db
+@patch('Site.views.get_latest_version', return_value='5.0.0')
+@patch('Site.views.settings')
+def test_check_for_update_disabled_skips_docker_hub(mock_settings, mock_glv):
+    """When the setting is off, no lookup happens and no update is reported"""
+    from Management.models import Settings
+    app_settings = Settings.get_settings()
+    app_settings.check_for_updates = False
+    app_settings.save()
+    mock_settings.__VERSION__ = '1.0.0'
+
+    assert views.check_for_update() is None
+    mock_glv.assert_not_called()
+
+
+@pytest.mark.django_db
+@patch('Site.views.get_latest_version', return_value='5.0.0')
+@patch('Site.views.settings')
+def test_check_for_update_enabled_by_default(mock_settings, mock_glv):
+    """A fresh install checks Docker Hub"""
+    mock_settings.__VERSION__ = '1.0.0'
+
+    result = views.check_for_update()
+
+    assert result is not None
+    assert result['latest_version'] == '5.0.0'
+    mock_glv.assert_called_once()
+
+
+@patch('Site.views.Settings.get_settings', side_effect=RuntimeError("no table"))
+def test_update_check_enabled_defaults_true_when_settings_unreadable(mock_gs):
+    """Before migrations run, the check stays on rather than erroring"""
+    assert views.update_check_enabled() is True
+
+
+# ============================================================================
 # View authentication behaviour
 # ============================================================================
 
