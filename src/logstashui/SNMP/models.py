@@ -687,6 +687,12 @@ class Profile(models.Model):
         normalizer_errors = validate_normalizers(self.normalizers)
         if normalizer_errors:
             raise ValidationError({'normalizers': normalizer_errors})
+        # Pipeline generation prefers profile_data['normalizers'] over the column.
+        if isinstance(self.profile_data, dict) and 'normalizers' in self.profile_data:
+            coerce_field_lists(self.profile_data['normalizers'])
+            inline_errors = validate_normalizers(self.profile_data['normalizers'])
+            if inline_errors:
+                raise ValidationError({'profile_data': [f'profile_data.{e}' for e in inline_errors]})
     
     def save(self, *args, **kwargs):
         """Run `full_clean()` then persist the row."""

@@ -241,6 +241,28 @@ class TestProfileCreate:
         assert r.status_code == 400, r.content
         assert message in json.dumps(r.json()['error'])
 
+    def test_create_malformed_inline_normalizer_400(self, authenticated_client):
+        """profile_data['normalizers'] wins at generation time, so it is validated too."""
+        r = _post(authenticated_client, '/api/snmp/profiles/', {
+            'name': 'bad_inline', 'vendor': 'Acme',
+            'profile_data': {**SAMPLE_PROFILE_DATA,
+                             'normalizers': [{'operation': ['multiply'], 'target': {'scope': 'get'}}]},
+        })
+        assert r.status_code == 400, r.content
+        assert 'profile_data.normalizers[0]: unknown operation' in json.dumps(r.json()['error'])
+        assert not Profile.objects.filter(name='bad_inline').exists()
+
+    def test_create_stores_inline_field_list_as_list(self, authenticated_client):
+        r = _post(authenticated_client, '/api/snmp/profiles/', {
+            'name': 'good_inline', 'vendor': 'Acme',
+            'profile_data': {**SAMPLE_PROFILE_DATA, 'normalizers': [
+                {'operation': 'sum', 'target': {'scope': 'get'},
+                 'params': {'input_fields': 'a, b', 'output_field': 'c'}}]},
+        })
+        assert r.status_code == 201, r.json()
+        stored = Profile.objects.get(name='good_inline').profile_data['normalizers']
+        assert stored[0]['params']['input_fields'] == ['a', 'b']
+
     @pytest.mark.parametrize('body, message', [
         ({'name': 'mine.json'}, 'reserved for official profiles'),
         ({'name': '../../secrets.json', 'profile_data': {'is_official_placeholder': True}},
