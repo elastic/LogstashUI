@@ -35,6 +35,7 @@ from pysnmp.hlapi.v3arch.asyncio import (
     usmAesCfb192Protocol,
     usmAesCfb256Protocol,
 )
+from pysnmp.proto.rfc1902 import IpAddress
 import asyncio
 
 
@@ -83,7 +84,26 @@ def _device_response_data(device, poll_address=None):
 
 
 def _format_snmp_value(value):
-    """Format an SNMP value, converting binary MAC/IP payloads to hex."""
+    """Format an SNMP value for display.
+
+    ``IpAddress`` values are rendered as dotted quads. Other binary payloads
+    (MACs, opaque octet strings) are rendered as colon-separated hex.
+
+    Args:
+        value: A PySNMP value object or a plain string.
+
+    Returns:
+        str: The display string.
+
+    Example:
+        >>> _format_snmp_value(IpAddress('10.1.1.3'))
+        '10.1.1.3'
+        >>> _format_snmp_value('\\x00\\x11\\x22\\x33\\x44\\x55')
+        '00:11:22:33:44:55'
+    """
+    if isinstance(value, IpAddress):
+        return value.prettyPrint()
+
     value_str = str(value)
     
     # Count printable vs non-printable characters

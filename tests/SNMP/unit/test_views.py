@@ -846,6 +846,30 @@ class TestCheckSNMPIndexTemplateView:
         assert data['results'][0]['connection_name'] == test_connection.name
 
 
+class TestSNMPIndexTemplateMappings:
+    """Test field mappings in the bundled SNMP index template."""
+
+    @pytest.mark.parametrize('path', [
+        ('arp', 'ip_addr'),
+        ('ip_addr', 'address'),
+        ('bgp_peer', 'remote_ip'),
+        ('ospf_neighbor', 'neighbor_ip'),
+        ('ospf_neighbor', 'router_id'),
+    ])
+    def test_topology_ip_fields_mapped_as_ip(self, path):
+        from SNMP.views import _load_snmp_template
+
+        properties = _load_snmp_template()['template']['mappings']['properties']
+        group, field = path
+        assert properties[group]['properties'][field]['type'] == 'ip'
+
+    def test_failure_store_enabled(self):
+        from SNMP.views import _load_snmp_template
+
+        template = _load_snmp_template()['template']
+        assert template['data_stream_options']['failure_store']['enabled'] is True
+
+
 # ============================================================================
 # InstallSNMPIndexTemplate
 # ============================================================================

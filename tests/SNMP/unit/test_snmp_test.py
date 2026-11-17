@@ -192,6 +192,11 @@ class TestFormatSnmpValue:
         result = _format_snmp_value(binary)
         assert ':' in result
 
+    def test_ip_address_formatted_as_dotted_quad(self):
+        from pysnmp.proto.rfc1902 import IpAddress
+
+        assert _format_snmp_value(IpAddress('10.1.1.3')) == '10.1.1.3'
+
 
 # ===========================================================================
 # load_profile_data

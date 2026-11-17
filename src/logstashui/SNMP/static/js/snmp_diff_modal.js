@@ -519,8 +519,14 @@ function _renderTemplateStatusPanel(results) {
         // update (not after a first-time install where no old index exists).
         if (r.status === 'installed_but_outdated') _snmpTemplateWasOutdated = true;
 
-        const diffHint = r.differences && r.differences.length
-            ? `<span class="text-xs text-gray-500 ml-1">(${r.differences.join(', ')})</span>`
+        const vc = r.version_change;
+        const diffLabels = (r.differences || []).map(d =>
+            d === '_meta.version' && vc
+                ? `version ${vc.installed ?? 'none'} → ${vc.available}`
+                : d
+        );
+        const diffHint = diffLabels.length
+            ? `<span class="text-xs text-gray-500 ml-1">(${escapeHtml(diffLabels.join(', '))})</span>`
             : '';
         const errorHint = r.error
             ? `<span class="text-xs text-red-400 ml-1 truncate" title="${escapeHtml(r.error)}">${escapeHtml(r.error)}</span>`

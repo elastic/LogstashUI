@@ -555,6 +555,7 @@ def CheckSNMPIndexTemplate(request):
 
     Returns:
         JSON `{results: [{connection_id, connection_name, status, differences, error}]}`.
+        Outdated results also include `version_change: {installed, available}`.
     """
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)

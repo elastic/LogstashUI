@@ -558,7 +558,13 @@ def check_index_template(connection_id, template_name, template_definition):
     Returns:
         Dict with ``status`` (``not_installed``, ``installed``,
         ``installed_but_outdated``, or ``error``), ``differences`` (field
-        names), and ``error``.
+        names), and ``error``. Outdated results also carry
+        ``version_change``, or ``None`` when the versions match.
+
+    Example:
+        >>> check_index_template(1, 'metrics-snmp.polling', template)
+        {'status': 'installed_but_outdated', 'differences': ['_meta.version'],
+         'version_change': {'installed': '1.7', 'available': '1.8'}, 'error': None}
     """
     try:
         current = get_index_template(connection_id, template_name)
@@ -582,14 +588,21 @@ def check_index_template(connection_id, template_name, template_definition):
             differences.append('data_stream')
 
         # Compare version string from _meta if the desired template declares one
+        version_change = None
         desired_version = template_definition.get('_meta', {}).get('version')
         if desired_version is not None:
             current_version = current.get('_meta', {}).get('version')
             if desired_version != current_version:
                 differences.append('_meta.version')
+                version_change = {'installed': current_version, 'available': desired_version}
 
         if differences:
-            return {'status': 'installed_but_outdated', 'differences': differences, 'error': None}
+            return {
+                'status': 'installed_but_outdated',
+                'differences': differences,
+                'version_change': version_change,
+                'error': None,
+            }
 
         return {'status': 'installed', 'differences': [], 'error': None}
 

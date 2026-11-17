@@ -46,6 +46,39 @@ Note that `tsds.index` is also mapped as a dimension (used to disambiguate multi
 
 ---
 
+## Failure Store
+
+The template enables the data stream failure store (`data_stream_options.failure_store.enabled`). Documents that Elasticsearch rejects, for example a value that does not parse as the mapped field type, are kept in the failure store instead of being dropped. Query them with:
+
+```esql
+FROM metrics-snmp.polling-default::failures
+```
+
+The failure store requires Elasticsearch 9.1 or later. Older clusters reject the template.
+
+---
+
+## IP Address Fields
+
+The topology fields that hold IP addresses are mapped as `ip` rather than `keyword`, matching the [Network Topology field reference](https://www.elastic.co/docs/solutions/observability/infra-and-hosts/network-topology/field-reference). This allows CIDR and range queries.
+
+| Field | Source |
+|---|---|
+| `host.ip` | Polled address, when it is an IP |
+| `arp.ip_addr` | `generic_arp` (`ipNetToMediaNetAddress`) |
+| `ip_addr.address` | `generic_ip_addr` (`ipAdEntAddr`) |
+| `bgp_peer.remote_ip` | `generic_bgp` (`bgpPeerRemoteAddr`) |
+| `ospf_neighbor.neighbor_ip` | `generic_ospf` (`ospfNbrIpAddr`) |
+| `ospf_neighbor.router_id` | `generic_ospf` (`ospfNbrRtrId`) |
+| `wireless.ap.ip` | Wireless controller profiles |
+
+```esql
+FROM metrics-snmp.polling-*
+| WHERE CIDR_MATCH(arp.ip_addr, "10.1.0.0/16")
+```
+
+---
+
 ## Query Performance
 
 TSDS indices are stored in a columnar format optimized for time range and dimension queries. Broad queries that touch many series can be expensive.

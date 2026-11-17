@@ -16,6 +16,7 @@ from Common.elastic_utils import (
     _extract_field_names,
     query_elasticsearch_documents,
     normalize_kibana_url,
+    check_index_template,
 )
 from PipelineManager.models import Connection
 
@@ -718,4 +719,25 @@ class TestNormalizeKibanaUrl:
     def test_empty_and_none(self):
         assert normalize_kibana_url('') == ''
         assert normalize_kibana_url(None) is None
+
+
+class TestCheckIndexTemplate:
+
+    def _template(self, version):
+        return {'index_patterns': ['metrics-snmp.polling-*'], '_meta': {'version': version}}
+
+    def test_outdated_reports_version_change(self):
+        with patch('Common.elastic_utils.get_index_template', return_value=self._template('1.7')):
+            result = check_index_template(1, 'metrics-snmp.polling', self._template('1.8'))
+
+        assert result['status'] == 'installed_but_outdated'
+        assert result['differences'] == ['_meta.version']
+        assert result['version_change'] == {'installed': '1.7', 'available': '1.8'}
+
+    def test_installed_has_no_version_change(self):
+        with patch('Common.elastic_utils.get_index_template', return_value=self._template('1.8')):
+            result = check_index_template(1, 'metrics-snmp.polling', self._template('1.8'))
+
+        assert result['status'] == 'installed'
+        assert 'version_change' not in result
 
