@@ -276,6 +276,7 @@ class ConnectionForm(ModelForm):
             # For Agent connections, require either host or cloud_url
             if not cleaned_data.get('host') and not cleaned_data.get('cloud_url'):
                 raise forms.ValidationError("Either Host or Cloud URL is required for Agent connections.")
+            cleaned_data['kibana_url'] = None
         else:  # CENTRALIZED
             # Read the radio-button selections from raw POST data so we can zero
             # out whichever fields the user hid before submitting. Hidden inputs

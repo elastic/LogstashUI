@@ -185,7 +185,10 @@ def GetConnectionsTable(request):
             'name': conn['name'],
             'connection_type': conn['connection_type'],
             'host': conn.get('host') or '',
-            'es_hosts': (conn.get('es_hosts') or []) if conn['connection_type'] == 'CENTRALIZED' else [],
+            'es_hosts': (
+                ConnectionTable(cloud_id=conn.get('cloud_id'), es_hosts=conn.get('es_hosts')).get_es_hosts()
+                if conn['connection_type'] == 'CENTRALIZED' else []
+            ),
             'cloud_id': conn.get('cloud_id') or '',
             'policy_id': conn.get('policy_id'),
             'policy_name': conn.get('policy__name') or '',

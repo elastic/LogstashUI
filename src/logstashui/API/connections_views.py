@@ -105,6 +105,7 @@ def _list_connections(request):
 
     # Normalize datetime fields to ISO strings
     for c in connections:
+        c['es_hosts'] = Connection(cloud_id=c['cloud_id'], es_hosts=c['es_hosts']).get_es_hosts()
         for field in ('last_check_in', 'created_at', 'updated_at'):
             val = c.get(field)
             c[field] = val.isoformat() if val else None

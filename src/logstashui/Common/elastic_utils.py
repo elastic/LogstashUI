@@ -58,6 +58,7 @@ def check_elastic_nodes(connection_id):
         kwargs = dict(creds)
         if host:
             kwargs['hosts'] = [host]
+        client = None
         try:
             client = Elasticsearch(
                 **kwargs,
@@ -68,6 +69,9 @@ def check_elastic_nodes(connection_id):
             results.append((host, True, test_elastic_connectivity(client)))
         except Exception as e:
             results.append((host, False, str(e)))
+        finally:
+            if client is not None:
+                client.close()
     return results
 
 

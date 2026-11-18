@@ -25,7 +25,7 @@ def forwards(apps, schema_editor):
     Connection = apps.get_model('PipelineManager', 'Connection')
     rows = Connection.objects.filter(connection_type='CENTRALIZED').exclude(host__isnull=True).exclude(host='')
     for conn in rows:
-        if conn.es_hosts:
+        if conn.es_hosts or conn.cloud_id:
             continue
         Connection.objects.filter(pk=conn.pk).update(es_hosts=[_legacy_host(conn.host, conn.port)])
 

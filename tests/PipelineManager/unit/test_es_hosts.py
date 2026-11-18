@@ -139,6 +139,10 @@ class TestConnectionModel:
         with pytest.raises(ValidationError):
             Connection.objects.create(name='Empty', connection_type='CENTRALIZED', username='e', password='p')
 
+    def test_cloud_id_ignores_stored_hosts(self):
+        conn = Connection(cloud_id='dep:abc', es_hosts=['https://es1:9200'])
+        assert conn.get_es_hosts() == []
+
     def test_cloud_only_clears_legacy_host(self):
         conn = Connection.objects.create(name='Cloud', connection_type='CENTRALIZED',
                                          cloud_id='dep:abc', api_key='k')
@@ -178,6 +182,7 @@ LEGACY_ROWS = [
     ('es.lab', 9200, None, 'CENTRALIZED', ['es.lab:9200']),
     ('https://proxy.lab/es', None, None, 'CENTRALIZED', ['https://proxy.lab/es']),
     ('', None, 'dep:abc', 'CENTRALIZED', []),
+    ('https://leftover.lab', 9200, 'dep:abc', 'CENTRALIZED', []),
     ('https://agent.lab', 9600, None, 'AGENT', []),
 ]
 
@@ -211,7 +216,7 @@ class TestBackfillMigration:
 
     def test_dialled_hosts_and_generated_output_unchanged(self):
         """Before: one ``host:port`` string. After: that same string as the only node."""
-        rows = [r for r in self._rows() if r.connection_type == 'CENTRALIZED' and r.host]
+        rows = [r for r in self._rows() if r.connection_type == 'CENTRALIZED' and r.host and not r.cloud_id]
         before = {r.pk: (f'{r.host}:{r.port}' if r.port else r.host) for r in rows}
         backfill.forwards(django_apps, None)
         for pk, legacy in before.items():

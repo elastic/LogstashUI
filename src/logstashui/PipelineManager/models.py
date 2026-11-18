@@ -511,6 +511,8 @@ class Connection(models.Model):
             >>> Connection(es_hosts=["https://es1:9200", "https://es2:9200"]).get_es_hosts()
             ['https://es1:9200', 'https://es2:9200']
         """
+        if self.cloud_id:
+            return []
         return [h for h in (self.es_hosts or []) if isinstance(h, str) and h.strip()]
 
 

@@ -98,12 +98,15 @@ class TestCheckElasticNodes:
 
     @patch("Common.elastic_utils.Elasticsearch")
     def test_each_node_checked_alone_in_order(self, mock_es):
+        clients = []
+
         def build(**kwargs):
             client = MagicMock()
             if kwargs["hosts"] == ["https://es2:9200"]:
                 client.info.side_effect = ConnectionError("refused")
             else:
                 client.info.return_value = {"cluster_name": "c"}
+            clients.append(client)
             return client
 
         mock_es.side_effect = build
@@ -118,6 +121,9 @@ class TestCheckElasticNodes:
         for call in mock_es.call_args_list:
             assert call.kwargs["max_retries"] == 0
             assert len(call.kwargs["hosts"]) == 1
+        assert len(clients) == 3
+        for client in clients:
+            client.close.assert_called_once()
 
     @patch("Common.elastic_utils.Elasticsearch")
     def test_cloud_id_checked_once(self, mock_es):
