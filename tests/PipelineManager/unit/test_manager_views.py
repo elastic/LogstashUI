@@ -79,7 +79,7 @@ class TestConnectionCRUD:
     def test_add_connection_success(self, mock_test_connectivity, authenticated_client):
         """Test successful connection creation"""
         # Mock successful connectivity test
-        mock_test_connectivity.return_value = (True, "Connection successful", [])
+        mock_test_connectivity.return_value = (True, "Connection successful", [], [])
 
         response = authenticated_client.post(
             "/ConnectionManager/AddConnection",
@@ -107,7 +107,7 @@ class TestConnectionCRUD:
     ):
         """Test connection creation with failed connectivity test"""
         # Mock failed connectivity test
-        mock_test_connectivity.return_value = (False, "Connection failed: Timeout", [])
+        mock_test_connectivity.return_value = (False, "Connection failed: Timeout", [], [])
 
         response = authenticated_client.post(
             "/ConnectionManager/AddConnection",
@@ -389,7 +389,7 @@ class TestSecurityAndErrorHandling:
         """Test that error messages in TestConnectivity are HTML-escaped to prevent XSS"""
         # Mock connectivity test with XSS attempt in error message
         xss_payload = "<script>alert('XSS')</script>"
-        mock_test_connectivity.return_value = (False, xss_payload, [])
+        mock_test_connectivity.return_value = (False, xss_payload, [], [])
 
         response = authenticated_client.get(
             f"/ConnectionManager/TestConnectivity?test={test_connection.id}"
@@ -407,7 +407,7 @@ class TestSecurityAndErrorHandling:
     ):
         """Test that readonly (non-admin) user cannot add connections"""
         # Mock connectivity test
-        mock_test_connectivity.return_value = (True, "Connection successful", [])
+        mock_test_connectivity.return_value = (True, "Connection successful", [], [])
 
         # Create a readonly user (not admin)
         from django.contrib.auth.models import User
@@ -512,7 +512,7 @@ class TestCheckConnectivity:
             ("https://es1:9200", True, "info-1"),
             ("https://es2:9200", True, "info-2"),
         ]
-        assert check_connectivity(1) == (True, "info-1", [])
+        assert check_connectivity(1) == (True, "info-1", [], ["https://es1:9200", "https://es2:9200"])
 
     @patch("PipelineManager.manager_views.check_kibana_status", return_value=None)
     @patch("PipelineManager.manager_views.check_elastic_nodes")
@@ -523,10 +523,19 @@ class TestCheckConnectivity:
             ("https://es1:9200", False, "refused"),
             ("https://es2:9200", True, "info-2"),
         ]
-        success, message, warnings = check_connectivity(1)
+        success, message, warnings, reachable = check_connectivity(1)
         assert success is True
         assert message == "info-2"
         assert warnings == ["Elasticsearch node https://es1:9200 is unreachable: refused"]
+        assert reachable == ["https://es2:9200"]
+
+    @patch("PipelineManager.manager_views.check_kibana_status", return_value=None)
+    @patch("PipelineManager.manager_views.check_elastic_nodes")
+    def test_cloud_id_has_no_reachable_urls(self, mock_nodes, _mock_kibana):
+        from PipelineManager.manager_views import check_connectivity
+
+        mock_nodes.return_value = [(None, True, "info")]
+        assert check_connectivity(1) == (True, "info", [], [])
 
     @patch("PipelineManager.manager_views.check_kibana_status")
     @patch("PipelineManager.manager_views.check_elastic_nodes")
@@ -537,10 +546,14 @@ class TestCheckConnectivity:
             ("https://es1:9200", False, "refused"),
             ("https://es2:9200", False, "timeout"),
         ]
-        success, message, warnings = check_connectivity(1)
+        success, message, node_errors, reachable = check_connectivity(1)
         assert success is False
         assert message == "https://es1:9200: refused\nhttps://es2:9200: timeout"
-        assert warnings == []
+        assert node_errors == [
+            "Elasticsearch node https://es1:9200 is unreachable: refused",
+            "Elasticsearch node https://es2:9200 is unreachable: timeout",
+        ]
+        assert reachable == []
         mock_kibana.assert_not_called()
 
     @patch("PipelineManager.manager_views.check_kibana_status", return_value=None)
@@ -549,13 +562,14 @@ class TestCheckConnectivity:
         from PipelineManager.manager_views import check_connectivity
 
         mock_nodes.return_value = [("https://es1:9200", False, "refused")]
-        assert check_connectivity(1) == (False, "refused", [])
+        assert check_connectivity(1) == (
+            False, "refused", ["Elasticsearch node https://es1:9200 is unreachable: refused"], [])
 
     @patch("PipelineManager.manager_views.check_elastic_nodes", return_value=[])
     def test_nothing_configured(self, _mock_nodes):
         from PipelineManager.manager_views import check_connectivity
 
-        success, message, _ = check_connectivity(1)
+        success, message, _, _ = check_connectivity(1)
         assert success is False
         assert "No Elasticsearch node URL or Cloud ID" in message
 
@@ -568,7 +582,7 @@ class TestCheckConnectivity:
         from PipelineManager.manager_views import check_connectivity
 
         mock_nodes.return_value = [("https://es1:9200", True, "info-1")]
-        success, _, warnings = check_connectivity(1)
+        success, _, warnings, _ = check_connectivity(1)
         assert success is True
         assert warnings == ["Kibana at https://kb:5601 is unreachable: refused"]
 
@@ -590,7 +604,7 @@ class TestTestConnectivityView:
 
     @patch(
         "PipelineManager.manager_views.check_connectivity",
-        return_value=(True, "All good!", []),
+        return_value=(True, "All good!", [], []),
     )
     def test_success_renders_green_div(
         self, mock_tc, authenticated_client, test_connection
@@ -607,7 +621,7 @@ class TestTestConnectivityView:
 
     @patch(
         "PipelineManager.manager_views.check_connectivity",
-        return_value=(True, "{}", ["Elasticsearch node <b>x</b> is unreachable: refused"]),
+        return_value=(True, "{}", ["Elasticsearch node <b>x</b> is unreachable: refused"], ["https://es1:9200"]),
     )
     def test_warnings_render_amber_and_escaped(
         self, mock_tc, authenticated_client, test_connection
@@ -618,11 +632,12 @@ class TestTestConnectivityView:
         content = response.content.decode()
         assert response["X-Connection-Test"] == "ok"
         assert "Connected, with warnings" in content
+        assert "Elasticsearch node https://es1:9200 is reachable" in content
         assert "&lt;b&gt;x&lt;/b&gt;" in content
 
     @patch(
         "PipelineManager.manager_views.check_connectivity",
-        return_value=(False, "Connection refused", []),
+        return_value=(False, "Connection refused", [], []),
     )
     def test_failure_is_flagged_for_status_pill(
         self, mock_tc, authenticated_client, test_connection
@@ -948,7 +963,7 @@ class TestIntegration:
     ):
         """Test complete pipeline lifecycle: create connection, create pipeline, update, delete"""
         # Step 1: Create connection
-        mock_test_connectivity.return_value = (True, "Connection successful", [])
+        mock_test_connectivity.return_value = (True, "Connection successful", [], [])
 
         conn_response = authenticated_client.post(
             "/ConnectionManager/AddConnection",

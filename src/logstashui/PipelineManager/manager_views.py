@@ -124,35 +124,43 @@ def check_connectivity(connection_id):
         connection_id: ``Connection`` primary key.
 
     Returns:
-        ``(success, message, warnings)``: ``message`` is the first reachable
-        node's cluster-info JSON, or the error text when every node failed.
+        ``(success, message, warnings, reachable)``:
+
+        * ``message``: the first reachable node's cluster-info JSON, or the
+          error text when every node failed.
+        * ``warnings``: one line per unreachable node, plus a failed Kibana
+          check. On failure these are the per-node errors.
+        * ``reachable``: node URLs that answered, in order. Empty for Cloud
+          ID connections and on failure.
 
     Examples:
         >>> check_connectivity(conn.pk)  # doctest: +SKIP
-        (True, '{...}', ['Elasticsearch node https://es2:9200 is unreachable: ...'])
+        (True, '{...}', ['Elasticsearch node https://es2:9200 is unreachable: ...'], ['https://es1:9200'])
     """
     if not connection_id:
-        return (False, "No connection ID provided", [])
+        return (False, "No connection ID provided", [], [])
 
     try:
         results = check_elastic_nodes(connection_id)
     except Exception as e:
         logger.error(f"Connection test against {connection_id} failed: {e}")
-        return (False, str(e), [])
+        return (False, str(e), [], [])
 
     passed = [detail for _, ok, detail in results if ok]
     failed = [(host, detail) for host, ok, detail in results if not ok]
+    node_errors = [f"Elasticsearch node {host} is unreachable: {detail}" for host, detail in failed if host]
     if not passed:
         if not results:
-            return (False, "No Elasticsearch node URL or Cloud ID is configured", [])
+            return (False, "No Elasticsearch node URL or Cloud ID is configured", [], [])
         if len(failed) == 1:
             message = failed[0][1]
         else:
             message = "\n".join(f"{host}: {detail}" for host, detail in failed)
         logger.error(f"Connection test against {connection_id} failed: {message}")
-        return (False, message, [])
+        return (False, message, node_errors, [])
 
-    warnings = [f"Elasticsearch node {host} is unreachable: {detail}" for host, detail in failed]
+    reachable = [host for host, ok, _ in results if ok and host]
+    warnings = list(node_errors)
     try:
         kibana_warning = check_kibana_status(connection_id)
     except Exception as e:
@@ -161,7 +169,7 @@ def check_connectivity(connection_id):
         warnings.append(kibana_warning)
     for warning in warnings:
         logger.warning(f"Connection {connection_id}: {warning}")
-    return (True, passed[0], warnings)
+    return (True, passed[0], warnings, reachable)
 
 
 def test_connectivity(connection_id):
@@ -174,7 +182,7 @@ def test_connectivity(connection_id):
         ``(success, message)`` where ``message`` is cluster info JSON or an
         error string. Use :func:`check_connectivity` for per-node warnings.
     """
-    success, message, _ = check_connectivity(connection_id)
+    success, message, _, _ = check_connectivity(connection_id)
     return (success, message)
 
 
@@ -190,7 +198,7 @@ def TestConnectivity(request):
         return HttpResponse("No connection ID provided", status=400)
     
     logger.info(f"User '{request.user.username}' testing connection {test_id}")
-    success, message, warnings = check_connectivity(test_id)
+    success, message, warnings, reachable = check_connectivity(test_id)
 
     if success:
         # Check if this is a serverless instance
@@ -202,7 +210,8 @@ def TestConnectivity(request):
             pass
 
         if warnings:
-            items = "".join(f"<li>{escape(w)}</li>" for w in warnings)
+            lines = [f"Elasticsearch node {host} is reachable" for host in reachable] + warnings
+            items = "".join(f"<li>{escape(line)}</li>" for line in lines)
             response = HttpResponse(f"""
                 <div class="p-4 mb-4 text-sm text-amber-800 bg-amber-100 rounded-lg">
                     <p class="font-semibold">Connected, with warnings:</p>

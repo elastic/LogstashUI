@@ -18,64 +18,12 @@
           </button>
         </div>
         <div class="flex-1 overflow-y-auto p-6">
-          <!-- Error message container -->
-          <div id="connectionErrorContainer"></div>
-          
           <form id="connectionForm"
               hx-post="/ConnectionManager/AddConnection"
               hx-swap="none"
-              hx-indicator=".loading"
-              hx-on::before-request="document.getElementById('connectionErrorContainer').innerHTML = '';"
-              hx-on::after-request="
-                  const errorContainer = document.getElementById('connectionErrorContainer');
-                  
-                  try {
-                      const response = JSON.parse(event.detail.xhr.responseText);
-                      
-                      if (response.success) {
-                          // Store the connection ID so closeFlyout() triggers a page reload
-                          window.lastCreatedConnectionId = response.connection_id;
-                          
-                          const isEdit = window.connectionEditMode === 'edit';
-                          showToast(response.message || (isEdit ? 'Connection updated successfully!' : 'Connection created and tested successfully!'), 'success');
-
-                          if (response.warnings && response.warnings.length) {
-                              showConnectionSavedWarnings(response.warnings);
-                              return;
-                          }
-                          
-                          // Close the modal (page reload is handled by the closeFlyout override in pipeline_manager.html)
-                          closeFlyout();
-                          
-                          // Clear the form
-                          document.getElementById('connectionForm').reset();
-                          errorContainer.innerHTML = '';
-                      } else {
-                          // Display error message
-                          errorContainer.innerHTML = `
-                              <div class='p-4 mb-4 text-red-700 bg-red-100 border border-red-300 rounded-lg'>
-                                  <h3 class='font-bold mb-2 text-lg'>❌ Connection Test Failed</h3>
-                                  <p class='mb-3'>The connection could not be established. Please check your credentials and try again.</p>
-                                  <div class='mt-3 p-3 bg-red-50 border border-red-200 rounded'>
-                                      <p class='font-semibold mb-1 text-sm'>Error Details:</p>
-                                      <pre class='text-xs overflow-auto whitespace-pre-wrap break-words max-h-64'>${response.error || 'Unknown error'}</pre>
-                                  </div>
-                              </div>
-                          `;
-                          showToast('Connection test failed - check the error message above', 'error');
-                          errorContainer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                      }
-                  } catch (e) {
-                      console.error('Error parsing response:', e);
-                      errorContainer.innerHTML = `
-                          <div class='p-4 mb-4 text-red-700 bg-red-100 border border-red-300 rounded-lg'>
-                              <h3 class='font-bold mb-2'>Error</h3>
-                              <p>Failed to process server response. Please try again.</p>
-                          </div>
-                      `;
-                      showToast('Failed to process server response', 'error');
-                  }
-              ">
+              hx-indicator="#connectionSavingIndicator"
+              hx-disabled-elt="#saveConnectionBtn"
+              hx-on::after-request="handleConnectionSaveResponse(event)">
               {% csrf_token %}
 
               <!-- Hidden connection type field -->
@@ -141,9 +89,16 @@
                   <button type="button" id="addEsHostBtn" class="btn btn-ghost btn-xs mt-2 text-blue-400">
                     + Add host
                   </button>
-                  <p class="text-gray-400 text-xs mt-1">URL and port of each Elasticsearch node (e.g., https://elasticsearch.example.com and 9200). At least one is required; Logstash outputs use them in this order.</p>
+                  <p class="text-gray-400 text-xs mt-1">URL and port of each Elasticsearch node (e.g., https://elasticsearch.example.com and 9200). At least one is required; Logstash outputs use them in this order. Drag a row by its handle to reorder.</p>
                   <template id="esHostRowTemplate">
                     <div class="es-host-row flex gap-3 items-center">
+                      <span class="es-host-drag cursor-grab active:cursor-grabbing touch-none select-none text-gray-500 hover:text-gray-300 -mr-1" title="Drag to reorder" aria-hidden="true">
+                        <svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                          <circle cx="7" cy="5" r="1.5"/><circle cx="13" cy="5" r="1.5"/>
+                          <circle cx="7" cy="10" r="1.5"/><circle cx="13" cy="10" r="1.5"/>
+                          <circle cx="7" cy="15" r="1.5"/><circle cx="13" cy="15" r="1.5"/>
+                        </svg>
+                      </span>
                       <div class="flex-1">
                         <input type="text" name="es_host_url" class="input input-bordered w-full" placeholder="https://elasticsearch.example.com" autocomplete="off">
                       </div>
@@ -354,15 +309,18 @@ sudo systemctl start logstash-agent</code></pre>
                 </div>
               </div>
 
-              <div class="form-actions pt-6 mt-6 border-t border-gray-700">
+              <div class="form-actions pt-6 mt-6 border-t border-gray-700 flex flex-wrap items-center gap-2">
                   <button type="button" onclick="closeFlyout()" class="btn btn-secondary">
                       Cancel
                   </button>
                   <button id="saveConnectionBtn" type="submit" class="btn btn-primary">
                       Save Connection
                   </button>
+                  <span id="connectionSavingIndicator" class="htmx-indicator inline-flex items-center gap-2 ml-2 text-sm text-gray-300">
+                      <span class="loading loading-spinner loading-sm"></span>
+                      Testing connections before saving
+                  </span>
               </div>
-              <div class="htmx-indicator loading">Saving...</div>
           </form>
         </div>
       </div>
@@ -380,47 +338,65 @@ sudo systemctl start logstash-agent</code></pre>
 
     function closeFlyout() {
         document.getElementById('connectionFormFlyout').classList.add('hidden');
-        _clearSavedWithWarningsState();
         _resetConnectionModalToAddMode();
     }
 
+    const CONNECTION_NODE_TOAST_MS = 10000;
+
     /**
-     * Keep the flyout open after a save that passed with warnings (for example
-     * one unreachable Elasticsearch node) so the user can read them.
+     * Report a save as toasts: the outcome, then one toast per Elasticsearch
+     * node when more than one node was tested or any check failed.
+     * On the Connections page the flyout close reloads the page, so the toasts
+     * are queued and shown after the reload.
      */
-    window.showConnectionSavedWarnings = function(warnings) {
-        const items = warnings.map(w => `<li>${escapeConnectionHtml(w)}</li>`).join('');
-        document.getElementById('connectionErrorContainer').innerHTML = `
-            <div class='p-4 mb-4 text-amber-200 bg-amber-900/30 border border-amber-600 rounded-lg'>
-                <h3 class='font-bold mb-2'>Connection saved with warnings</h3>
-                <ul class='list-disc ml-5 text-sm space-y-1'>${items}</ul>
-                <button type='button' class='btn btn-sm btn-primary mt-3' onclick='closeFlyout()'>Done</button>
-            </div>
-        `;
-        const saveBtn = document.getElementById('saveConnectionBtn');
-        if (saveBtn) saveBtn.classList.add('hidden');
-        window.connectionSavedWithWarnings = true;
-        document.getElementById('connectionErrorContainer').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    };
-
-    function _clearSavedWithWarningsState() {
-        if (!window.connectionSavedWithWarnings) return;
-        window.connectionSavedWithWarnings = false;
-        const saveBtn = document.getElementById('saveConnectionBtn');
-        if (saveBtn) saveBtn.classList.remove('hidden');
-        const form = document.getElementById('connectionForm');
-        if (window.connectionEditMode !== 'edit') {
-            form.reset();
-            setEsHostRows([]);
+    window.handleConnectionSaveResponse = function(event) {
+        let response;
+        try {
+            response = JSON.parse(event.detail.xhr.responseText);
+        } catch (e) {
+            console.error('Error parsing response:', e);
+            showToast('Failed to process server response. Please try again.', 'error');
+            return;
         }
-        document.getElementById('connectionErrorContainer').innerHTML = '';
-    }
 
-    function escapeConnectionHtml(value) {
-        const div = document.createElement('div');
-        div.textContent = String(value);
-        return div.innerHTML;
-    }
+        if (!response.success) {
+            const nodeErrors = response.node_errors || [];
+            if (nodeErrors.length > 1) {
+                showToast('Connection not saved: no Elasticsearch node is reachable.', 'error', CONNECTION_NODE_TOAST_MS);
+                nodeErrors.forEach(err => showToast(err, 'error', CONNECTION_NODE_TOAST_MS));
+            } else {
+                showToast(`Connection not saved: ${response.error || 'Unknown error'}`, 'error', CONNECTION_NODE_TOAST_MS);
+            }
+            return;
+        }
+
+        // Store the connection ID so closeFlyout() triggers a page reload
+        window.lastCreatedConnectionId = response.connection_id;
+
+        const isEdit = window.connectionEditMode === 'edit';
+        const reachable = response.reachable || [];
+        const warnings = response.warnings || [];
+        const toasts = [{
+            message: response.message || (isEdit ? 'Connection updated successfully!' : 'Connection created and tested successfully!'),
+            type: 'success',
+        }];
+        if (warnings.length || reachable.length > 1) {
+            reachable.forEach(host => toasts.push({
+                message: `Elasticsearch node ${host} is reachable`, type: 'success', duration: CONNECTION_NODE_TOAST_MS,
+            }));
+        }
+        warnings.forEach(warning => toasts.push({ message: warning, type: 'warning', duration: CONNECTION_NODE_TOAST_MS }));
+
+        if (window.isPipelineManagerPage) {
+            queueToastsForReload(toasts);
+        } else {
+            toasts.forEach(t => showToast(t.message, t.type, t.duration));
+        }
+
+        closeFlyout();
+        document.getElementById('connectionForm').reset();
+        setEsHostRows([]);
+    };
 
     // ── Elasticsearch node rows ─────────────────────────────────────────────
 
@@ -430,7 +406,10 @@ sudo systemctl start logstash-agent</code></pre>
 
     function _updateEsHostRemoveButtons() {
         const rows = _esHostRows();
-        rows.forEach(row => { row.querySelector('.es-host-remove').disabled = rows.length <= 1; });
+        rows.forEach(row => {
+            row.querySelector('.es-host-remove').disabled = rows.length <= 1;
+            row.querySelector('.es-host-drag').classList.toggle('invisible', rows.length <= 1);
+        });
     }
 
     window.addEsHostRow = function(url = '', port = '') {
@@ -512,6 +491,40 @@ sudo systemctl start logstash-agent</code></pre>
         _updateEsHostRemoveButtons();
     });
 
+    // Reorder rows by dragging the handle. The container holds the pointer
+    // capture because the dragged row moves in the DOM while dragging.
+    let _draggedEsHostRow = null;
+    const _esHostRowsEl = document.getElementById('esHostRows');
+
+    _esHostRowsEl.addEventListener('pointerdown', function(e) {
+        const handle = e.target.closest('.es-host-drag');
+        if (!handle || _esHostRows().length <= 1) return;
+        e.preventDefault();
+        _draggedEsHostRow = handle.closest('.es-host-row');
+        _draggedEsHostRow.classList.add('opacity-60');
+        _esHostRowsEl.setPointerCapture(e.pointerId);
+    });
+
+    _esHostRowsEl.addEventListener('pointermove', function(e) {
+        if (!_draggedEsHostRow) return;
+        for (const row of _esHostRows()) {
+            if (row === _draggedEsHostRow) continue;
+            const box = row.getBoundingClientRect();
+            if (e.clientY < box.top || e.clientY > box.bottom) continue;
+            const before = e.clientY < box.top + box.height / 2;
+            _esHostRowsEl.insertBefore(_draggedEsHostRow, before ? row : row.nextSibling);
+            break;
+        }
+    });
+
+    function _endEsHostDrag() {
+        if (!_draggedEsHostRow) return;
+        _draggedEsHostRow.classList.remove('opacity-60');
+        _draggedEsHostRow = null;
+    }
+    _esHostRowsEl.addEventListener('pointerup', _endEsHostDrag);
+    _esHostRowsEl.addEventListener('pointercancel', _endEsHostDrag);
+
     document.getElementById('esHostRows').addEventListener('focusout', function(e) {
         if (e.target.name !== 'es_host_url') return;
         if (document.getElementById('nodeUrlField').classList.contains('hidden')) return;
@@ -573,7 +586,6 @@ sudo systemctl start logstash-agent</code></pre>
         // so we must explicitly restore field visibility to match those defaults)
         form.reset();
         setEsHostRows([]);
-        document.getElementById('connectionErrorContainer').innerHTML = '';
 
         // Restore connection mode visibility to default (Cloud ID selected)
         document.getElementById('cloudIdField').classList.remove('hidden');
@@ -626,9 +638,6 @@ sudo systemctl start logstash-agent</code></pre>
 
             // Show credential re-entry hint
             document.getElementById('credentialReentryHint').classList.remove('hidden');
-
-            // Clear any previous errors
-            document.getElementById('connectionErrorContainer').innerHTML = '';
 
             // -- Pre-fill name --
             const nameInput = document.querySelector('[name="name"]');

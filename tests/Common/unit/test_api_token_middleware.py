@@ -92,7 +92,7 @@ class TestTokenAccepted:
         """No CSRF token, no session — the request still reaches AddConnection."""
         monkeypatch.setattr(
             'PipelineManager.manager_views.check_connectivity',
-            lambda cid: (True, 'ok', []),
+            lambda cid: (True, 'ok', [], []),
         )
         _token, raw = admin_token
 
@@ -139,7 +139,7 @@ class TestTokenAccepted:
     def test_last_used_at_is_recorded(self, csrf_client, admin_token, monkeypatch):
         monkeypatch.setattr(
             'PipelineManager.manager_views.check_connectivity',
-            lambda cid: (True, 'ok', []),
+            lambda cid: (True, 'ok', [], []),
         )
         token, raw = admin_token
         assert token.last_used_at is None

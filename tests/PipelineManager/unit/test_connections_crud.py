@@ -124,7 +124,7 @@ class TestAddConnection:
     def test_add_connection_success(self, mock_test_connectivity, authenticated_client):
         """Test successful connection creation"""
         # Mock successful connectivity test
-        mock_test_connectivity.return_value = (True, "Connection successful", [])
+        mock_test_connectivity.return_value = (True, "Connection successful", [], [])
 
         response = authenticated_client.post('/ConnectionManager/AddConnection', {
             'name': 'Test Connection',
@@ -148,7 +148,7 @@ class TestAddConnection:
     def test_add_connection_failed_connectivity(self, mock_test_connectivity, authenticated_client):
         """Test connection creation with failed connectivity test"""
         # Mock failed connectivity test
-        mock_test_connectivity.return_value = (False, "Connection failed: Timeout", [])
+        mock_test_connectivity.return_value = (False, "Connection failed: Timeout", [], [])
 
         response = authenticated_client.post('/ConnectionManager/AddConnection', {
             'name': 'Bad Connection',
@@ -171,7 +171,7 @@ class TestAddConnection:
     def test_add_connection_host_rows_and_warnings(self, mock_check, authenticated_client):
         """Modal rows are saved in order and failed-node warnings are returned."""
         warning = 'Elasticsearch node https://es2.lab:9200 is unreachable: refused'
-        mock_check.return_value = (True, '{}', [warning])
+        mock_check.return_value = (True, '{}', [warning], ['https://es1.lab:9243'])
 
         response = authenticated_client.post('/ConnectionManager/AddConnection', {
             'name': 'Rows', 'connection_type': 'CENTRALIZED', 'connection_mode': 'url',
@@ -184,6 +184,7 @@ class TestAddConnection:
         data = response.json()
         assert data['success'] is True
         assert data['warnings'] == [warning]
+        assert data['reachable'] == ['https://es1.lab:9243']
         conn = Connection.objects.get(name='Rows')
 
         detail = authenticated_client.get(f'/ConnectionManager/GetConnection/{conn.id}/').json()['connection']
@@ -207,6 +208,31 @@ class TestAddConnection:
         assert 'error' in response_data
         # Check that the error contains form validation messages
         assert 'name' in response_data['error'] or 'This field is required' in response_data['error']
+
+    def test_add_connection_form_errors_are_plain_text(self, authenticated_client):
+        """The modal shows errors in toasts, so they must not be HTML."""
+        response = authenticated_client.post('/ConnectionManager/AddConnection', {
+            'name': '', 'connection_type': 'CENTRALIZED', 'connection_mode': 'url',
+            'auth_type': 'basic', 'es_host_url': [''], 'es_host_port': [''],
+        })
+        error = response.json()['error']
+        assert '<' not in error
+        assert 'This field is required.' in error
+
+    @patch('PipelineManager.manager_views.check_connectivity')
+    def test_add_connection_all_nodes_down_returns_node_errors(self, mock_check, authenticated_client):
+        node_errors = ['Elasticsearch node https://es1.lab:9200 is unreachable: refused',
+                       'Elasticsearch node https://es2.lab:9200 is unreachable: refused']
+        mock_check.return_value = (False, 'both down', node_errors, [])
+        response = authenticated_client.post('/ConnectionManager/AddConnection', {
+            'name': 'Down', 'connection_type': 'CENTRALIZED', 'connection_mode': 'url',
+            'auth_type': 'basic', 'username': 'elastic', 'password': 'x',
+            'es_host_url': ['https://es1.lab', 'https://es2.lab'], 'es_host_port': ['9200', '9200'],
+        })
+        data = response.json()
+        assert data['success'] is False
+        assert data['node_errors'] == node_errors
+        assert not Connection.objects.filter(name='Down').exists()
 
     def test_add_connection_get_returns_405(self, authenticated_client):
         """AddConnection only accepts POST — GET returns 405"""

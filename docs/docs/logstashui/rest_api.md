@@ -146,8 +146,9 @@ POST /api/connections/
 
 Each Elasticsearch node is tested separately before the connection is kept. If every node
 fails, the record is rolled back and `422` is returned. If at least one node answers, the
-connection is saved and each unreachable node is listed in `warnings`. A saved `kibana_url` is
-checked with `GET /api/status`; a failure is a warning only.
+connection is saved, each unreachable node is listed in `warnings`, and the nodes that answered
+are listed in `reachable` (empty for Cloud ID connections). A saved `kibana_url` is checked with
+`GET /api/status`; a failure is a warning only.
 
 In URL mode, list the nodes in `es_hosts`, in the order Logstash outputs should use them. Each
 URL needs `http://` or `https://`, and all nodes must use the same scheme. A missing port
@@ -192,7 +193,7 @@ curl -X POST https://logstashui.example.com/api/connections/ \
 ```
 
 ```json
-{"success": true, "connection_id": 1, "message": "Connection created and tested successfully.", "warnings": []}
+{"success": true, "connection_id": 1, "message": "Connection created and tested successfully.", "warnings": [], "reachable": ["https://es.example.com:9200"]}
 ```
 
 | Field | Required | Notes |
@@ -234,7 +235,7 @@ curl -X PUT https://logstashui.example.com/api/connections/1/ \
 ```
 
 ```json
-{"success": true, "connection_id": 1, "message": "Connection updated and tested successfully.", "warnings": []}
+{"success": true, "connection_id": 1, "message": "Connection updated and tested successfully.", "warnings": [], "reachable": ["https://es.example.com:9200"]}
 ```
 
 ---
@@ -266,7 +267,7 @@ POST /api/connections/{id}/test/
 
 Runs a live connectivity check against each node of the saved connection without modifying
 it. Succeeds when at least one node answers; unreachable nodes and a failing Kibana status
-check are listed in `warnings`.
+check are listed in `warnings`, and the nodes that answered in `reachable`.
 
 ```bash
 curl -X POST https://logstashui.example.com/api/connections/1/test/ \
@@ -274,7 +275,7 @@ curl -X POST https://logstashui.example.com/api/connections/1/test/ \
 ```
 
 ```json
-{"success": true, "detail": "{...cluster info...}", "warnings": ["Elasticsearch node https://es2:9200 is unreachable: ..."]}
+{"success": true, "detail": "{...cluster info...}", "warnings": ["Elasticsearch node https://es2:9200 is unreachable: ..."], "reachable": ["https://es1:9200"]}
 ```
 
 ---

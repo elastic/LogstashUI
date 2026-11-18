@@ -132,7 +132,7 @@ def _create_connection(request):
 
     new_connection = form.save()
 
-    success, message, warnings = manager_views.check_connectivity(new_connection.id)
+    success, message, warnings, reachable = manager_views.check_connectivity(new_connection.id)
     if not success:
         new_connection.delete()
         logger.error("API create connection: connectivity test failed — %s", message)
@@ -144,6 +144,7 @@ def _create_connection(request):
         'connection_id': new_connection.id,
         'message': 'Connection created and tested successfully.',
         'warnings': warnings,
+        'reachable': reachable,
     }, status=201)
 
 
@@ -260,10 +261,11 @@ def _update_connection(request, connection_id):
     test_success = False
     test_message = ''
     warnings = []
+    reachable = []
     try:
         with transaction.atomic():
             updated = form.save()
-            test_success, test_message, warnings = manager_views.check_connectivity(updated.id)
+            test_success, test_message, warnings, reachable = manager_views.check_connectivity(updated.id)
             if not test_success:
                 transaction.set_rollback(True)
     except Exception as exc:
@@ -280,6 +282,7 @@ def _update_connection(request, connection_id):
         'connection_id': connection_id,
         'message': 'Connection updated and tested successfully.',
         'warnings': warnings,
+        'reachable': reachable,
     })
 
 
@@ -321,8 +324,8 @@ def connection_test(request, connection_id):
         return JsonResponse({'success': False, 'error': 'Connection not found'}, status=404)
 
     logger.info("API: connectivity test for connection %s by %s", connection_id, request.user.username)
-    success, message, warnings = manager_views.check_connectivity(connection_id)
+    success, message, warnings, reachable = manager_views.check_connectivity(connection_id)
 
     if success:
-        return JsonResponse({'success': True, 'detail': message, 'warnings': warnings})
+        return JsonResponse({'success': True, 'detail': message, 'warnings': warnings, 'reachable': reachable})
     return JsonResponse({'success': False, 'error': str(message)}, status=422)

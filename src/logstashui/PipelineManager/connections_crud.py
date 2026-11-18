@@ -230,6 +230,24 @@ def GetConnectionsTable(request):
     })
 
 
+def _form_error_text(form):
+    """Return a form's errors as plain text, one ``Label: message`` per line.
+
+    The connection modal shows these in toasts, which escape HTML, so the
+    default ``<ul class="errorlist">`` rendering would show raw tags.
+
+    Examples:
+        >>> _form_error_text(form)  # doctest: +SKIP
+        'Connection Name: This field is required.\\nAt least one Elasticsearch node URL is required ...'
+    """
+    lines = []
+    for field, errors in form.errors.items():
+        bound = form.fields.get(field)
+        prefix = '' if field == '__all__' else f"{(bound.label if bound and bound.label else field)}: "
+        lines.extend(f"{prefix}{error}" for error in errors)
+    return "\n".join(lines)
+
+
 def _compute_connection_status(conn):
     """Compute a displayable status string from a connection dict.
 
@@ -303,7 +321,7 @@ def AddConnection(request):
             new_connection = form.save()
 
             # Test the connection
-            success, message, warnings = manager_views.check_connectivity(new_connection.id)
+            success, message, warnings, reachable = manager_views.check_connectivity(new_connection.id)
 
             if not success:
                 # If test fails, delete the connection and return JSON error
@@ -312,7 +330,8 @@ def AddConnection(request):
 
                 return JsonResponse({
                     'success': False,
-                    'error': str(message)
+                    'error': str(message),
+                    'node_errors': warnings,
                 }, status=200)
 
             # Connection test succeeded, return JSON response
@@ -323,12 +342,13 @@ def AddConnection(request):
                 'connection_id': new_connection.id,
                 'message': 'Connection created and tested successfully!',
                 'warnings': warnings,
+                'reachable': reachable,
             }, status=200)
         else:
             logger.warning(f"User '{request.user.username}' failed to add connection: {form.errors}")
             return JsonResponse({
                 'success': False,
-                'error': str(form.errors)
+                'error': _form_error_text(form)
             }, status=200)
 
     return JsonResponse({'error': 'Invalid request method'}, status=405)
@@ -445,15 +465,16 @@ def UpdateConnection(request, connection_id):
     form = ConnectionForm(request.POST, instance=connection)
     if not form.is_valid():
         logger.warning(f"User '{request.user.username}' submitted invalid update for connection {connection_id}: {form.errors}")
-        return JsonResponse({'success': False, 'error': str(form.errors)}, status=200)
+        return JsonResponse({'success': False, 'error': _form_error_text(form)}, status=200)
 
     test_success = False
     test_message = ""
     warnings = []
+    reachable = []
     try:
         with transaction.atomic():
             updated_connection = form.save()
-            test_success, test_message, warnings = manager_views.check_connectivity(updated_connection.id)
+            test_success, test_message, warnings, reachable = manager_views.check_connectivity(updated_connection.id)
             if not test_success:
                 transaction.set_rollback(True)
     except Exception as e:
@@ -462,7 +483,7 @@ def UpdateConnection(request, connection_id):
 
     if not test_success:
         logger.warning(f"User '{request.user.username}' failed connectivity test when updating connection {connection_id}")
-        return JsonResponse({'success': False, 'error': str(test_message)}, status=200)
+        return JsonResponse({'success': False, 'error': str(test_message), 'node_errors': warnings}, status=200)
 
     logger.info(f"User '{request.user.username}' updated connection {connection_id}")
     return JsonResponse({
@@ -470,6 +491,7 @@ def UpdateConnection(request, connection_id):
         'connection_id': connection_id,
         'message': 'Connection updated and tested successfully!',
         'warnings': warnings,
+        'reachable': reachable,
     }, status=200)
 
 

@@ -126,7 +126,7 @@ class TestConnectionCreate:
 
     @patch('API.connections_views.manager_views.check_connectivity')
     def test_create_success_returns_201(self, mock_test, authenticated_client):
-        mock_test.return_value = (True, 'ok', [])
+        mock_test.return_value = (True, 'ok', [], [])
         response = authenticated_client.post(
             '/api/connections/',
             data=json.dumps({
@@ -148,7 +148,7 @@ class TestConnectionCreate:
 
     @patch('API.connections_views.manager_views.check_connectivity')
     def test_create_persists_to_db(self, mock_test, authenticated_client):
-        mock_test.return_value = (True, 'ok', [])
+        mock_test.return_value = (True, 'ok', [], [])
         authenticated_client.post(
             '/api/connections/',
             data=json.dumps({
@@ -173,7 +173,7 @@ class TestConnectionCreate:
     @patch('API.connections_views.manager_views.check_connectivity')
     def test_create_moves_port_out_of_host(self, mock_test, authenticated_client,
                                            host, port, saved_host, saved_port):
-        mock_test.return_value = (True, 'ok', [])
+        mock_test.return_value = (True, 'ok', [], [])
         body = {'name': 'Port Conn', 'connection_type': 'CENTRALIZED', 'connection_mode': 'url',
                 'auth_type': 'basic', 'host': host, 'username': 'elastic', 'password': 'x'}
         if port:
@@ -197,7 +197,7 @@ class TestConnectionCreate:
 
     @patch('API.connections_views.manager_views.check_connectivity')
     def test_create_connectivity_fail_returns_422(self, mock_test, authenticated_client):
-        mock_test.return_value = (False, 'Connection timed out', [])
+        mock_test.return_value = (False, 'Connection timed out', [], [])
         response = authenticated_client.post(
             '/api/connections/',
             data=json.dumps({
@@ -217,7 +217,7 @@ class TestConnectionCreate:
 
     @patch('API.connections_views.manager_views.check_connectivity')
     def test_create_connectivity_fail_rolls_back_row(self, mock_test, authenticated_client):
-        mock_test.return_value = (False, 'Connection timed out', [])
+        mock_test.return_value = (False, 'Connection timed out', [], [])
         authenticated_client.post(
             '/api/connections/',
             data=json.dumps({
@@ -237,7 +237,7 @@ class TestConnectionCreate:
     @patch('API.connections_views.manager_views.check_connectivity')
     def test_create_with_es_hosts_returns_warnings(self, mock_test, authenticated_client):
         warning = 'Elasticsearch node https://es2.example.com:9200 is unreachable: refused'
-        mock_test.return_value = (True, 'ok', [warning])
+        mock_test.return_value = (True, 'ok', [warning], ['https://es1.example.com:9200'])
         response = authenticated_client.post('/api/connections/', data=json.dumps({
             'name': 'Multi', 'connection_type': 'CENTRALIZED', 'connection_mode': 'url',
             'auth_type': 'basic', 'username': 'elastic', 'password': 'x',
@@ -245,6 +245,7 @@ class TestConnectionCreate:
         }), content_type='application/json')
         assert response.status_code == 201
         assert response.json()['warnings'] == [warning]
+        assert response.json()['reachable'] == ['https://es1.example.com:9200']
         conn = Connection.objects.get(name='Multi')
         assert conn.es_hosts == ['https://es1.example.com:9200', 'https://es2.example.com:9200']
 
@@ -336,7 +337,7 @@ class TestConnectionUpdate:
 
     @patch('API.connections_views.manager_views.check_connectivity')
     def test_update_success(self, mock_test, authenticated_client, centralized_connection):
-        mock_test.return_value = (True, 'ok', [])
+        mock_test.return_value = (True, 'ok', [], [])
         response = authenticated_client.put(
             f'/api/connections/{centralized_connection.id}/',
             data=json.dumps({
@@ -358,7 +359,7 @@ class TestConnectionUpdate:
 
     @patch('API.connections_views.manager_views.check_connectivity')
     def test_update_connectivity_fail_returns_422_and_rolls_back(self, mock_test, authenticated_client, centralized_connection):
-        mock_test.return_value = (False, 'Timed out', [])
+        mock_test.return_value = (False, 'Timed out', [], [])
         original_name = centralized_connection.name
         authenticated_client.put(
             f'/api/connections/{centralized_connection.id}/',
@@ -380,7 +381,7 @@ class TestConnectionUpdate:
     @patch('API.connections_views.manager_views.check_connectivity')
     def test_partial_update_port_only_keeps_host(self, mock_test, authenticated_client, centralized_connection):
         """A legacy client sending only ``port`` moves the first node to that port."""
-        mock_test.return_value = (True, 'ok', [])
+        mock_test.return_value = (True, 'ok', [], [])
         response = authenticated_client.put(
             f'/api/connections/{centralized_connection.id}/',
             data=json.dumps({'port': 9243}), content_type='application/json',
@@ -392,7 +393,7 @@ class TestConnectionUpdate:
 
     @patch('API.connections_views.manager_views.check_connectivity')
     def test_partial_update_name_keeps_all_hosts(self, mock_test, authenticated_client, centralized_connection):
-        mock_test.return_value = (True, 'ok', [])
+        mock_test.return_value = (True, 'ok', [], [])
         centralized_connection.es_hosts = ['https://es1:9200', 'https://es2:9200']
         centralized_connection.save()
         response = authenticated_client.put(
@@ -405,7 +406,7 @@ class TestConnectionUpdate:
 
     @patch('API.connections_views.manager_views.check_connectivity')
     def test_update_es_hosts_and_kibana_url(self, mock_test, authenticated_client, centralized_connection):
-        mock_test.return_value = (True, 'ok', ['Kibana at https://kb:5601 is unreachable: refused'])
+        mock_test.return_value = (True, 'ok', ['Kibana at https://kb:5601 is unreachable: refused'], [])
         response = authenticated_client.put(
             f'/api/connections/{centralized_connection.id}/',
             data=json.dumps({'es_hosts': ['https://es3', 'https://es4:9243'],
@@ -470,7 +471,7 @@ class TestConnectionTest:
 
     @patch('API.connections_views.manager_views.check_connectivity')
     def test_test_success(self, mock_test, authenticated_client, centralized_connection):
-        mock_test.return_value = (True, '{"cluster_name": "my-cluster"}', [])
+        mock_test.return_value = (True, '{"cluster_name": "my-cluster"}', [], [])
         response = authenticated_client.post(f'/api/connections/{centralized_connection.id}/test/')
         assert response.status_code == 200
         data = response.json()
@@ -479,7 +480,7 @@ class TestConnectionTest:
 
     @patch('API.connections_views.manager_views.check_connectivity')
     def test_test_failure_returns_422(self, mock_test, authenticated_client, centralized_connection):
-        mock_test.return_value = (False, 'Connection refused', [])
+        mock_test.return_value = (False, 'Connection refused', [], [])
         response = authenticated_client.post(f'/api/connections/{centralized_connection.id}/test/')
         assert response.status_code == 422
         assert response.json()['success'] is False
@@ -499,7 +500,7 @@ class TestConnectionTest:
     @patch('API.connections_views.manager_views.check_connectivity')
     def test_test_does_not_modify_connection(self, mock_test, authenticated_client, centralized_connection):
         """Connectivity test is read-only — connection row must not change."""
-        mock_test.return_value = (True, 'ok', [])
+        mock_test.return_value = (True, 'ok', [], [])
         original_updated = centralized_connection.updated_at
         authenticated_client.post(f'/api/connections/{centralized_connection.id}/test/')
         centralized_connection.refresh_from_db()

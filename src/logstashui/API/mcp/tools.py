@@ -546,21 +546,23 @@ TOOLS = [
          'Credentials are never returned.'),
     Tool('connections_create', 'connections', 'api-connections-list', 'POST',
          'Create a connection. Each Elasticsearch node is tested; it is rolled back only when '
-         'every node fails, and unreachable nodes or Kibana come back in warnings. Admin only.',
+         'every node fails. Unreachable nodes or Kibana come back in warnings, nodes that '
+         'answered in reachable. Admin only.',
          body=_CONNECTION_FIELDS, required=('name', 'connection_type'),
          hints={422: _CONNECTION_TEST_FAILED + ' Nothing was saved.'}),
     Tool('connections_get', 'connections', 'api-connections-detail', 'GET',
          'Get one connection by ID.', path_params={'connection_id': _int('Connection ID.')}),
     Tool('connections_update', 'connections', 'api-connections-detail', 'PUT',
          'Update a connection; send only fields to change. Re-tested and rolled back only when '
-         'every node fails; partial failures come back in warnings. Admin only.',
+         'every node fails; partial failures come back in warnings, nodes that answered in '
+         'reachable. Admin only.',
          path_params={'connection_id': _int('Connection ID.')}, body=_CONNECTION_FIELDS,
          hints={422: _CONNECTION_TEST_FAILED + ' The update was rolled back.'}),
     Tool('connections_delete', 'connections', 'api-connections-detail', 'DELETE',
          'Delete a connection. Admin only.', path_params={'connection_id': _int('Connection ID.')}),
     Tool('connections_test', 'connections', 'api-connections-test', 'POST',
          'Run a live connectivity check against each node of a saved connection without changing '
-         'it. Unreachable nodes or Kibana come back in warnings.',
+         'it. Unreachable nodes or Kibana come back in warnings, nodes that answered in reachable.',
          path_params={'connection_id': _int('Connection ID.')}, read_only=True,
          hints={404: 'Connection not found. Use connections_list to find the ID.',
                 422: _CONNECTION_TEST_FAILED + ' Fix it with connections_update.'}),
