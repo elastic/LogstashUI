@@ -331,20 +331,30 @@ class AgentBuilder:
 
     @staticmethod
     def _normalize(resource_dict, resource_type):
-        """Return a copy with write-only configuration keys removed for stable comparison.
+        """Return a copy of an agent with unstable ``configuration`` keys removed.
 
-        Kibana accepts certain keys (e.g. ``skill_ids``, ``tools``) inside the
-        agent ``configuration`` object on write but does not include them in the
-        GET response.  Stripping them from both sides before comparison prevents
-        permanent false "needs update" results.
+        Two kinds of keys are dropped from both sides before comparison, so
+        neither causes a permanent false "needs update":
+
+        * Write-only keys (``skill_ids``, ``tools``) that some Kibana versions
+          omit from the GET response.
+        * Empty values (``None``, ``[]``, ``{}``, ``''``). Newer Kibana
+          versions return defaults for keys our definitions don't set, such
+          as ``subagent_ids: []``.
+
+        Examples:
+            >>> AgentBuilder._normalize(
+            ...     {'configuration': {'instructions': 'x', 'subagent_ids': [], 'tools': []}},
+            ...     RESOURCE_AGENT)
+            {'configuration': {'instructions': 'x'}}
         """
         if resource_type != RESOURCE_AGENT:
             return resource_dict
         result = dict(resource_dict)
-        config = dict(result.get('configuration') or {})
-        for k in AgentBuilder._AGENT_CONFIG_WRITE_ONLY_KEYS:
-            config.pop(k, None)
-        result['configuration'] = config
+        result['configuration'] = {
+            k: v for k, v in (result.get('configuration') or {}).items()
+            if k not in AgentBuilder._AGENT_CONFIG_WRITE_ONLY_KEYS and v not in (None, [], {}, '')
+        }
         return result
 
     @staticmethod
