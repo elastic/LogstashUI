@@ -14,7 +14,7 @@ from PipelineManager.models import Connection
 from .overview import get_discovered_devices_count, get_template_data_categories, get_high_resource_usage
 from Common.decorators import require_admin_role
 from Common.formatters import format_display_name
-from Common.elastic_utils import normalize_kibana_url, get_kibana_url
+from Common.elastic_utils import KibanaUrlMissing, connection_edit_url
 
 
 
@@ -25,27 +25,27 @@ import json
 def _ai_template_connections():
     """Return centralized ES connections for the Generate Template UI.
 
-    Each row includes `suggested_kibana_url`: the Elasticsearch host rewritten to a
-    Kibana origin so URL connections can prefill Kibana instead of the ES endpoint.
+    Each row includes ``has_kibana_url`` (a saved Kibana URL or a Cloud ID to
+    derive one from) and ``edit_url``, the link that opens the connection's
+    edit form to add one.
     """
     rows = list(Connection.objects.filter(
         connection_type=Connection.ConnectionType.CENTRALIZED
-    ).values('id', 'name', 'cloud_id', 'host', 'port'))
+    ).values('id', 'name', 'cloud_id', 'kibana_url'))
     for row in rows:
-        if row.get('cloud_id'):
-            try:
-                row['suggested_kibana_url'] = get_kibana_url(row['id'])
-            except Exception:
-                row['suggested_kibana_url'] = ''
-        else:
-            raw = row.get('host') or ''
-            port = row.get('port')
-            if raw and port:
-                host_part = raw.split('://', 1)[-1]
-                if ':' not in host_part:
-                    raw = f"{raw}:{port}"
-            row['suggested_kibana_url'] = normalize_kibana_url(raw) if raw else ''
+        row['has_kibana_url'] = bool(row.get('kibana_url') or row.get('cloud_id'))
+        row['edit_url'] = connection_edit_url(row['id'])
     return rows
+
+
+def _kibana_url_missing_response(exc):
+    """JSON body for an AI endpoint called on a connection with no Kibana URL."""
+    return JsonResponse({
+        'error': str(exc),
+        'kibana_url_missing': True,
+        'edit_url': exc.edit_url,
+        'api_available': False,
+    }, status=400)
 
 
 # Create your views here.
@@ -409,12 +409,15 @@ def GetOverviewMetrics(request):
 def CheckAgentBuilderResources(request):
     """Check whether SNMP AI Agent Builder resources exist and match expected definitions.
 
+    The Kibana URL comes from the connection (saved URL, else Cloud ID).
+
     Args:
         connection_id: Elasticsearch/Kibana connection primary key.
-        kibana_url: Optional Kibana origin override for URL-based connections.
 
     Returns:
-        JSON in the shape produced by `AgentBuilder.check_resources()`.
+        JSON in the shape produced by `AgentBuilder.check_resources()`, or 400
+        with ``kibana_url_missing`` and ``edit_url`` when the connection has
+        no Kibana URL.
     """
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
@@ -425,7 +428,6 @@ def CheckAgentBuilderResources(request):
         return JsonResponse({'error': 'Invalid JSON body'}, status=400)
 
     connection_id  = data.get('connection_id')
-    kibana_url     = data.get('kibana_url') or None
 
     if not connection_id:
         return JsonResponse({'error': 'connection_id is required'}, status=400)
@@ -436,10 +438,7 @@ def CheckAgentBuilderResources(request):
         _assets_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets', 'device_template_generation')
         tools, skills, agents = load_resources_from_directory(_assets_dir)
 
-        builder = AgentBuilder(
-            connection_id=int(connection_id),
-            kibana_url_override=kibana_url,
-        )
+        builder = AgentBuilder(connection_id=int(connection_id))
         results = builder.check_resources(
             tools=tools,
             skills=skills,
@@ -447,6 +446,8 @@ def CheckAgentBuilderResources(request):
         )
         return JsonResponse(results)
 
+    except KibanaUrlMissing as e:
+        return _kibana_url_missing_response(e)
     except Exception as e:
         return JsonResponse({'error': str(e), 'api_available': False}, status=500)
 
@@ -457,10 +458,10 @@ def InstallAgentBuilderPackage(request):
 
     Args:
         connection_id: Elasticsearch/Kibana connection primary key.
-        kibana_url: Optional Kibana origin override for URL-based connections.
 
     Returns:
-        JSON `{success, results: [{type, id, action, success, error?}]}`.
+        JSON `{success, results: [{type, id, action, success, error?}]}`, or
+        400 with ``kibana_url_missing`` when the connection has no Kibana URL.
     """
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
@@ -471,7 +472,6 @@ def InstallAgentBuilderPackage(request):
         return JsonResponse({'error': 'Invalid JSON body'}, status=400)
 
     connection_id = data.get('connection_id')
-    kibana_url    = data.get('kibana_url') or None
 
     if not connection_id:
         return JsonResponse({'error': 'connection_id is required'}, status=400)
@@ -482,10 +482,7 @@ def InstallAgentBuilderPackage(request):
         _assets_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets', 'device_template_generation')
         tools, skills, agents = load_resources_from_directory(_assets_dir)
 
-        builder = AgentBuilder(
-            connection_id=int(connection_id),
-            kibana_url_override=kibana_url,
-        )
+        builder = AgentBuilder(connection_id=int(connection_id))
         result = builder.apply_all_resources(
             tools=tools,
             skills=skills,
@@ -493,6 +490,8 @@ def InstallAgentBuilderPackage(request):
         )
         return JsonResponse(result)
 
+    except KibanaUrlMissing as e:
+        return _kibana_url_missing_response(e)
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
@@ -505,7 +504,6 @@ def GenerateTemplateAndProfiles(request):
 
     Args:
         connection_id: Elasticsearch/Kibana connection primary key.
-        kibana_url: Optional Kibana origin for URL-based connections.
         walk_text: Raw SNMP walk output.
         inference_id: Agent Builder inference model id.
     """
@@ -518,7 +516,6 @@ def GenerateTemplateAndProfiles(request):
         return JsonResponse({'error': 'Invalid JSON body'}, status=400)
 
     connection_id = body.get('connection_id')
-    kibana_url    = body.get('kibana_url') or None
     walk_text     = body.get('walk_text', '')
     inference_id  = body.get('inference_id') or None
 
@@ -530,7 +527,7 @@ def GenerateTemplateAndProfiles(request):
     from .ai_template_generation import stream_template_generation
 
     response = StreamingHttpResponse(
-        stream_template_generation(connection_id, kibana_url, walk_text, inference_id),
+        stream_template_generation(connection_id, walk_text, inference_id),
         content_type='text/event-stream',
     )
     response['X-Accel-Buffering'] = 'no'

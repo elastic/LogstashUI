@@ -494,6 +494,7 @@ class TestGenerateOutputTlsVerification:
         conn.allow_self_signed_certs = False
         for k, v in conn_kwargs.items():
             setattr(conn, k, v)
+        conn.get_es_hosts.return_value = [f"{conn.host}:{conn.port}"] if conn.host else []
         net = MagicMock()
         net.id = 1
         net.connection = conn
@@ -544,6 +545,7 @@ class TestGenerateOutputCertificateAuthorities:
         conn.username = "elastic"
         conn.password = "x"
         conn.allow_self_signed_certs = allow_self_signed
+        conn.get_es_hosts.return_value = [f"{host}:9200"] if host else []
         net = MagicMock()
         net.id = 1
         net.connection = conn
@@ -633,7 +635,7 @@ class TestEsConnectionUsesTls:
     def test_cases(self, cloud_id, host, expected):
         c = MagicMock()
         c.cloud_id = cloud_id
-        c.host = host
+        c.get_es_hosts.return_value = [host] if host else []
         assert _es_connection_uses_tls(c) is expected
 
 

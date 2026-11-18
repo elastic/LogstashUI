@@ -51,7 +51,7 @@ A network is a monitoring zone. **Every network gets its own generated pipelines
 | **Name** | Unique friendly name. Used (sanitized) in pipeline names: `snmp-<network>-...` |
 | **Network range** | CIDR notation, e.g. `192.168.1.0/24`. Used by [discovery](/docs/docs/logstashui/SNMP/discovery.md) to know what to scan. |
 | **Deployment mode** | **Centralized Pipeline Management** (pipelines written to Elasticsearch) or **Logstash Agent** (pipelines pushed to an enrolled agent). See [Deploying Changes](/docs/docs/logstashui/SNMP/deploying_changes.md). |
-| **Connection** | The Elasticsearch connection (CPM mode) or Logstash Agent connection (agent mode) this network deploys to. |
+| **Connection** | The Elasticsearch connection (CPM mode) or Logstash Agent connection (agent mode) this network deploys to. The generated Elasticsearch output lists every node URL on that connection, in the order you entered them. Logstash load-balances across them rather than failing over in order. |
 | **Credential mode** (CPM only) | **Manage Keystore Manually** (you add the credential entries to the Logstash keystore on the node yourself) or **Plaintext Credentials** (credentials embedded in the pipeline definition — convenient, but visible to anyone who can read pipelines in Elasticsearch). Not applicable in agent mode, where the agent manages the node's keystore and host configuration for you. |
 | **Polling interval** | How often devices are polled, in seconds (default 30). |
 | **Namespace** | Data stream namespace for this network's data (default `default`). Alternatively, enable **namespace from device template** to use the normalized template name as the namespace. |

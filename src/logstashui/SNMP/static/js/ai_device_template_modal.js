@@ -14,17 +14,10 @@
     return el ? el.value : '';
   }
 
-  function debounce(fn, ms) {
-    let t;
-    return function (...args) {
-      clearTimeout(t);
-      t = setTimeout(() => fn.apply(this, args), ms);
-    };
-  }
-
   // Current connection context — kept in closure so the install button can use it
   let _connectionId = null;
-  let _kibanaUrl    = null;
+  // True when the selected connection has no saved Kibana URL and no Cloud ID
+  let _kibanaMissing = false;
 
   // ── Step icon SVG snippets ────────────────────────────────────────────────────
 
@@ -145,13 +138,28 @@
     // If a connection is already selected (modal re-opened), restore state.
     const connectionSelect = document.getElementById('aiTemplateConnectionSelect');
     if (connectionSelect && connectionSelect.value) {
-      updateKibanaUrlVisibility();
-      const selected   = connectionSelect.options[connectionSelect.selectedIndex];
-      const connId = parseInt(connectionSelect.value, 10);
-
-      fetchAndPopulateModels(connId);
-      _prefillAndCheckKibanaUrl(selected, connId);
+      _selectConnection(connectionSelect.options[connectionSelect.selectedIndex]);
     }
+  }
+
+  /**
+   * Load models and check Agent Builder resources for the selected connection,
+   * or show the "add a Kibana URL" notice when it has none.
+   */
+  function _selectConnection(selected) {
+    if (!selected || !selected.value) {
+      showKibanaMissing(null);
+      return;
+    }
+    const connId = parseInt(selected.value, 10);
+    if (selected.dataset.hasKibanaUrl !== 'true') {
+      _connectionId = connId;
+      showKibanaMissing(selected.dataset.editUrl);
+      return;
+    }
+    showKibanaMissing(null);
+    fetchAndPopulateModels(connId);
+    checkAgentBuilderResources(connId);
   }
 
   function closeAiDeviceTemplateModal() {
@@ -160,10 +168,7 @@
     modal.classList.add('hidden');
     document.body.style.overflow = '';
 
-    const kibanaUrlContainer = document.getElementById('aiTemplateKibanaUrlContainer');
-    if (kibanaUrlContainer) kibanaUrlContainer.classList.add('hidden');
-    const kibanaUrlInput = document.getElementById('aiTemplateKibanaUrl');
-    if (kibanaUrlInput) kibanaUrlInput.value = '';
+    showKibanaMissing(null);
 
     if (_activeReader) {
       _activeReader.cancel();
@@ -176,26 +181,22 @@
     showModelSelector(false);
     hideResourceStatus();
     _connectionId = null;
-    _kibanaUrl    = null;
     _generationInFlight = false;
   }
 
-  // ── Kibana URL visibility ──────────────────────────────────────────────────────
+  // ── Missing Kibana URL notice ──────────────────────────────────────────────────
 
-  function updateKibanaUrlVisibility() {
-    const connectionSelect   = document.getElementById('aiTemplateConnectionSelect');
-    const kibanaUrlContainer = document.getElementById('aiTemplateKibanaUrlContainer');
-    if (!connectionSelect || !kibanaUrlContainer) return;
-
-    const selected = connectionSelect.options[connectionSelect.selectedIndex];
-
-    if (selected && selected.value) {
-      kibanaUrlContainer.classList.remove('hidden');
-    } else {
-      kibanaUrlContainer.classList.add('hidden');
-      const kibanaUrlInput = document.getElementById('aiTemplateKibanaUrl');
-      if (kibanaUrlInput) kibanaUrlInput.value = '';
-    }
+  /**
+   * Show the notice linking to the connection's edit form, or hide it.
+   * @param {string|null} editUrl e.g. "/ConnectionManager/?edit=7&focus=kibana_url"; null hides it
+   */
+  function showKibanaMissing(editUrl) {
+    _kibanaMissing = !!editUrl;
+    const notice = document.getElementById('aiTemplateKibanaMissing');
+    const link   = document.getElementById('aiTemplateKibanaMissingLink');
+    if (notice) notice.classList.toggle('hidden', !editUrl);
+    if (link && editUrl) link.href = editUrl;
+    _updateGenerateBtnState();
   }
 
   // ── Resource status panel ─────────────────────────────────────────────────────
@@ -233,11 +234,6 @@
     _updateGenerateBtnState();
   }
 
-  function _kibanaUrlRequired() {
-    const kibanaContainer = document.getElementById('aiTemplateKibanaUrlContainer');
-    return !!(kibanaContainer && !kibanaContainer.classList.contains('hidden'));
-  }
-
   function _updateGenerateBtnState() {
     const btn         = document.getElementById('aiTemplateGenerateBtn');
     const walkInput   = document.getElementById('aiTemplateWalkInput');
@@ -246,8 +242,7 @@
 
     const walkEmpty    = !walkInput  || !walkInput.value.trim();
     const noModel      = !modelSelect || !modelSelect.value;
-    const kibanaInput  = document.getElementById('aiTemplateKibanaUrl');
-    const noKibanaUrl  = _kibanaUrlRequired() && (!kibanaInput || !kibanaInput.value.trim());
+    const noKibanaUrl  = _kibanaMissing;
     const blocked      = _hasMissingResources || _checkInFlight || _generationInFlight || walkEmpty || noModel || noKibanaUrl;
 
     btn.disabled = blocked;
@@ -260,7 +255,7 @@
       } else if (_hasMissingResources) {
         btn.title = 'Install all required Elastic Agent Builder resources before generating';
       } else if (noKibanaUrl) {
-        btn.title = 'Provide a Kibana URL before generating';
+        btn.title = 'Add a Kibana URL to this connection before generating';
       } else if (noModel) {
         btn.title = 'Select an inference model before generating';
       } else {
@@ -369,29 +364,31 @@
 
   // ── Check resources API call ───────────────────────────────────────────────────
 
-  function checkAgentBuilderResources(connectionId, kibanaUrl) {
+  function checkAgentBuilderResources(connectionId) {
     if (!connectionId) return;
 
     _connectionId = connectionId;
-    _kibanaUrl    = kibanaUrl || null;
 
     _checkInFlight = true;
     _updateGenerateBtnState();
     setLoading(true);
     setInstallBtnVisible(false);
 
-    const body = { connection_id: connectionId };
-    if (kibanaUrl) body.kibana_url = kibanaUrl;
-
     fetch('/SNMP/CheckAgentBuilderResources/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ connection_id: connectionId }),
     })
       .then(r => r.json())
       .then(results => {
         _checkInFlight = false;
         setLoading(false);
+        if (results.kibana_url_missing) {
+          hideResourceStatus();
+          showModelSelector(false);
+          showKibanaMissing(results.edit_url);
+          return;
+        }
         renderResourceStatus(results);
       })
       .catch(err => {
@@ -403,20 +400,6 @@
           tools: [], skills: [], agents: [],
         });
       });
-  }
-
-  function _prefillAndCheckKibanaUrl(selected, connectionId) {
-    const kibanaUrlInput = document.getElementById('aiTemplateKibanaUrl');
-    const suggested = (selected && selected.dataset.suggestedKibanaUrl) || '';
-    if (kibanaUrlInput && suggested && !kibanaUrlInput.value.trim()) {
-      kibanaUrlInput.value = suggested;
-    }
-    const kibanaUrl = kibanaUrlInput && kibanaUrlInput.value.trim();
-    if (kibanaUrl) {
-      checkAgentBuilderResources(connectionId, kibanaUrl);
-    } else {
-      _updateGenerateBtnState();
-    }
   }
 
   // ── Install / update entire package ───────────────────────────────────────────
@@ -433,13 +416,10 @@
     _updateGenerateBtnState();
     setLoading(true);
 
-    const body = { connection_id: _connectionId };
-    if (_kibanaUrl) body.kibana_url = _kibanaUrl;
-
     fetch('/SNMP/InstallAgentBuilderPackage/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrf() },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ connection_id: _connectionId }),
     })
       .then(r => {
         if (r.status === 403) throw new Error('Access denied: Admin role required');
@@ -451,7 +431,7 @@
           const firstError = (result.results || []).find(r => !r.success);
           showToast(firstError ? firstError.error : 'Install failed', 'error');
         }
-        checkAgentBuilderResources(_connectionId, _kibanaUrl);
+        checkAgentBuilderResources(_connectionId);
       })
       .catch(err => {
         if (btn) btn.disabled = false;
@@ -478,35 +458,9 @@
     const connectionSelect = document.getElementById('aiTemplateConnectionSelect');
     if (connectionSelect) {
       connectionSelect.addEventListener('change', function () {
-        updateKibanaUrlVisibility();
         hideResourceStatus();
         showModelSelector(false);
-
-        const selected = this.options[this.selectedIndex];
-
-        if (selected && selected.value) {
-          fetchAndPopulateModels(parseInt(selected.value, 10));
-          const kibanaUrlInput = document.getElementById('aiTemplateKibanaUrl');
-          if (kibanaUrlInput) kibanaUrlInput.value = '';
-          _prefillAndCheckKibanaUrl(selected, parseInt(selected.value, 10));
-        }
-      });
-    }
-
-    const kibanaUrlInput = document.getElementById('aiTemplateKibanaUrl');
-    if (kibanaUrlInput) {
-      const debouncedCheck = debounce(function () {
-        const sel          = document.getElementById('aiTemplateConnectionSelect');
-        const connectionId = sel && sel.value ? parseInt(sel.value, 10) : null;
-        const kibanaUrl    = kibanaUrlInput.value.trim();
-        if (connectionId && kibanaUrl) {
-          checkAgentBuilderResources(connectionId, kibanaUrl);
-        }
-      }, 600);
-
-      kibanaUrlInput.addEventListener('input', function () {
-        _updateGenerateBtnState();
-        debouncedCheck();
+        _selectConnection(this.options[this.selectedIndex]);
       });
     }
 
@@ -867,14 +821,12 @@
   function startGeneration() {
     const connectionSelect = document.getElementById('aiTemplateConnectionSelect');
     const walkInput        = document.getElementById('aiTemplateWalkInput');
-    const kibanaUrlInput   = document.getElementById('aiTemplateKibanaUrl');
     const modelSelect      = document.getElementById('aiTemplateModelSelect');
 
     if (!connectionSelect || !connectionSelect.value || !walkInput || !walkInput.value.trim()) return;
 
     const connectionId = parseInt(connectionSelect.value, 10);
     const walkText     = walkInput.value;
-    const kibanaUrl    = (kibanaUrlInput && kibanaUrlInput.value.trim()) || null;
     const inferenceId  = (modelSelect && modelSelect.value) || null;
 
     // Reset and show the generation panel
@@ -1048,6 +1000,7 @@
           const errMsg = typeof event.message === 'string'
             ? event.message
             : JSON.stringify(event.message);
+          if (event.kibana_url_missing) showKibanaMissing(event.edit_url);
           _resolveStep(_pendingStep, false, errMsg);
           _pendingStep = null;
           if (_streamingStep) {
@@ -1062,7 +1015,6 @@
     }
 
     const body = { connection_id: connectionId, walk_text: walkText };
-    if (kibanaUrl)    body.kibana_url    = kibanaUrl;
     if (inferenceId)  body.inference_id  = inferenceId;
 
     fetch('/SNMP/GenerateTemplateAndProfiles/', {

@@ -38,7 +38,7 @@ _CREDENTIAL_FIELDS = (
 )
 _CREDENTIAL_SECRETS = {'community', 'auth_pass', 'priv_pass'}
 _CONNECTION_FIELDS = (
-    'id', 'host', 'port', 'cloud_id', 'allow_self_signed_certs', 'policy_id',
+    'id', 'host', 'port', 'es_hosts', 'cloud_id', 'allow_self_signed_certs', 'policy_id',
     'username', 'password', 'api_key',
 )
 _CONNECTION_SECRETS = {'password', 'api_key'}

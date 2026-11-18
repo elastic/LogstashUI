@@ -977,14 +977,15 @@ def _es_connection_uses_tls(connection):
     Examples:
         >>> _es_connection_uses_tls(Connection(cloud_id="dep:abc"))
         True
-        >>> _es_connection_uses_tls(Connection(host="https://es.example.com"))
+        >>> _es_connection_uses_tls(Connection(es_hosts=["https://es.example.com:9200"]))
         True
-        >>> _es_connection_uses_tls(Connection(host="http://localhost"))
+        >>> _es_connection_uses_tls(Connection(es_hosts=["http://localhost:9200"]))
         False
     """
     if connection.cloud_id:
         return True
-    return (connection.host or "").strip().lower().startswith("https://")
+    hosts = connection.get_es_hosts()
+    return bool(hosts) and hosts[0].strip().lower().startswith("https://")
 
 
 def _generate_output(network_db_object, snmp_type="polling", device_template=None):
@@ -1038,10 +1039,9 @@ def _generate_output(network_db_object, snmp_type="polling", device_template=Non
     # Add connection details based on what's available
     if connection.cloud_id:
         config["cloud_id"] = connection.cloud_id
-    elif connection.host:
-        # Add port to host if available
-        host_with_port = f"{connection.host}:{connection.port}" if connection.port else connection.host
-        config["hosts"] = [host_with_port]
+    elif connection.get_es_hosts():
+        # Every node, in the order supplied. Logstash load-balances across them.
+        config["hosts"] = connection.get_es_hosts()
 
     # Add authentication. In Agent mode, reference keystore keys instead of
     # embedding secrets; LogstashUI provisions the matching keystore entries.

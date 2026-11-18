@@ -91,12 +91,15 @@ def _assemble_instructions(grounded_columns):
 
 # ── Main stream generator ─────────────────────────────────────────────────────
 
-def stream_template_generation(connection_id, kibana_url, walk_text, inference_id):
+def stream_template_generation(connection_id, walk_text, inference_id):
     """Yield SSE `data:` lines for template/profile generation.
+
+    The Kibana URL comes from the connection (saved URL, else Cloud ID). When
+    it has neither, an ``error`` event carries ``edit_url`` to the
+    connection's edit form.
 
     Args:
         connection_id: Elasticsearch/Kibana connection primary key.
-        kibana_url: Optional Kibana origin override.
         walk_text: Raw SNMP walk output.
         inference_id: Agent Builder inference model id.
 
@@ -106,10 +109,21 @@ def stream_template_generation(connection_id, kibana_url, walk_text, inference_i
         `agent_chunk`, `tool_call`, `tool_done`, `done`, or `error`.
     """
     from Common.ai.agent_builder import AgentBuilder
+    from Common.elastic_utils import KibanaUrlMissing
     from .snmp_grounding import reduce_and_ground
 
     if not inference_id:
         yield _sse({"phase": "error", "message": "No inference model selected."})
+        return
+
+    try:
+        builder = AgentBuilder(connection_id=int(connection_id))
+    except KibanaUrlMissing as exc:
+        yield _sse({"phase": "error", "message": str(exc), "kibana_url_missing": True,
+                    "edit_url": exc.edit_url})
+        return
+    except Exception as exc:
+        yield _sse({"phase": "error", "message": f"Agent invocation failed: {exc}"})
         return
 
     # ── 1. Reduce the raw walk to MIB-grounded columns ────────────────────────
@@ -168,10 +182,6 @@ def stream_template_generation(connection_id, kibana_url, walk_text, inference_i
 
     # ── 4. Stream agent response ───────────────────────────────────────────────
     try:
-        builder = AgentBuilder(
-            connection_id=int(connection_id),
-            kibana_url_override=kibana_url,
-        )
         kibana_base = builder._kibana_url
 
         for chunk in builder.invoke_agent(

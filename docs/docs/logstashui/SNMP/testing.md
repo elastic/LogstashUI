@@ -30,7 +30,7 @@ A walk is the raw material for profile building: it shows every OID the device a
 
 Once a walk completes, a **Generate Template and Profiles** button appears. It opens the AI template generator pre-filled with the walk output:
 
-1. Choose the Elasticsearch connection and AI model to use.
+1. Choose the Elasticsearch connection and AI model to use. The generator calls Kibana's Agent Builder API, using the connection's **Kibana URL**, or the Kibana endpoint from its Cloud ID when that field is blank. If the connection has neither, the generator links to that connection's edit form so you can add one.
 2. The walk output is uploaded to a temporary index, and the AI agent analyzes it — checking existing official profiles first so it reuses established field names and doesn't reinvent standard MIB coverage.
 3. It proposes a device template plus profiles (GET/table OID mappings and normalizers) as JSON.
 4. Review and accept — accepted profiles and the template are saved as **custom** entries you can edit, assign to devices, and deploy like any other.

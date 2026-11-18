@@ -430,12 +430,21 @@ class TestOnboardingView:
         for key in ('connections', 'credentials', 'networks', 'templates', 'devices', 'device_count', 'form'):
             assert key in response.context, f"Missing context key: {key}"
 
-    def test_onboarding_connections_include_suggested_kibana_url(self, authenticated_client, test_connection):
+    def test_onboarding_connections_flag_kibana_url(self, authenticated_client, test_connection):
+        Connection.objects.create(name='With KB', connection_type='CENTRALIZED',
+                                  es_hosts=['https://es:9200'], kibana_url='https://kb:5601',
+                                  username='e', password='p')
+        Connection.objects.create(name='Cloud', connection_type='CENTRALIZED',
+                                  cloud_id='dep:abc', api_key='k')
         response = authenticated_client.get('/SNMP/Onboarding/')
         assert response.status_code == 200
-        connections = list(response.context['connections'])
-        assert connections, 'expected at least the test_connection'
-        assert 'suggested_kibana_url' in connections[0]
+        rows = {c['name']: c for c in response.context['connections']}
+        assert rows[test_connection.name]['has_kibana_url'] is False
+        assert rows[test_connection.name]['edit_url'] == (
+            f'/ConnectionManager/?edit={test_connection.id}&focus=kibana_url')
+        assert rows['With KB']['has_kibana_url'] is True
+        assert rows['Cloud']['has_kibana_url'] is True
+        assert b'aiTemplateKibanaMissing' in response.content
 
     def test_onboarding_device_count_matches_db(self, authenticated_client, test_device):
         from SNMP.models import Device as _Device
@@ -978,6 +987,20 @@ class TestCheckAgentBuilderResourcesView:
             )
         assert response.status_code == 500
 
+    @pytest.mark.parametrize('endpoint', ['CheckAgentBuilderResources', 'InstallAgentBuilderPackage'])
+    def test_missing_kibana_url_returns_edit_link(self, authenticated_client, test_connection, endpoint):
+        with patch('Common.ai.agent_builder.load_resources_from_directory', return_value=([], [], [])):
+            response = authenticated_client.post(
+                f'/SNMP/{endpoint}/',
+                data=json.dumps({'connection_id': test_connection.id}),
+                content_type='application/json',
+            )
+        assert response.status_code == 400
+        data = response.json()
+        assert data['kibana_url_missing'] is True
+        assert data['edit_url'] == f'/ConnectionManager/?edit={test_connection.id}&focus=kibana_url'
+        assert 'no Kibana URL' in data['error']
+
 
 # ============================================================================
 # InstallAgentBuilderPackage
@@ -1120,3 +1143,9 @@ class TestGenerateTemplateGroundingInline:
         assert '"phase": "error"' in body
         mock_bulk.assert_not_called()
         MockAgentBuilder.return_value.invoke_agent.assert_not_called()
+
+    def test_missing_kibana_url_streams_edit_link(self, authenticated_client, test_connection):
+        body = self._post(authenticated_client, test_connection.id)
+        assert '"phase": "error"' in body
+        assert '"kibana_url_missing": true' in body
+        assert f'/ConnectionManager/?edit={test_connection.id}&focus=kibana_url' in body

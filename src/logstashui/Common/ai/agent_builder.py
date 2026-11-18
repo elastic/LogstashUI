@@ -11,8 +11,6 @@ Examples:
     from Common.ai.agent_builder import AgentBuilder, RESOURCE_TOOL, RESOURCE_SKILL, RESOURCE_AGENT
 
     builder = AgentBuilder(connection_id=42)
-    # or, for URL-based connections:
-    builder = AgentBuilder(connection_id=42, kibana_url_override="https://my-kibana:5601")
 
     results = builder.check_resources(
         tools=MY_TOOL_DEFINITIONS,
@@ -167,10 +165,9 @@ _PUT_STRIP_KEYS = {
 class AgentBuilder:
     """Client for the Elastic Agent Builder API.
 
-    At least one of connection_id or kibana_url_override must be provided.
-    The Kibana URL and auth credentials are derived from the Connection
-    record, or from kibana_url_override after normalize_kibana_url
-    (``.es.`` hosts become ``.kb.``, paths stripped).
+    The Kibana URL comes from the Connection's saved ``kibana_url`` or its
+    Cloud ID (see ``get_kibana_url``); auth credentials come from the same
+    record.
     """
 
     # Connect timeout is short so a wrong host (ES instead of Kibana) fails
@@ -181,33 +178,22 @@ class AgentBuilder:
     _PROBE_READ_TIMEOUT = 8
     _INVOKE_READ_TIMEOUT = 300
 
-    def __init__(self, connection_id=None, kibana_url_override=None):
+    def __init__(self, connection_id):
         """Initialize an Agent Builder client.
 
         Args:
             connection_id: LogstashUI DB Connection pk. Kibana URL and auth
                 credentials are derived automatically from the Connection record.
-            kibana_url_override: Kibana origin after normalize_kibana_url
-                (``.es.`` hosts become ``.kb.``, paths stripped). If omitted, the
-                origin is derived from the Connection via get_kibana_url.
 
         Raises:
-            ValueError: If neither connection_id nor kibana_url_override is given.
+            KibanaUrlMissing: The connection has no saved Kibana URL and no
+                Cloud ID.
         """
-        from Common.elastic_utils import _get_creds, get_kibana_url, normalize_kibana_url
+        from Common.elastic_utils import _get_creds, get_kibana_url
 
-        if connection_id is None and kibana_url_override is None:
-            raise ValueError(
-                "Supply at least connection_id or kibana_url_override"
-            )
-
-        self._creds, _conn = _get_creds(connection_id) if connection_id else ({}, None)
+        self._creds, _conn = _get_creds(connection_id)
         self._connection_id = connection_id
-
-        raw_url = (kibana_url_override or '').strip()
-        if not raw_url:
-            raw_url = get_kibana_url(connection_id)
-        self._kibana_url = normalize_kibana_url(raw_url).rstrip('/')
+        self._kibana_url = get_kibana_url(connection_id).rstrip('/')
         logger.info("AgentBuilder Kibana origin: %s", self._kibana_url)
 
         # Build reusable headers.  Writes also need kbn-xsrf (added per-call).
@@ -221,9 +207,7 @@ class AgentBuilder:
         self._auth = self._creds.get('http_auth')  # (username, password) or None
 
         self._session = requests.Session()
-        # Honour the connection's TLS setting when one is bound; fall back to
-        # strict verification when only kibana_url_override is given (no record).
-        self._session.verify = (not _conn.allow_self_signed_certs) if _conn is not None else True
+        self._session.verify = not _conn.allow_self_signed_certs
         self._session.auth = self._auth
         self._session.headers.update(self._read_headers)
 
