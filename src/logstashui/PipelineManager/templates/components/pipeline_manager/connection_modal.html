@@ -38,6 +38,11 @@
                           
                           const isEdit = window.connectionEditMode === 'edit';
                           showToast(response.message || (isEdit ? 'Connection updated successfully!' : 'Connection created and tested successfully!'), 'success');
+
+                          if (response.warnings && response.warnings.length) {
+                              showConnectionSavedWarnings(response.warnings);
+                              return;
+                          }
                           
                           // Close the modal (page reload is handled by the closeFlyout override in pipeline_manager.html)
                           closeFlyout();
@@ -127,20 +132,40 @@
                   <p class="text-gray-400 text-xs mt-1">Your Elastic Cloud deployment ID</p>
                 </div>
 
-                <!-- Node URL and Port Fields -->
+                <!-- Node URL and Port rows (one per Elasticsearch node, in order) -->
                 <div id="nodeUrlField" class="hidden mb-6">
                   <label class="block text-sm font-medium text-gray-300 mb-2">
-                    Elastic Node URL
+                    Elastic Node URLs
                   </label>
-                  <div class="flex gap-3">
-                    <div class="flex-1">
-                      {{ form.host }}
+                  <div id="esHostRows" class="flex flex-col gap-2"></div>
+                  <button type="button" id="addEsHostBtn" class="btn btn-ghost btn-xs mt-2 text-blue-400">
+                    + Add host
+                  </button>
+                  <p class="text-gray-400 text-xs mt-1">URL and port of each Elasticsearch node (e.g., https://elasticsearch.example.com and 9200). At least one is required; Logstash outputs use them in this order.</p>
+                  <template id="esHostRowTemplate">
+                    <div class="es-host-row flex gap-3 items-center">
+                      <div class="flex-1">
+                        <input type="text" name="es_host_url" class="input input-bordered w-full" placeholder="https://elasticsearch.example.com" autocomplete="off">
+                      </div>
+                      <div class="w-24">
+                        <input type="number" name="es_host_port" class="input input-bordered w-full" placeholder="9200" min="1" max="65535">
+                      </div>
+                      <button type="button" class="es-host-remove btn btn-ghost btn-sm btn-circle" title="Remove host" aria-label="Remove host">
+                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
                     </div>
-                    <div class="w-24">
-                      {{ form.port }}
-                    </div>
-                  </div>
-                  <p class="text-gray-400 text-xs mt-1">URL and port of your Elasticsearch node (e.g., https://elasticsearch.example.com:9200)</p>
+                  </template>
+                </div>
+
+                <!-- Kibana URL (optional, both modes) -->
+                <div id="kibanaUrlField" class="mb-6">
+                  <label for="{{ form.kibana_url.id_for_label }}" class="block text-sm font-medium text-gray-300 mb-2">
+                    Kibana URL <span class="text-gray-500 font-normal">(optional)</span>
+                  </label>
+                  {{ form.kibana_url }}
+                  <p id="kibanaUrlHelp" class="text-gray-400 text-xs mt-1">Leave blank to use the Kibana endpoint from the Cloud ID.</p>
                 </div>
 
                 <!-- Authentication Section -->
@@ -355,8 +380,175 @@ sudo systemctl start logstash-agent</code></pre>
 
     function closeFlyout() {
         document.getElementById('connectionFormFlyout').classList.add('hidden');
+        _clearSavedWithWarningsState();
         _resetConnectionModalToAddMode();
     }
+
+    /**
+     * Keep the flyout open after a save that passed with warnings (for example
+     * one unreachable Elasticsearch node) so the user can read them.
+     */
+    window.showConnectionSavedWarnings = function(warnings) {
+        const items = warnings.map(w => `<li>${escapeConnectionHtml(w)}</li>`).join('');
+        document.getElementById('connectionErrorContainer').innerHTML = `
+            <div class='p-4 mb-4 text-amber-200 bg-amber-900/30 border border-amber-600 rounded-lg'>
+                <h3 class='font-bold mb-2'>Connection saved with warnings</h3>
+                <ul class='list-disc ml-5 text-sm space-y-1'>${items}</ul>
+                <button type='button' class='btn btn-sm btn-primary mt-3' onclick='closeFlyout()'>Done</button>
+            </div>
+        `;
+        const saveBtn = document.getElementById('saveConnectionBtn');
+        if (saveBtn) saveBtn.classList.add('hidden');
+        window.connectionSavedWithWarnings = true;
+        document.getElementById('connectionErrorContainer').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    };
+
+    function _clearSavedWithWarningsState() {
+        if (!window.connectionSavedWithWarnings) return;
+        window.connectionSavedWithWarnings = false;
+        const saveBtn = document.getElementById('saveConnectionBtn');
+        if (saveBtn) saveBtn.classList.remove('hidden');
+        const form = document.getElementById('connectionForm');
+        if (window.connectionEditMode !== 'edit') {
+            form.reset();
+            setEsHostRows([]);
+        }
+        document.getElementById('connectionErrorContainer').innerHTML = '';
+    }
+
+    function escapeConnectionHtml(value) {
+        const div = document.createElement('div');
+        div.textContent = String(value);
+        return div.innerHTML;
+    }
+
+    // ── Elasticsearch node rows ─────────────────────────────────────────────
+
+    function _esHostRows() {
+        return Array.from(document.querySelectorAll('#esHostRows .es-host-row'));
+    }
+
+    function _updateEsHostRemoveButtons() {
+        const rows = _esHostRows();
+        rows.forEach(row => { row.querySelector('.es-host-remove').disabled = rows.length <= 1; });
+    }
+
+    window.addEsHostRow = function(url = '', port = '') {
+        const template = document.getElementById('esHostRowTemplate');
+        const row = template.content.firstElementChild.cloneNode(true);
+        row.querySelector('[name="es_host_url"]').value = url;
+        row.querySelector('[name="es_host_port"]').value = port;
+        document.getElementById('esHostRows').appendChild(row);
+        _updateEsHostRemoveButtons();
+        return row;
+    };
+
+    /**
+     * Replace all rows with one per stored node URL (or one empty row).
+     * @param {string[]} hosts e.g. ["https://es1:9200", "https://es2:9200"]
+     */
+    window.setEsHostRows = function(hosts) {
+        document.getElementById('esHostRows').innerHTML = '';
+        const list = (hosts || []).filter(Boolean);
+        if (!list.length) {
+            addEsHostRow();
+            return;
+        }
+        list.forEach(host => {
+            const parts = _splitEsHost(host);
+            addEsHostRow(parts.url, parts.port);
+        });
+    };
+
+    function _defaultPortFor(protocol) {
+        return protocol === 'https:' ? '443' : '80';
+    }
+
+    function _splitEsHost(host) {
+        if (!/^https?:\/\//i.test(host)) return { url: host, port: '' };
+        try {
+            const u = new URL(host);
+            const path = u.pathname.replace(/\/+$/, '');
+            return { url: `${u.protocol}//${u.hostname}${path}`, port: u.port || _defaultPortFor(u.protocol) };
+        } catch (e) {
+            return { url: host, port: '' };
+        }
+    }
+
+    /**
+     * Normalize one row in place: a port typed into the URL moves into the
+     * Port box, and an empty Port gets the scheme default (443 / 80).
+     * Returns false when the URL is present but invalid.
+     */
+    function _normalizeEsHostRow(row, notify) {
+        const urlInput = row.querySelector('[name="es_host_url"]');
+        const portInput = row.querySelector('[name="es_host_port"]');
+        const value = urlInput.value.trim();
+        if (!value) return true;
+        if (!/^https?:\/\//i.test(value)) {
+            if (notify) showToast('Please include http:// or https:// in the URL', 'warning');
+            return false;
+        }
+        try {
+            const u = new URL(value);
+            const path = u.pathname.replace(/\/+$/, '');
+            urlInput.value = `${u.protocol}//${u.hostname}${path}`;
+            portInput.value = u.port || portInput.value.trim() || _defaultPortFor(u.protocol);
+            return true;
+        } catch (e) {
+            if (notify) showToast('Invalid URL format. Please use http://hostname or https://hostname', 'error');
+            return false;
+        }
+    }
+
+    document.getElementById('addEsHostBtn').addEventListener('click', function() {
+        addEsHostRow().querySelector('[name="es_host_url"]').focus();
+    });
+
+    document.getElementById('esHostRows').addEventListener('click', function(e) {
+        const removeBtn = e.target.closest('.es-host-remove');
+        if (!removeBtn || _esHostRows().length <= 1) return;
+        removeBtn.closest('.es-host-row').remove();
+        _updateEsHostRemoveButtons();
+    });
+
+    document.getElementById('esHostRows').addEventListener('focusout', function(e) {
+        if (e.target.name !== 'es_host_url') return;
+        if (document.getElementById('nodeUrlField').classList.contains('hidden')) return;
+        _normalizeEsHostRow(e.target.closest('.es-host-row'), true);
+    });
+
+    // ── Kibana URL ──────────────────────────────────────────────────────────
+
+    function _updateKibanaUrlHelp(mode) {
+        const help = document.getElementById('kibanaUrlHelp');
+        if (!help) return;
+        help.textContent = mode === 'cloud'
+            ? 'Leave blank to use the Kibana endpoint from the Cloud ID.'
+            : 'Required for SNMP AI features.';
+    }
+
+    for (const kibanaUrlInput of document.querySelectorAll('[name="kibana_url"]')) {
+        // Trim to an origin so users see what will be stored; the server also
+        // maps Elastic Cloud ".es." endpoints to their ".kb." host.
+        kibanaUrlInput.addEventListener('blur', function() {
+            let value = this.value.trim();
+            if (!value) return;
+            if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) value = 'https://' + value;
+            try {
+                const u = new URL(value);
+                if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+                    showToast('Kibana URL must start with http:// or https://', 'warning');
+                    return;
+                }
+                this.value = u.origin;
+            } catch (e) {
+                showToast('Invalid Kibana URL format', 'warning');
+            }
+        });
+    }
+
+    setEsHostRows([]);
 
     function _resetConnectionModalToAddMode() {
         if (window.connectionEditMode !== 'edit') return;
@@ -380,11 +572,13 @@ sudo systemctl start logstash-agent</code></pre>
         // Reset form values (radios go back to their HTML default but don't fire change events,
         // so we must explicitly restore field visibility to match those defaults)
         form.reset();
+        setEsHostRows([]);
         document.getElementById('connectionErrorContainer').innerHTML = '';
 
         // Restore connection mode visibility to default (Cloud ID selected)
         document.getElementById('cloudIdField').classList.remove('hidden');
         document.getElementById('nodeUrlField').classList.add('hidden');
+        _updateKibanaUrlHelp('cloud');
 
         // Restore auth type visibility to default (Username/Password selected)
         document.getElementById('basicAuthFields').classList.remove('hidden');
@@ -449,14 +643,15 @@ sudo systemctl start logstash-agent</code></pre>
                 document.getElementById('nodeUrlField').classList.add('hidden');
                 const cloudIdInput = document.querySelector('[name="cloud_id"]');
                 if (cloudIdInput) cloudIdInput.value = conn.cloud_id;
+                setEsHostRows([]);
             } else {
                 document.getElementById('cloudIdField').classList.add('hidden');
                 document.getElementById('nodeUrlField').classList.remove('hidden');
-                const hostInput = document.querySelector('[name="host"]');
-                const portInput = document.querySelector('[name="port"]');
-                if (hostInput) hostInput.value = conn.host;
-                if (portInput) portInput.value = conn.port;
+                setEsHostRows(conn.es_hosts || []);
             }
+            _updateKibanaUrlHelp(conn.connection_mode);
+            const kibanaInput = document.querySelector('[name="kibana_url"]');
+            if (kibanaInput) kibanaInput.value = conn.kibana_url || '';
 
             // -- Pre-fill auth type (credentials intentionally blank) --
             const authRadios = document.querySelectorAll('input[name="auth_type"]');
@@ -1145,14 +1340,12 @@ ${day2}`;
   // stale data is not silently included in the POST payload.
   document.querySelectorAll('input[name="connection_mode"]').forEach(radio => {
     radio.addEventListener('change', function() {
+      _updateKibanaUrlHelp(this.value);
       if (this.value === 'cloud') {
         document.getElementById('cloudIdField').classList.remove('hidden');
         document.getElementById('nodeUrlField').classList.add('hidden');
-        // Clear the now-hidden URL fields
-        const hostInput = document.querySelector('[name="host"]');
-        const portInput = document.querySelector('[name="port"]');
-        if (hostInput) hostInput.value = '';
-        if (portInput) portInput.value = '';
+        // Clear the now-hidden URL rows
+        setEsHostRows([]);
       } else {
         document.getElementById('cloudIdField').classList.add('hidden');
         document.getElementById('nodeUrlField').classList.remove('hidden');
@@ -1186,68 +1379,37 @@ ${day2}`;
     });
   });
 
-  // Parse URL in host field to extract scheme and port
-  const hostInput = document.querySelector('input[name="host"]');
-  const portInput = document.querySelector('input[name="port"]');
-  
-  if (hostInput && portInput) {
-    hostInput.addEventListener('blur', function() {
-      let url = this.value.trim();
-      
-      // Only process if in URL mode (not Cloud ID mode)
-      if (!document.getElementById('nodeUrlField').classList.contains('hidden')) {
-        // Check if URL has a scheme
-        if (url && !url.match(/^https?:\/\//i)) {
-          // No scheme provided, show error
-          showToast('Please include http:// or https:// in the URL', 'warning');
-          return;
-        }
-        
-        if (url.match(/^https?:\/\//i)) {
-          try {
-            const urlObj = new URL(url);
-            
-            // Extract hostname (without port)
-            const hostname = urlObj.hostname;
-            
-            // Extract port if present, otherwise use default based on scheme
-            let port = urlObj.port;
-            if (!port) {
-              port = urlObj.protocol === 'https:' ? '443' : '80';
-            }
-            
-            // Update the host field with just the scheme and hostname
-            this.value = urlObj.protocol + '//' + hostname;
-            
-            // Update the port field
-            portInput.value = port;
-            
-          } catch (e) {
-            showToast('Invalid URL format. Please use http://hostname or https://hostname', 'error');
-          }
-        }
+  // Validate and normalize the Elasticsearch node rows on submit
+  document.getElementById('connectionForm').addEventListener('submit', function(e) {
+    const connectionMode = document.querySelector('input[name="connection_mode"]:checked');
+    if (document.getElementById('connectionTypeField').value === 'AGENT') return;
+    if (!connectionMode || connectionMode.value !== 'url') return;
+
+    const stop = (message, input) => {
+      e.preventDefault();
+      e.stopPropagation();
+      showToast(message, 'error');
+      if (input) input.focus();
+      return false;
+    };
+
+    const rows = _esHostRows();
+    const filled = rows.filter(row => row.querySelector('[name="es_host_url"]').value.trim());
+    if (!filled.length) {
+      return stop('At least one Elastic Node URL is required', rows[0] && rows[0].querySelector('[name="es_host_url"]'));
+    }
+    const schemes = new Set();
+    for (const row of filled) {
+      const urlInput = row.querySelector('[name="es_host_url"]');
+      if (!_normalizeEsHostRow(row, false)) {
+        return stop('Elastic Node URL must start with http:// or https://', urlInput);
       }
-    });
-    
-    // Also validate on form submit
-    const connectionForm = document.getElementById('connectionForm');
-    connectionForm.addEventListener('submit', function(e) {
-      const connectionMode = document.querySelector('input[name="connection_mode"]:checked');
-      
-      // Only validate if using Node URL mode (not Cloud ID)
-      if (connectionMode && connectionMode.value === 'url') {
-        const hostValue = hostInput.value.trim();
-        
-        if (hostValue && !hostValue.match(/^https?:\/\//i)) {
-          e.preventDefault();
-          e.stopPropagation();
-          showToast('Elastic Node URL must start with http:// or https://', 'error');
-          hostInput.focus();
-          return false;
-        }
-      }
-    });
-  }
+      schemes.add(urlInput.value.split(':', 1)[0].toLowerCase());
+    }
+    if (schemes.size > 1) {
+      return stop('All Elastic Node URLs must use the same scheme (all http:// or all https://)');
+    }
+  });
 
   // Copy to clipboard function for agent installation commands
   function copyToClipboard(elementId, event) {

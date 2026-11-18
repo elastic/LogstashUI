@@ -120,11 +120,11 @@ class TestAddConnection:
         assert response.status_code == 302
         assert '/Management/Login/' in response.url
 
-    @patch('PipelineManager.manager_views.test_connectivity')
+    @patch('PipelineManager.manager_views.check_connectivity')
     def test_add_connection_success(self, mock_test_connectivity, authenticated_client):
         """Test successful connection creation"""
         # Mock successful connectivity test
-        mock_test_connectivity.return_value = (True, "Connection successful")
+        mock_test_connectivity.return_value = (True, "Connection successful", [])
 
         response = authenticated_client.post('/ConnectionManager/AddConnection', {
             'name': 'Test Connection',
@@ -144,11 +144,11 @@ class TestAddConnection:
         # Verify connection was created
         assert Connection.objects.filter(name='Test Connection').exists()
 
-    @patch('PipelineManager.manager_views.test_connectivity')
+    @patch('PipelineManager.manager_views.check_connectivity')
     def test_add_connection_failed_connectivity(self, mock_test_connectivity, authenticated_client):
         """Test connection creation with failed connectivity test"""
         # Mock failed connectivity test
-        mock_test_connectivity.return_value = (False, "Connection failed: Timeout")
+        mock_test_connectivity.return_value = (False, "Connection failed: Timeout", [])
 
         response = authenticated_client.post('/ConnectionManager/AddConnection', {
             'name': 'Bad Connection',
@@ -166,6 +166,33 @@ class TestAddConnection:
 
         # Verify connection was NOT created (deleted after failed test)
         assert not Connection.objects.filter(name='Bad Connection').exists()
+
+    @patch('PipelineManager.manager_views.check_connectivity')
+    def test_add_connection_host_rows_and_warnings(self, mock_check, authenticated_client):
+        """Modal rows are saved in order and failed-node warnings are returned."""
+        warning = 'Elasticsearch node https://es2.lab:9200 is unreachable: refused'
+        mock_check.return_value = (True, '{}', [warning])
+
+        response = authenticated_client.post('/ConnectionManager/AddConnection', {
+            'name': 'Rows', 'connection_type': 'CENTRALIZED', 'connection_mode': 'url',
+            'auth_type': 'basic', 'username': 'elastic', 'password': 'x',
+            'es_host_url': ['https://es1.lab:9243', 'https://es2.lab'],
+            'es_host_port': ['', '9200'],
+            'kibana_url': 'https://kb.lab:5601',
+        })
+
+        data = response.json()
+        assert data['success'] is True
+        assert data['warnings'] == [warning]
+        conn = Connection.objects.get(name='Rows')
+
+        detail = authenticated_client.get(f'/ConnectionManager/GetConnection/{conn.id}/').json()['connection']
+        assert detail['es_hosts'] == ['https://es1.lab:9243', 'https://es2.lab:9200']
+        assert detail['kibana_url'] == 'https://kb.lab:5601'
+
+        rows = authenticated_client.get('/ConnectionManager/GetConnectionsTable/').json()['connections']
+        row = next(r for r in rows if r['pk'] == conn.id)
+        assert row['es_hosts'] == ['https://es1.lab:9243', 'https://es2.lab:9200']
 
     def test_add_connection_invalid_form(self, authenticated_client):
         """Test connection creation with invalid form data"""

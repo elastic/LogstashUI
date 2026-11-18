@@ -352,6 +352,28 @@
     }
   };
 
+  // Deep link: /ConnectionManager/?edit=<id>[&focus=kibana_url] opens that
+  // connection's edit form (used by the SNMP AI "add a Kibana URL" prompt).
+  (function openEditFromQuery() {
+    const params = new URLSearchParams(window.location.search);
+    const editId = parseInt(params.get('edit'), 10);
+    if (!editId || typeof window.openEditConnection !== 'function') return;
+    const focusField = params.get('focus');
+    params.delete('edit');
+    params.delete('focus');
+    const query = params.toString();
+    history.replaceState(null, '', window.location.pathname + (query ? `?${query}` : ''));
+    window.openEditConnection(editId).then(() => {
+      if (focusField === 'kibana_url') {
+        const input = document.querySelector('[name="kibana_url"]');
+        if (input) {
+          input.focus();
+          input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }
+    });
+  })();
+
   // Handle action menu (3-dot icon) functionality using event delegation
   document.addEventListener('click', function(e) {
     // Check if clicked on action menu button

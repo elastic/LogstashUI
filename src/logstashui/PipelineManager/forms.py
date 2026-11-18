@@ -4,11 +4,14 @@
 
 """Django forms for PipelineManager connections."""
 
+import json
+import re
+
 from django import forms
 from django.core.exceptions import ValidationError
 from django.forms import ModelForm
 from urllib.parse import urlparse, urlunparse
-from PipelineManager.models import Connection
+from PipelineManager.models import Connection, _split_url_port
 
 
 def split_host_port(host, port):
@@ -45,6 +48,56 @@ def split_host_port(host, port):
             f"Host includes port {host_port} but Port is {port}. Put the port only in Port.")
     netloc = parsed.netloc.rsplit(':', 1)[0]
     return urlunparse(parsed._replace(netloc=netloc)).removeprefix('//'), host_port
+
+
+def normalize_es_host(url, port=None):
+    """Return one Elasticsearch node as ``scheme://host:port[/path]``.
+
+    Mirrors the connection modal's live normalization: a port typed into the
+    URL moves into ``port``, and a missing port defaults to 443 for https or
+    80 for http. The port is always explicit because the Logstash
+    elasticsearch output defaults to 9200 while the Python client uses the
+    scheme default.
+
+    Args:
+        url: Node URL as entered; must start with ``http://`` or ``https://``.
+        port: Port field value (int, numeric string, empty, or None).
+
+    Returns:
+        Normalized URL string.
+
+    Raises:
+        ValidationError: Missing scheme or hostname, a non-numeric or
+            out-of-range port, or conflicting ports in URL and Port.
+
+    Examples:
+        >>> normalize_es_host('https://es1.lab:9200')
+        'https://es1.lab:9200'
+        >>> normalize_es_host('https://es1.lab', '9243')
+        'https://es1.lab:9243'
+        >>> normalize_es_host('http://es1.lab/')
+        'http://es1.lab:80'
+    """
+    url = (url or '').strip().rstrip('/')
+    if not re.match(r'^https?://', url, re.IGNORECASE):
+        raise ValidationError(f"'{url}' must start with http:// or https://")
+
+    port_text = str(port).strip() if port is not None else ''
+    if port_text:
+        if not port_text.isdigit() or not 1 <= int(port_text) <= 65535:
+            raise ValidationError(f"Port '{port_text}' for {url} must be a number from 1 to 65535.")
+        port = int(port_text)
+    else:
+        port = None
+
+    url, port = split_host_port(url, port)
+    parsed = urlparse(url)
+    if not parsed.hostname:
+        raise ValidationError(f"'{url}' has no hostname.")
+    scheme = parsed.scheme.lower()
+    if port is None:
+        port = 443 if scheme == 'https' else 80
+    return urlunparse((scheme, f"{parsed.netloc}:{port}", parsed.path.rstrip('/'), '', '', ''))
 
 
 class ConnectionForm(ModelForm):
@@ -102,7 +155,7 @@ class ConnectionForm(ModelForm):
             # Agent fields
             'host', 'port', 'username', 'password', 'ssh_key',
             # Centralized fields
-            'cloud_id', 'cloud_url', 'api_key',
+            'cloud_id', 'cloud_url', 'api_key', 'kibana_url',
             'allow_self_signed_certs',
         ]
         widgets = {
@@ -134,6 +187,10 @@ class ConnectionForm(ModelForm):
                 'class': 'input input-bordered w-full',
                 'placeholder': 'https://my-deployment.es.us-central1.gcp.cloud.es.io:9243',
                 'required': False,
+            }),
+            'kibana_url': forms.TextInput(attrs={
+                'class': 'input input-bordered w-full',
+                'placeholder': 'https://kibana.example.com:5601',
             }),
             'allow_self_signed_certs': forms.CheckboxInput(attrs={
                 'class': 'checkbox checkbox-primary',
@@ -235,13 +292,34 @@ class ConnectionForm(ModelForm):
                 cleaned_data['port'] = None
                 if not cleaned_data.get('cloud_id'):
                     raise forms.ValidationError("Cloud ID is required when using Cloud ID mode.")
+                cleaned_data['es_hosts'] = []
             else:  # 'url'
                 # Cloud ID field should be ignored
                 cleaned_data['cloud_id'] = ''
-                if not cleaned_data.get('host'):
-                    raise forms.ValidationError("Host is required when using Elastic Node URL mode.")
-                cleaned_data['host'], cleaned_data['port'] = split_host_port(
-                    cleaned_data['host'], cleaned_data.get('port'))
+                hosts = []
+                for url, port in self._submitted_hosts(cleaned_data):
+                    if not str(url or '').strip():
+                        continue
+                    node = normalize_es_host(url, port)
+                    if node not in hosts:
+                        hosts.append(node)
+                if not hosts:
+                    raise forms.ValidationError(
+                        "At least one Elasticsearch node URL is required when using Elastic Node URL mode.")
+                if len({urlparse(h).scheme for h in hosts}) > 1:
+                    raise forms.ValidationError(
+                        "All Elasticsearch node URLs must use the same scheme (all http:// or all https://).")
+                cleaned_data['es_hosts'] = hosts
+                cleaned_data['host'], cleaned_data['port'] = _split_url_port(hosts[0])
+
+            kibana_url = (cleaned_data.get('kibana_url') or '').strip()
+            if kibana_url:
+                from Common.elastic_utils import normalize_kibana_url
+                if '://' in kibana_url and not re.match(r'^https?://', kibana_url, re.IGNORECASE):
+                    raise forms.ValidationError("Kibana URL must start with http:// or https://")
+                cleaned_data['kibana_url'] = normalize_kibana_url(kibana_url)
+            else:
+                cleaned_data['kibana_url'] = None
 
             # --- Auth type ---
             if auth_type == 'basic':
@@ -254,6 +332,60 @@ class ConnectionForm(ModelForm):
 
         return cleaned_data
 
+    def _submitted_hosts(self, cleaned_data):
+        """Return the submitted Elasticsearch nodes as ``(url, port)`` pairs.
+
+        Sources, first match wins: the modal's parallel ``es_host_url`` /
+        ``es_host_port`` rows, an ``es_hosts`` list (JSON array, repeated form
+        key, or comma-separated string), then the legacy single
+        ``host`` + ``port``.
+
+        Args:
+            cleaned_data: The form's cleaned data, for the legacy fields.
+
+        Returns:
+            List of ``(url, port)`` tuples in submitted order.
+
+        Raises:
+            ValidationError: ``es_hosts`` is not a list of strings.
+
+        Examples:
+            >>> # POST es_host_url=https://es1&es_host_port=9200&es_host_url=https://es2&es_host_port=
+            >>> # -> [('https://es1', '9200'), ('https://es2', '')]
+        """
+        data = self.data
+        getlist = getattr(data, 'getlist', None)
+        if 'es_host_url' in data:
+            urls = getlist('es_host_url') if getlist else data.get('es_host_url')
+            ports = (getlist('es_host_port') if getlist else data.get('es_host_port')) or []
+            if isinstance(urls, str):
+                urls = [urls]
+            if isinstance(ports, (str, int)):
+                ports = [ports]
+            return [(u, ports[i] if i < len(ports) else '') for i, u in enumerate(urls)]
+
+        if 'es_hosts' in data:
+            raw = getlist('es_hosts') if getlist else data.get('es_hosts')
+            if isinstance(raw, list) and len(raw) == 1 and isinstance(raw[0], str):
+                raw = raw[0]
+            if isinstance(raw, str):
+                text = raw.strip()
+                if text.startswith('['):
+                    try:
+                        raw = json.loads(text)
+                    except ValueError:
+                        raise ValidationError("es_hosts must be a JSON array of URLs.")
+                else:
+                    raw = [part for part in text.split(',')]
+            if raw is None:
+                raw = []
+            if not isinstance(raw, list) or not all(isinstance(h, str) for h in raw):
+                raise ValidationError("es_hosts must be a list of URL strings.")
+            return [(h, None) for h in raw]
+
+        host = cleaned_data.get('host')
+        return [(host, cleaned_data.get('port'))] if host else []
+
     def save(self, commit=True):
         """Persist the connection, keeping existing credentials when left blank.
 
@@ -264,6 +396,8 @@ class ConnectionForm(ModelForm):
             The unsaved or saved ``Connection`` instance.
         """
         instance = super().save(commit=False)
+        if 'es_hosts' in self.cleaned_data:
+            instance.es_hosts = self.cleaned_data['es_hosts']
         
         # Only update password if a new one was provided.
         # Use the snapshot from __init__ because Django's _post_clean() already

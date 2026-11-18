@@ -190,8 +190,8 @@ function buildConnectionRow(conn) {
     <!-- Host -->
     <td class="px-6 py-4 text-sm text-gray-300">
       <span class="block max-w-xs truncate cursor-help"
-            title="${escapeHtml(conn.host || conn.cloud_id)}">
-        ${escapeHtml(conn.host || conn.cloud_id || '')}
+            title="${escapeHtml(hostCellTitle(conn))}">
+        ${escapeHtml(hostCellText(conn))}
       </span>
     </td>
 
@@ -210,6 +210,18 @@ function buildConnectionRow(conn) {
       ${buildActionsCell(conn)}
     </td>
   `;
+}
+
+/** First Elasticsearch node plus a count of the rest, e.g. "https://es1:9200 (+2)". */
+function hostCellText(conn) {
+  const hosts = conn.es_hosts || [];
+  if (hosts.length) return hosts.length > 1 ? `${hosts[0]} (+${hosts.length - 1})` : hosts[0];
+  return conn.host || conn.cloud_id || '';
+}
+
+function hostCellTitle(conn) {
+  const hosts = conn.es_hosts || [];
+  return hosts.length ? hosts.join('\n') : (conn.host || conn.cloud_id || '');
 }
 
 function buildTypeCell(conn) {

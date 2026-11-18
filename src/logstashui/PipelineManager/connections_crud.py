@@ -74,7 +74,7 @@ def GetConnectionsTable(request):
 
     # ── DB query ───────────────────────────────────────────────────────────────
     qs = ConnectionTable.objects.values(
-        'connection_type', 'name', 'host', 'cloud_id', 'cloud_url', 'pk',
+        'connection_type', 'name', 'host', 'es_hosts', 'cloud_id', 'cloud_url', 'pk',
         'policy__name', 'policy_id', 'policy__policy_type', 'agent_id',
         'last_check_in', 'status_blob', 'desired_agent_version',
         'logstash_version_resolved', 'policy__current_revision_number',
@@ -185,6 +185,7 @@ def GetConnectionsTable(request):
             'name': conn['name'],
             'connection_type': conn['connection_type'],
             'host': conn.get('host') or '',
+            'es_hosts': (conn.get('es_hosts') or []) if conn['connection_type'] == 'CENTRALIZED' else [],
             'cloud_id': conn.get('cloud_id') or '',
             'policy_id': conn.get('policy_id'),
             'policy_name': conn.get('policy__name') or '',
@@ -302,7 +303,7 @@ def AddConnection(request):
             new_connection = form.save()
 
             # Test the connection
-            success, message = manager_views.test_connectivity(new_connection.id)
+            success, message, warnings = manager_views.check_connectivity(new_connection.id)
 
             if not success:
                 # If test fails, delete the connection and return JSON error
@@ -320,7 +321,8 @@ def AddConnection(request):
             return JsonResponse({
                 'success': True,
                 'connection_id': new_connection.id,
-                'message': 'Connection created and tested successfully!'
+                'message': 'Connection created and tested successfully!',
+                'warnings': warnings,
             }, status=200)
         else:
             logger.warning(f"User '{request.user.username}' failed to add connection: {form.errors}")
@@ -368,8 +370,8 @@ def GetConnection(request, connection_id):
         connection_id: ``Connection`` primary key.
 
     Returns:
-        JSON with ``connection_mode``, ``cloud_id``, ``host``, ``port``,
-        ``auth_type``, ``username``; 400 if not CENTRALIZED.
+        JSON with ``connection_mode``, ``cloud_id``, ``es_hosts``,
+        ``kibana_url``, ``auth_type``, ``username``; 400 if not CENTRALIZED.
     """
     if request.method != "GET":
         return JsonResponse({'error': 'Invalid request method'}, status=405)
@@ -392,6 +394,8 @@ def GetConnection(request, connection_id):
             'cloud_id': connection.cloud_id or '',
             'host': connection.host or '',
             'port': connection.port or '',
+            'es_hosts': connection.get_es_hosts(),
+            'kibana_url': connection.kibana_url or '',
             'auth_type': auth_type,
             'username': connection.username or '',
             'allow_self_signed_certs': connection.allow_self_signed_certs,
@@ -445,10 +449,11 @@ def UpdateConnection(request, connection_id):
 
     test_success = False
     test_message = ""
+    warnings = []
     try:
         with transaction.atomic():
             updated_connection = form.save()
-            test_success, test_message = manager_views.test_connectivity(updated_connection.id)
+            test_success, test_message, warnings = manager_views.check_connectivity(updated_connection.id)
             if not test_success:
                 transaction.set_rollback(True)
     except Exception as e:
@@ -463,7 +468,8 @@ def UpdateConnection(request, connection_id):
     return JsonResponse({
         'success': True,
         'connection_id': connection_id,
-        'message': 'Connection updated and tested successfully!'
+        'message': 'Connection updated and tested successfully!',
+        'warnings': warnings,
     }, status=200)
 
 

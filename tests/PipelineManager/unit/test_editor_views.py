@@ -180,8 +180,7 @@ class TestRBACPipelineEditorEndpoints:
 
         assert response.status_code == 403
 
-    @patch('PipelineManager.manager_views.get_elastic_connection')
-    def test_readonly_user_cannot_clone_pipeline(self, mock_get_es, client, test_connection):
+    def test_readonly_user_cannot_clone_pipeline(self, client, test_connection):
         """Test that readonly user cannot clone pipelines"""
         from django.contrib.auth.models import User
         from Management.models import UserProfile

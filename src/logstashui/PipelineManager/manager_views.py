@@ -16,7 +16,7 @@ from PipelineManager.models import Connection as ConnectionTable
 from Common.decorators import require_admin_role
 from API.mcp.tools import toolset_catalog
 
-from Common.elastic_utils import get_elastic_connection, test_elastic_connectivity
+from Common.elastic_utils import check_elastic_nodes, check_kibana_status
 
 
 from datetime import datetime, timezone
@@ -114,6 +114,56 @@ def PipelineManager(request):
         'mcp_toolsets': toolset_catalog(),
     })
 
+def check_connectivity(connection_id):
+    """Test every Elasticsearch node of a connection, plus its Kibana URL.
+
+    Succeeds when at least one node answers. Each failed node, and a saved
+    Kibana URL whose ``/api/status`` check fails, becomes a warning.
+
+    Args:
+        connection_id: ``Connection`` primary key.
+
+    Returns:
+        ``(success, message, warnings)``: ``message`` is the first reachable
+        node's cluster-info JSON, or the error text when every node failed.
+
+    Examples:
+        >>> check_connectivity(conn.pk)  # doctest: +SKIP
+        (True, '{...}', ['Elasticsearch node https://es2:9200 is unreachable: ...'])
+    """
+    if not connection_id:
+        return (False, "No connection ID provided", [])
+
+    try:
+        results = check_elastic_nodes(connection_id)
+    except Exception as e:
+        logger.error(f"Connection test against {connection_id} failed: {e}")
+        return (False, str(e), [])
+
+    passed = [detail for _, ok, detail in results if ok]
+    failed = [(host, detail) for host, ok, detail in results if not ok]
+    if not passed:
+        if not results:
+            return (False, "No Elasticsearch node URL or Cloud ID is configured", [])
+        if len(failed) == 1:
+            message = failed[0][1]
+        else:
+            message = "\n".join(f"{host}: {detail}" for host, detail in failed)
+        logger.error(f"Connection test against {connection_id} failed: {message}")
+        return (False, message, [])
+
+    warnings = [f"Elasticsearch node {host} is unreachable: {detail}" for host, detail in failed]
+    try:
+        kibana_warning = check_kibana_status(connection_id)
+    except Exception as e:
+        kibana_warning = f"Kibana status check failed: {e}"
+    if kibana_warning:
+        warnings.append(kibana_warning)
+    for warning in warnings:
+        logger.warning(f"Connection {connection_id}: {warning}")
+    return (True, passed[0], warnings)
+
+
 def test_connectivity(connection_id):
     """Test connectivity to an Elasticsearch connection.
 
@@ -122,19 +172,10 @@ def test_connectivity(connection_id):
 
     Returns:
         ``(success, message)`` where ``message`` is cluster info JSON or an
-        error string.
+        error string. Use :func:`check_connectivity` for per-node warnings.
     """
-    if not connection_id:
-        return (False, "No connection ID provided")
-    
-    try:
-        elastic_connection = get_elastic_connection(connection_id)
-        result = test_elastic_connectivity(elastic_connection)
-        return (True, result)
-    except Exception as e:
-        error_msg = str(e)
-        logger.error(f"Connection test against {connection_id} failed: {error_msg}")
-        return (False, error_msg)
+    success, message, _ = check_connectivity(connection_id)
+    return (success, message)
 
 
 def TestConnectivity(request):
@@ -149,8 +190,8 @@ def TestConnectivity(request):
         return HttpResponse("No connection ID provided", status=400)
     
     logger.info(f"User '{request.user.username}' testing connection {test_id}")
-    success, message = test_connectivity(test_id)
-    
+    success, message, warnings = check_connectivity(test_id)
+
     if success:
         # Check if this is a serverless instance
         is_serverless = False
@@ -159,15 +200,24 @@ def TestConnectivity(request):
             is_serverless = info.get('name') == 'serverless'
         except (json.JSONDecodeError, AttributeError):
             pass
-        
-        # Return response with HX-Trigger to update the type column if serverless
-        response = HttpResponse("""
-            <div class="p-4 mb-4 text-sm text-green-700 bg-green-100 rounded-lg"
-                onload="setTimeout(() => this.remove(), 3000);">
-                <p>{0}</p>
-            </div>
-        """.format(escape(str(message))))
-        
+
+        if warnings:
+            items = "".join(f"<li>{escape(w)}</li>" for w in warnings)
+            response = HttpResponse(f"""
+                <div class="p-4 mb-4 text-sm text-amber-800 bg-amber-100 rounded-lg">
+                    <p class="font-semibold">Connected, with warnings:</p>
+                    <ul class="list-disc ml-5">{items}</ul>
+                </div>
+            """)
+        else:
+            # Return response with HX-Trigger to update the type column if serverless
+            response = HttpResponse("""
+                <div class="p-4 mb-4 text-sm text-green-700 bg-green-100 rounded-lg"
+                    onload="setTimeout(() => this.remove(), 3000);">
+                    <p>{0}</p>
+                </div>
+            """.format(escape(str(message))))
+
         if is_serverless:
             response['HX-Trigger'] = json.dumps({"serverlessDetected": {"connectionId": test_id}})
 

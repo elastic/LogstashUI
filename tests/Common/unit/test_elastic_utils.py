@@ -55,7 +55,7 @@ class TestGetCreds:
         creds, connection = _get_creds(mock_connection.id)
         
         assert 'hosts' in creds
-        assert creds['hosts'] == 'https://localhost:9200'
+        assert creds['hosts'] == ['https://localhost:9200']
         assert 'http_auth' in creds
         assert creds['http_auth'][0] == 'elastic'
 

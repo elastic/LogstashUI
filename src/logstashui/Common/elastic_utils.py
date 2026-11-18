@@ -32,6 +32,82 @@ def test_elastic_connectivity(elastic_connection):
     """
     return json.dumps(dict(elastic_connection.info()), indent=4)
 
+
+def check_elastic_nodes(connection_id):
+    """Call ``info()`` on each Elasticsearch node of a connection separately.
+
+    A client built with several hosts succeeds when any one answers, which
+    would hide a mistyped node. Cloud ID connections are checked once.
+
+    Args:
+        connection_id: Primary key of a CENTRALIZED ``Connection``.
+
+    Returns:
+        List of ``(host, ok, detail)`` tuples in node order. ``host`` is None
+        for Cloud ID; ``detail`` is cluster-info JSON or the error text.
+
+    Examples:
+        >>> check_elastic_nodes(conn.pk)  # doctest: +SKIP
+        [('https://es1:9200', True, '{...}'), ('https://es2:9200', False, 'Connection refused')]
+    """
+    creds, connection = _get_creds(connection_id)
+    hosts = creds.pop('hosts', None)
+    targets = [None] if 'cloud_id' in creds else (hosts or [])
+    results = []
+    for host in targets:
+        kwargs = dict(creds)
+        if host:
+            kwargs['hosts'] = [host]
+        try:
+            client = Elasticsearch(
+                **kwargs,
+                verify_certs=not connection.allow_self_signed_certs,
+                request_timeout=15,
+                max_retries=0,
+            )
+            results.append((host, True, test_elastic_connectivity(client)))
+        except Exception as e:
+            results.append((host, False, str(e)))
+    return results
+
+
+def check_kibana_status(connection_id):
+    """Return a warning string when the saved Kibana URL is unreachable.
+
+    Only the saved ``kibana_url`` is checked; a Cloud ID-derived URL is not.
+
+    Args:
+        connection_id: Primary key of a CENTRALIZED ``Connection``.
+
+    Returns:
+        Warning text, or None when there is no saved URL or ``/api/status``
+        answers 200.
+    """
+    creds, connection = _get_creds(connection_id)
+    if not connection.kibana_url:
+        return None
+    kibana_url = normalize_kibana_url(connection.kibana_url).rstrip('/')
+    headers = {}
+    auth = None
+    if creds.get('api_key'):
+        headers['Authorization'] = f"ApiKey {creds['api_key']}"
+    elif 'http_auth' in creds:
+        auth = creds['http_auth']
+    try:
+        response = requests.get(
+            f"{kibana_url}/api/status",
+            headers=headers,
+            auth=auth,
+            verify=not connection.allow_self_signed_certs,
+            timeout=15,
+        )
+    except requests.RequestException as e:
+        return f"Kibana at {kibana_url} is unreachable: {e}"
+    if response.status_code != 200:
+        return f"Kibana at {kibana_url} returned HTTP {response.status_code} from /api/status."
+    return None
+
+
 def get_elastic_connections_from_list():
     """Build ES clients for every CENTRALIZED ``Connection`` row.
 
@@ -98,12 +174,7 @@ def _get_creds(connection_id):
     if connection.cloud_id:
         connection_data['cloud_id'] = connection.cloud_id
     else:
-        # For CENTRALIZED connections, combine host and port fields
-        # The frontend stores them separately, so we need to recombine them
-        if connection.port:
-            connection_data['hosts'] = f"{connection.host}:{connection.port}"
-        else:
-            connection_data['hosts'] = connection.host
+        connection_data['hosts'] = connection.get_es_hosts()
 
     if connection.api_key:
         connection_data['api_key'] = connection.get_api_key()
@@ -855,11 +926,73 @@ def normalize_kibana_url(url):
     return urlunparse((scheme, netloc, '', '', '', ''))
 
 
-def get_kibana_url(connection_id):
-    """Derive a Kibana origin from a CENTRALIZED connection.
+KIBANA_URL_MISSING_MESSAGE = (
+    "This connection has no Kibana URL. Add one on the connection to use AI generation."
+)
 
-    Decodes ``cloud_id`` when present; otherwise rewrites the ES ``hosts``
-    URL through ``normalize_kibana_url``.
+
+def connection_edit_url(connection_id, focus='kibana_url'):
+    """Return the Connections page link that opens one connection's edit form.
+
+    Args:
+        connection_id: Primary key of a CENTRALIZED ``Connection``.
+        focus: Form field to focus after the form opens.
+
+    Returns:
+        Relative URL string.
+
+    Examples:
+        >>> connection_edit_url(7)
+        '/ConnectionManager/?edit=7&focus=kibana_url'
+    """
+    return f"/ConnectionManager/?edit={connection_id}&focus={focus}"
+
+
+class KibanaUrlMissing(ValueError):
+    """The connection has neither a saved Kibana URL nor a Cloud ID."""
+
+    def __init__(self, connection_id):
+        super().__init__(KIBANA_URL_MISSING_MESSAGE)
+        self.connection_id = connection_id
+        self.edit_url = connection_edit_url(connection_id)
+
+
+def kibana_url_from_cloud_id(cloud_id):
+    """Decode the Kibana origin from an Elastic Cloud ID.
+
+    Args:
+        cloud_id: ``deployment-name:base64("domain$es_uuid$kibana_uuid")``.
+
+    Returns:
+        Kibana origin string, or ``None`` when the ID cannot be decoded.
+
+    Examples:
+        >>> import base64
+        >>> kibana_url_from_cloud_id("dep:" + base64.b64encode(b"us-east-1.aws.found.io$es1$kb1").decode())
+        'https://kb1.us-east-1.aws.found.io'
+    """
+    import base64
+    import binascii
+
+    if not cloud_id or ':' not in cloud_id:
+        return None
+    try:
+        decoded = base64.b64decode(cloud_id.split(':', 1)[1]).decode('utf-8')
+    except (binascii.Error, UnicodeDecodeError, ValueError):
+        return None
+    parts = decoded.split('$')
+    if len(parts) < 2:
+        return None
+    domain = parts[0]
+    kibana_url = f"https://{parts[2]}.{domain}" if len(parts) > 2 else f"https://{domain}"
+    return normalize_kibana_url(kibana_url)
+
+
+def get_kibana_url(connection_id):
+    """Return the Kibana origin for a CENTRALIZED connection.
+
+    Uses the saved ``kibana_url`` first, then decodes the Cloud ID. The URL
+    is never guessed from the Elasticsearch node hosts.
 
     Args:
         connection_id: Primary key of a CENTRALIZED ``Connection``.
@@ -868,33 +1001,20 @@ def get_kibana_url(connection_id):
         Kibana origin string.
 
     Raises:
-        ValueError: If neither ``cloud_id`` nor ``hosts`` can produce a URL.
+        KibanaUrlMissing: The connection has no saved Kibana URL and no
+            decodable Cloud ID. ``edit_url`` links to the connection's form.
+
+    Examples:
+        >>> get_kibana_url(conn.pk)  # doctest: +SKIP
+        'https://kibana.example.com:5601'
     """
-    import base64
-    
-    creds, _ = _get_creds(connection_id)
-    
-    # Check if cloud_id is present
-    if 'cloud_id' in creds:
-        cloud_id = creds['cloud_id']
-        # Format: "deployment-name:base64encodeddata"
-        if ':' in cloud_id:
-            encoded_part = cloud_id.split(':', 1)[1]
-            decoded = base64.b64decode(encoded_part).decode('utf-8')
-            # Format: "domain$es_uuid$kibana_uuid"
-            parts = decoded.split('$')
-            if len(parts) >= 2:
-                domain = parts[0]
-                # Construct Kibana URL
-                kibana_url = f"https://{parts[2]}.{domain}" if len(parts) > 2 else f"https://{domain}"
-                return normalize_kibana_url(kibana_url)
-    
-    # Check for hosts (URL-based connection)
-    if 'hosts' in creds and creds['hosts']:
-        es_url = creds['hosts'][0] if isinstance(creds['hosts'], list) else creds['hosts']
-        return normalize_kibana_url(es_url)
-    
-    raise ValueError("Could not determine Kibana URL from connection")
+    connection = ConnectionTable.objects.get(id=connection_id)
+    if connection.kibana_url:
+        return normalize_kibana_url(connection.kibana_url)
+    from_cloud = kibana_url_from_cloud_id(connection.cloud_id)
+    if from_cloud:
+        return from_cloud
+    raise KibanaUrlMissing(connection_id)
 
 
 def create_kibana_dashboard(connection_id, dashboard_definition):

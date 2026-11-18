@@ -75,11 +75,11 @@ class TestConnectionCRUD:
         assert response.status_code == 302
         assert "/Management/Login/" in response.url
 
-    @patch("PipelineManager.manager_views.test_connectivity")
+    @patch("PipelineManager.manager_views.check_connectivity")
     def test_add_connection_success(self, mock_test_connectivity, authenticated_client):
         """Test successful connection creation"""
         # Mock successful connectivity test
-        mock_test_connectivity.return_value = (True, "Connection successful")
+        mock_test_connectivity.return_value = (True, "Connection successful", [])
 
         response = authenticated_client.post(
             "/ConnectionManager/AddConnection",
@@ -101,13 +101,13 @@ class TestConnectionCRUD:
         # Verify connection was created
         assert Connection.objects.filter(name="Test Connection").exists()
 
-    @patch("PipelineManager.manager_views.test_connectivity")
+    @patch("PipelineManager.manager_views.check_connectivity")
     def test_add_connection_failed_connectivity(
         self, mock_test_connectivity, authenticated_client
     ):
         """Test connection creation with failed connectivity test"""
         # Mock failed connectivity test
-        mock_test_connectivity.return_value = (False, "Connection failed: Timeout")
+        mock_test_connectivity.return_value = (False, "Connection failed: Timeout", [])
 
         response = authenticated_client.post(
             "/ConnectionManager/AddConnection",
@@ -382,14 +382,14 @@ class TestSecurityAndErrorHandling:
         # Should return 500 or 404, not crash
         assert response.status_code in [404, 500]
 
-    @patch("PipelineManager.manager_views.test_connectivity")
+    @patch("PipelineManager.manager_views.check_connectivity")
     def test_connectivity_error_message_escaped(
         self, mock_test_connectivity, authenticated_client, test_connection
     ):
         """Test that error messages in TestConnectivity are HTML-escaped to prevent XSS"""
         # Mock connectivity test with XSS attempt in error message
         xss_payload = "<script>alert('XSS')</script>"
-        mock_test_connectivity.return_value = (False, xss_payload)
+        mock_test_connectivity.return_value = (False, xss_payload, [])
 
         response = authenticated_client.get(
             f"/ConnectionManager/TestConnectivity?test={test_connection.id}"
@@ -401,13 +401,13 @@ class TestSecurityAndErrorHandling:
         assert "&lt;script&gt;" in content
         assert "<script>alert" not in content
 
-    @patch("PipelineManager.manager_views.test_connectivity")
+    @patch("PipelineManager.manager_views.check_connectivity")
     def test_readonly_user_cannot_add_connection(
         self, mock_test_connectivity, client, test_user
     ):
         """Test that readonly (non-admin) user cannot add connections"""
         # Mock connectivity test
-        mock_test_connectivity.return_value = (True, "Connection successful")
+        mock_test_connectivity.return_value = (True, "Connection successful", [])
 
         # Create a readonly user (not admin)
         from django.contrib.auth.models import User
@@ -478,27 +478,99 @@ class TestConnectivityHelper:
         assert success is False
         assert "No connection ID" in msg
 
-    @patch("PipelineManager.manager_views.get_elastic_connection")
-    @patch("PipelineManager.manager_views.test_elastic_connectivity")
-    def test_success_returns_true_and_result(self, mock_test_elastic, mock_get_es):
+    @patch("PipelineManager.manager_views.check_kibana_status", return_value=None)
+    @patch("PipelineManager.manager_views.check_elastic_nodes")
+    def test_success_returns_true_and_result(self, mock_nodes, _mock_kibana):
         from PipelineManager.manager_views import test_connectivity
 
-        mock_get_es.return_value = MagicMock()
-        mock_test_elastic.return_value = "Connected!"
+        mock_nodes.return_value = [("https://es1:9200", True, "Connected!")]
         success, msg = test_connectivity("42")
         assert success is True
         assert msg == "Connected!"
 
     @patch(
-        "PipelineManager.manager_views.get_elastic_connection",
+        "PipelineManager.manager_views.check_elastic_nodes",
         side_effect=Exception("timeout"),
     )
-    def test_exception_returns_false(self, mock_get_es):
+    def test_exception_returns_false(self, mock_nodes):
         from PipelineManager.manager_views import test_connectivity
 
         success, msg = test_connectivity("42")
         assert success is False
         assert "timeout" in msg
+
+
+class TestCheckConnectivity:
+    """Per-node results: one live node is enough, the rest become warnings."""
+
+    @patch("PipelineManager.manager_views.check_kibana_status", return_value=None)
+    @patch("PipelineManager.manager_views.check_elastic_nodes")
+    def test_all_nodes_up_no_warnings(self, mock_nodes, _mock_kibana):
+        from PipelineManager.manager_views import check_connectivity
+
+        mock_nodes.return_value = [
+            ("https://es1:9200", True, "info-1"),
+            ("https://es2:9200", True, "info-2"),
+        ]
+        assert check_connectivity(1) == (True, "info-1", [])
+
+    @patch("PipelineManager.manager_views.check_kibana_status", return_value=None)
+    @patch("PipelineManager.manager_views.check_elastic_nodes")
+    def test_one_node_down_is_a_warning(self, mock_nodes, _mock_kibana):
+        from PipelineManager.manager_views import check_connectivity
+
+        mock_nodes.return_value = [
+            ("https://es1:9200", False, "refused"),
+            ("https://es2:9200", True, "info-2"),
+        ]
+        success, message, warnings = check_connectivity(1)
+        assert success is True
+        assert message == "info-2"
+        assert warnings == ["Elasticsearch node https://es1:9200 is unreachable: refused"]
+
+    @patch("PipelineManager.manager_views.check_kibana_status")
+    @patch("PipelineManager.manager_views.check_elastic_nodes")
+    def test_all_nodes_down_fails_and_skips_kibana(self, mock_nodes, mock_kibana):
+        from PipelineManager.manager_views import check_connectivity
+
+        mock_nodes.return_value = [
+            ("https://es1:9200", False, "refused"),
+            ("https://es2:9200", False, "timeout"),
+        ]
+        success, message, warnings = check_connectivity(1)
+        assert success is False
+        assert message == "https://es1:9200: refused\nhttps://es2:9200: timeout"
+        assert warnings == []
+        mock_kibana.assert_not_called()
+
+    @patch("PipelineManager.manager_views.check_kibana_status", return_value=None)
+    @patch("PipelineManager.manager_views.check_elastic_nodes")
+    def test_single_node_down_message_is_the_error(self, mock_nodes, _mock_kibana):
+        from PipelineManager.manager_views import check_connectivity
+
+        mock_nodes.return_value = [("https://es1:9200", False, "refused")]
+        assert check_connectivity(1) == (False, "refused", [])
+
+    @patch("PipelineManager.manager_views.check_elastic_nodes", return_value=[])
+    def test_nothing_configured(self, _mock_nodes):
+        from PipelineManager.manager_views import check_connectivity
+
+        success, message, _ = check_connectivity(1)
+        assert success is False
+        assert "No Elasticsearch node URL or Cloud ID" in message
+
+    @patch(
+        "PipelineManager.manager_views.check_kibana_status",
+        return_value="Kibana at https://kb:5601 is unreachable: refused",
+    )
+    @patch("PipelineManager.manager_views.check_elastic_nodes")
+    def test_kibana_failure_is_a_warning(self, mock_nodes, _mock_kibana):
+        from PipelineManager.manager_views import check_connectivity
+
+        mock_nodes.return_value = [("https://es1:9200", True, "info-1")]
+        success, _, warnings = check_connectivity(1)
+        assert success is True
+        assert warnings == ["Kibana at https://kb:5601 is unreachable: refused"]
 
 
 # ============================================================================
@@ -517,8 +589,8 @@ class TestTestConnectivityView:
         assert b"No connection ID" in response.content
 
     @patch(
-        "PipelineManager.manager_views.test_connectivity",
-        return_value=(True, "All good!"),
+        "PipelineManager.manager_views.check_connectivity",
+        return_value=(True, "All good!", []),
     )
     def test_success_renders_green_div(
         self, mock_tc, authenticated_client, test_connection
@@ -534,8 +606,23 @@ class TestTestConnectivityView:
         assert response["X-Connection-Test"] == "ok"
 
     @patch(
-        "PipelineManager.manager_views.test_connectivity",
-        return_value=(False, "Connection refused"),
+        "PipelineManager.manager_views.check_connectivity",
+        return_value=(True, "{}", ["Elasticsearch node <b>x</b> is unreachable: refused"]),
+    )
+    def test_warnings_render_amber_and_escaped(
+        self, mock_tc, authenticated_client, test_connection
+    ):
+        response = authenticated_client.get(
+            f"/ConnectionManager/TestConnectivity?test={test_connection.id}"
+        )
+        content = response.content.decode()
+        assert response["X-Connection-Test"] == "ok"
+        assert "Connected, with warnings" in content
+        assert "&lt;b&gt;x&lt;/b&gt;" in content
+
+    @patch(
+        "PipelineManager.manager_views.check_connectivity",
+        return_value=(False, "Connection refused", []),
     )
     def test_failure_is_flagged_for_status_pill(
         self, mock_tc, authenticated_client, test_connection
@@ -854,14 +941,14 @@ class TestDeletePipelineEdgeCases:
 class TestIntegration:
     """Integration tests for complete workflows"""
 
-    @patch("PipelineManager.manager_views.test_connectivity")
+    @patch("PipelineManager.manager_views.check_connectivity")
     @patch("PipelineManager.pipelines_crud.get_elastic_connection")
     def test_full_pipeline_lifecycle(
         self, mock_get_es, mock_test_connectivity, authenticated_client
     ):
         """Test complete pipeline lifecycle: create connection, create pipeline, update, delete"""
         # Step 1: Create connection
-        mock_test_connectivity.return_value = (True, "Connection successful")
+        mock_test_connectivity.return_value = (True, "Connection successful", [])
 
         conn_response = authenticated_client.post(
             "/ConnectionManager/AddConnection",

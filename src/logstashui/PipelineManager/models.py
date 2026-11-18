@@ -305,6 +305,17 @@ class Connection(models.Model):
         null=True,
         help_text="Elastic Cloud URL (alternative to Cloud ID)"
     )
+    es_hosts = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Ordered Elasticsearch node URLs for CENTRALIZED URL-mode connections"
+    )
+    kibana_url = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="Kibana origin; when blank, derived from the Cloud ID if one is set"
+    )
     api_key = models.CharField(
         max_length=512,
         blank=True,
@@ -399,8 +410,9 @@ class Connection(models.Model):
     def clean(self):
         """Validate required fields for the connection type.
 
-        AGENT rows need ``host``. CENTRALIZED rows need Cloud ID or host,
-        plus either an API key or username/password.
+        AGENT rows need ``host``. CENTRALIZED rows need a Cloud ID or at
+        least one ``es_hosts`` entry, plus either an API key or
+        username/password.
 
         For *updates* (pk already set) the form may clear the credential
         fields on submission when the user didn't re-enter them.  In that
@@ -413,9 +425,14 @@ class Connection(models.Model):
                 raise ValidationError("Host is required for Agent connections")
             # Note: AGENT connections use ApiKey table (FK reference), so no ssh_key/username/password required here
         else:  # CENTRALIZED
-            if not (self.cloud_id or self.host):
+            # Callers that still set only host/port get the same single node
+            # the 0035 backfill produces. Remove with the host/port cleanup.
+            if not self.cloud_id and not self.get_es_hosts() and self.host:
+                self.es_hosts = [f"{self.host}:{self.port}" if self.port else self.host]
+            if not (self.cloud_id or self.get_es_hosts()):
                 raise ValidationError(
-                    "Either Cloud ID or Cloud URL is required for centralized connections"
+                    "Either a Cloud ID or at least one Elasticsearch node URL is required "
+                    "for centralized connections"
                 )
             if not (self.api_key or (self.username and self.password)):
                 # Bug 2 fix: for partial PUT requests the form clears the credential
@@ -444,6 +461,16 @@ class Connection(models.Model):
         """
         self.full_clean()
 
+        # Keep host/port holding the first node so a downgrade to a build
+        # without es_hosts still reaches Elasticsearch. Remove with the
+        # cleanup migration that drops CENTRALIZED host/port.
+        if self.connection_type == self.ConnectionType.CENTRALIZED:
+            hosts = self.get_es_hosts()
+            if hosts:
+                self.host, self.port = _split_url_port(hosts[0])
+            elif self.cloud_id:
+                self.host, self.port = '', None
+
         # Encrypt sensitive fields before saving
         if self.password and not self._is_encrypted(self.password):
             self.password = encrypt_credential(self.password)
@@ -471,6 +498,50 @@ class Connection(models.Model):
     def get_agent_inbound_key(self):
         """Return the decrypted agent inbound API key, or None if unset."""
         return decrypt_credential(self.agent_inbound_key) if self.agent_inbound_key else None
+
+    def get_es_hosts(self):
+        """Return the ordered Elasticsearch node URLs for this connection.
+
+        Cloud ID connections return an empty list.
+
+        Returns:
+            List of URL strings, in the order the user supplied them.
+
+        Examples:
+            >>> Connection(es_hosts=["https://es1:9200", "https://es2:9200"]).get_es_hosts()
+            ['https://es1:9200', 'https://es2:9200']
+        """
+        return [h for h in (self.es_hosts or []) if isinstance(h, str) and h.strip()]
+
+
+def _split_url_port(url):
+    """Split a node URL into the legacy ``(host, port)`` pair.
+
+    URLs with a path keep the whole URL in ``host`` because the legacy
+    ``f"{host}:{port}"`` join would put the port after the path.
+
+    Args:
+        url: Node URL such as ``https://es1:9200``.
+
+    Returns:
+        ``(host, port)`` where ``port`` may be None.
+
+    Examples:
+        >>> _split_url_port("https://es1:9200")
+        ('https://es1', 9200)
+        >>> _split_url_port("https://es1:9200/proxy")
+        ('https://es1:9200/proxy', None)
+    """
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url if '://' in url else f'//{url}')
+    try:
+        port = parsed.port
+    except ValueError:
+        return url, None
+    if port is None or parsed.path.strip('/'):
+        return url, None
+    return url.rsplit(':', 1)[0], port
 
 
 MANAGED_BY_CHOICES = [
