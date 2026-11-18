@@ -277,11 +277,18 @@ _CONNECTION_FIELDS = {
     'connection_type': _str('Connection type.', ['CENTRALIZED', 'AGENT']),
     'connection_mode': _str('How to reach Elasticsearch.', ['url', 'cloud']),
     'auth_type': _str('Elasticsearch auth method: basic or api_key.'),
-    'host': _str('Elasticsearch URL without the port, e.g. https://es.example.com; put the '
-                 'port in port.'),
+    'es_hosts': _arr('URL mode: ordered Elasticsearch node URLs with ports, e.g. '
+                     '["https://es1:9200", "https://es2:9200"]. At least one is required; all must '
+                     'share http or https. Replaces the stored list on update.',
+                     {'type': 'string'}),
+    'kibana_url': _str('Optional Kibana origin, e.g. https://kibana.example.com:5601. Needed for '
+                       'SNMP AI features on URL-mode connections; Cloud ID connections derive it '
+                       'when blank.'),
+    'host': _str('Legacy single-node form of es_hosts: Elasticsearch URL without the port; put '
+                 'the port in port. Prefer es_hosts.'),
     'cloud_id': _str('Elastic Cloud ID.'),
     'cloud_url': _str('Full cluster URL for Cloud deployments.'),
-    'port': _int('9200 for URL mode, 443 for Cloud.'),
+    'port': _int('Port for the legacy host field (443/80 by scheme when omitted).'),
     'username': _str('Basic-auth username.'),
     'password': _str('Basic-auth password. Omit on update to keep the stored value.'),
     'api_key': _str('Elasticsearch API key. Omit on update to keep the stored value.'),
@@ -538,19 +545,22 @@ TOOLS = [
          'nodes; policy_id is the policy they run, and SIMULATE-policy agents run simulations. '
          'Credentials are never returned.'),
     Tool('connections_create', 'connections', 'api-connections-list', 'POST',
-         'Create a connection. It is connectivity-tested first and rolled back on failure. Admin only.',
+         'Create a connection. Each Elasticsearch node is tested; it is rolled back only when '
+         'every node fails, and unreachable nodes or Kibana come back in warnings. Admin only.',
          body=_CONNECTION_FIELDS, required=('name', 'connection_type'),
          hints={422: _CONNECTION_TEST_FAILED + ' Nothing was saved.'}),
     Tool('connections_get', 'connections', 'api-connections-detail', 'GET',
          'Get one connection by ID.', path_params={'connection_id': _int('Connection ID.')}),
     Tool('connections_update', 'connections', 'api-connections-detail', 'PUT',
-         'Update a connection; send only fields to change. Re-tested and rolled back on failure. Admin only.',
+         'Update a connection; send only fields to change. Re-tested and rolled back only when '
+         'every node fails; partial failures come back in warnings. Admin only.',
          path_params={'connection_id': _int('Connection ID.')}, body=_CONNECTION_FIELDS,
          hints={422: _CONNECTION_TEST_FAILED + ' The update was rolled back.'}),
     Tool('connections_delete', 'connections', 'api-connections-detail', 'DELETE',
          'Delete a connection. Admin only.', path_params={'connection_id': _int('Connection ID.')}),
     Tool('connections_test', 'connections', 'api-connections-test', 'POST',
-         'Run a live connectivity check against a saved connection without changing it.',
+         'Run a live connectivity check against each node of a saved connection without changing '
+         'it. Unreachable nodes or Kibana come back in warnings.',
          path_params={'connection_id': _int('Connection ID.')}, read_only=True,
          hints={404: 'Connection not found. Use connections_list to find the ID.',
                 422: _CONNECTION_TEST_FAILED + ' Fix it with connections_update.'}),

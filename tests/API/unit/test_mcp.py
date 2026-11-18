@@ -355,8 +355,8 @@ class TestToolsCall:
                                 'port': 9200}, 'rolled back'),
         ('connections_test', {}, 'connections_update'),
     ])
-    @patch('API.connections_views.manager_views.test_connectivity',
-           return_value=(False, 'Connection timed out'))
+    @patch('API.connections_views.manager_views.check_connectivity',
+           return_value=(False, 'Connection timed out', []))
     def test_connectivity_failure_has_422_hint(self, _mock, client, admin_auth, test_connection,
                                                tool, arguments, expected):
         if tool != 'connections_create':

@@ -109,6 +109,8 @@ curl -H "Authorization: ApiKey $KEY" https://logstashui.example.com/api/connecti
     "connection_type": "CENTRALIZED",
     "host": null,
     "port": 443,
+    "es_hosts": [],
+    "kibana_url": null,
     "cloud_id": "<redacted>",
     "cloud_url": "https://my-cluster.es.us-east-2.aws.elastic-cloud.com",
     "username": null,
@@ -142,13 +144,18 @@ POST /api/connections/
 
 **Required role:** admin
 
-The connection is tested before being saved. If the connectivity test fails the record is
-rolled back and an error is returned.
+Each Elasticsearch node is tested separately before the connection is kept. If every node
+fails, the record is rolled back and `422` is returned. If at least one node answers, the
+connection is saved and each unreachable node is listed in `warnings`. A saved `kibana_url` is
+checked with `GET /api/status`; a failure is a warning only.
 
-Put the port in `port`, not in `host`. A port written into `host` (`https://es.example.com:9200`)
-is moved to `port`; if `port` is also set to a different value, the request fails with `400`.
+In URL mode, list the nodes in `es_hosts`, in the order Logstash outputs should use them. Each
+URL needs `http://` or `https://`, and all nodes must use the same scheme. A missing port
+defaults to `443` for https or `80` for http, so include `:9200` when that is your port. The
+legacy single-node `host` + `port` fields are still accepted: a port written into `host`
+(`https://es.example.com:9200`) is moved to `port`, and a different value in both fails with `400`.
 
-**URL + basic auth:**
+**URL + basic auth, two nodes:**
 
 ```bash
 curl -X POST https://logstashui.example.com/api/connections/ \
@@ -159,8 +166,8 @@ curl -X POST https://logstashui.example.com/api/connections/ \
     "connection_type": "CENTRALIZED",
     "connection_mode": "url",
     "auth_type": "basic",
-    "host": "https://es.example.com",
-    "port": 9200,
+    "es_hosts": ["https://es1.example.com:9200", "https://es2.example.com:9200"],
+    "kibana_url": "https://kibana.example.com:5601",
     "username": "elastic",
     "password": "<password>"
   }'
@@ -185,7 +192,7 @@ curl -X POST https://logstashui.example.com/api/connections/ \
 ```
 
 ```json
-{"success": true, "connection_id": 1, "message": "Connection created and tested successfully."}
+{"success": true, "connection_id": 1, "message": "Connection created and tested successfully.", "warnings": []}
 ```
 
 | Field | Required | Notes |
@@ -194,10 +201,12 @@ curl -X POST https://logstashui.example.com/api/connections/ \
 | `connection_type` | yes | `CENTRALIZED` or `AGENT` |
 | `connection_mode` | no | `url` or `cloud` |
 | `auth_type` | no | `basic` or `api_key` |
-| `host` | one of | Full URL e.g. `https://es.example.com` |
+| `es_hosts` | one of | URL mode: ordered list of node URLs, e.g. `["https://es1:9200"]` |
 | `cloud_id` | one of | Elastic Cloud ID |
+| `kibana_url` | no | Kibana origin. Required for SNMP AI features on URL connections; Cloud ID connections derive it when blank |
+| `host` | no | Legacy single-node form of `es_hosts`, without the port |
 | `cloud_url` | no | Full cluster URL |
-| `port` | no | `9200` for URL, `443` for Cloud |
+| `port` | no | Port for the legacy `host` field |
 | `username` / `password` | no | Basic auth |
 | `api_key` | no | Elasticsearch API key |
 | `allow_self_signed_certs` | no | `true` to skip TLS certificate verification for Elasticsearch and Kibana calls. Defaults to `false` on create; omitted on update keeps the stored value |
@@ -212,18 +221,20 @@ PUT /api/connections/{id}/
 
 **Required role:** admin
 
-Accepts the same fields as POST. The connectivity test is re-run; on failure the update is
-rolled back.
+Accepts the same fields as POST; omitted fields keep their stored values. `es_hosts` replaces
+the whole node list. Sending the legacy `host` or `port` without `es_hosts` replaces the list
+with that single node. The connectivity test is re-run; the update is rolled back only when
+every node fails.
 
 ```bash
 curl -X PUT https://logstashui.example.com/api/connections/1/ \
   -H "Authorization: ApiKey $KEY" \
   -H "Content-Type: application/json" \
-  -d '{"name": "my-cluster-renamed", "port": 443}'
+  -d '{"name": "my-cluster-renamed", "es_hosts": ["https://es1:9200", "https://es3:9200"]}'
 ```
 
 ```json
-{"success": true, "connection_id": 1, "message": "Connection updated and tested successfully."}
+{"success": true, "connection_id": 1, "message": "Connection updated and tested successfully.", "warnings": []}
 ```
 
 ---
@@ -253,7 +264,9 @@ curl -X DELETE https://logstashui.example.com/api/connections/1/ \
 POST /api/connections/{id}/test/
 ```
 
-Runs a live connectivity check against the saved connection without modifying it.
+Runs a live connectivity check against each node of the saved connection without modifying
+it. Succeeds when at least one node answers; unreachable nodes and a failing Kibana status
+check are listed in `warnings`.
 
 ```bash
 curl -X POST https://logstashui.example.com/api/connections/1/test/ \
@@ -261,7 +274,7 @@ curl -X POST https://logstashui.example.com/api/connections/1/test/ \
 ```
 
 ```json
-{"success": true, "message": "Connection test successful."}
+{"success": true, "detail": "{...cluster info...}", "warnings": ["Elasticsearch node https://es2:9200 is unreachable: ..."]}
 ```
 
 ---

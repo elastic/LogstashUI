@@ -52,6 +52,8 @@ def _safe_connection_data(conn):
         'agent_id': conn.agent_id,
         'host': conn.host,
         'port': conn.port,
+        'es_hosts': conn.get_es_hosts(),
+        'kibana_url': conn.kibana_url,
         'username': conn.username,
         'cloud_id': conn.cloud_id,
         'cloud_url': conn.cloud_url,
@@ -93,7 +95,7 @@ def connection_list(request):
 def _list_connections(request):
     connections_qs = Connection.objects.values(
         'id', 'name', 'connection_type', 'agent_id',
-        'policy__policy_type', 'host', 'port', 'username',
+        'policy__policy_type', 'host', 'port', 'es_hosts', 'kibana_url', 'username',
         'cloud_id', 'cloud_url', 'is_active',
         'last_check_in', 'created_at', 'updated_at',
         'desired_agent_version', 'restart_on_next_checkin',
@@ -130,7 +132,7 @@ def _create_connection(request):
 
     new_connection = form.save()
 
-    success, message = manager_views.test_connectivity(new_connection.id)
+    success, message, warnings = manager_views.check_connectivity(new_connection.id)
     if not success:
         new_connection.delete()
         logger.error("API create connection: connectivity test failed — %s", message)
@@ -141,6 +143,7 @@ def _create_connection(request):
         'success': True,
         'connection_id': new_connection.id,
         'message': 'Connection created and tested successfully.',
+        'warnings': warnings,
     }, status=201)
 
 
@@ -196,14 +199,13 @@ def _connection_form_defaults(conn):
     else:
         auth_type = 'basic'
 
-    return {
+    defaults = {
         'name':            conn.name,
         'connection_type': conn.connection_type,
-        'host':            conn.host or '',
-        'port':            conn.port or '',
         'username':        conn.username or '',
         'cloud_id':        conn.cloud_id or '',
         'cloud_url':       conn.cloud_url or '',
+        'kibana_url':      conn.kibana_url or '',
         # Checkbox: an omitted key would be read as False and silently flip an
         # existing connection to strict TLS verification on a partial PUT.
         'allow_self_signed_certs': conn.allow_self_signed_certs,
@@ -213,6 +215,12 @@ def _connection_form_defaults(conn):
         'auth_type':       auth_type,
         # api_key / password deliberately omitted: empty string → keep existing
     }
+    if conn.connection_type == Connection.ConnectionType.CENTRALIZED:
+        defaults['es_hosts'] = conn.get_es_hosts()
+    else:
+        defaults['host'] = conn.host or ''
+        defaults['port'] = conn.port or ''
+    return defaults
 
 
 @api_require_admin
@@ -227,6 +235,12 @@ def _update_connection(request, connection_id):
     # The caller only needs to supply the fields they want to change; omitted
     # fields retain their current values.
     merged = _connection_form_defaults(conn)
+    if ('host' in data or 'port' in data) and 'es_hosts' not in data and 'es_hosts' in merged:
+        # Legacy single-node update: start from the stored first node (mirrored
+        # in host/port) and replace the node list with that one node.
+        merged.pop('es_hosts')
+        merged['host'] = conn.host or ''
+        merged['port'] = conn.port or ''
     merged.update(data)
 
     # Bug 1 fix (update path): check for name collision against other connections.
@@ -245,10 +259,11 @@ def _update_connection(request, connection_id):
 
     test_success = False
     test_message = ''
+    warnings = []
     try:
         with transaction.atomic():
             updated = form.save()
-            test_success, test_message = manager_views.test_connectivity(updated.id)
+            test_success, test_message, warnings = manager_views.check_connectivity(updated.id)
             if not test_success:
                 transaction.set_rollback(True)
     except Exception as exc:
@@ -264,6 +279,7 @@ def _update_connection(request, connection_id):
         'success': True,
         'connection_id': connection_id,
         'message': 'Connection updated and tested successfully.',
+        'warnings': warnings,
     })
 
 
@@ -305,8 +321,8 @@ def connection_test(request, connection_id):
         return JsonResponse({'success': False, 'error': 'Connection not found'}, status=404)
 
     logger.info("API: connectivity test for connection %s by %s", connection_id, request.user.username)
-    success, message = manager_views.test_connectivity(connection_id)
+    success, message, warnings = manager_views.check_connectivity(connection_id)
 
     if success:
-        return JsonResponse({'success': True, 'detail': message})
+        return JsonResponse({'success': True, 'detail': message, 'warnings': warnings})
     return JsonResponse({'success': False, 'error': str(message)}, status=422)
