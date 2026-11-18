@@ -5,8 +5,9 @@
  */
 
 // Toast notification function
-function showToast(message, type = 'success') {
+function showToast(message, type = 'success', duration = 5000) {
   const container = document.getElementById('toast-container') || createToastContainer();
+  raiseToastContainer(container);
   const toast = document.createElement('div');
   const colors = {
     success: 'bg-green-500',
@@ -14,10 +15,10 @@ function showToast(message, type = 'success') {
     info: 'bg-blue-500',
     warning: 'bg-yellow-500'
   };
-  toast.className = `${colors[type] || 'bg-gray-800'} text-white px-6 py-3 rounded-lg shadow-lg flex items-center justify-between min-w-[300px]`;
+  toast.className = `${colors[type] || 'bg-gray-800'} text-white px-6 py-3 rounded-lg shadow-lg flex items-center justify-between min-w-[300px] max-w-md transition-opacity`;
   toast.innerHTML = `
-    <span>${escapeHtml(message)}</span>
-    <button onclick="this.parentElement.remove()" class="text-white hover:text-gray-200 ml-4">
+    <span class="break-words whitespace-pre-line min-w-0">${escapeHtml(message)}</span>
+    <button onclick="this.parentElement.remove()" class="text-white hover:text-gray-200 ml-4 flex-shrink-0">
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
       </svg>
@@ -26,20 +27,64 @@ function showToast(message, type = 'success') {
 
   container.appendChild(toast);
 
-  // Auto-remove after 5 seconds
   setTimeout(() => {
     toast.style.opacity = '0';
     setTimeout(() => toast.remove(), 300);
-  }, 5000);
+  }, duration);
+}
+
+/**
+ * Keep the toast container above everything, including modal <dialog>s and
+ * popovers. Those live in the browser's top layer, which no z-index can beat,
+ * so the container is a manual popover and is re-shown to move it to the top.
+ */
+function raiseToastContainer(container) {
+  if (typeof container.showPopover !== 'function') return;
+  try {
+    if (container.matches(':popover-open')) {
+      const covered = document.querySelector('dialog:modal, [popover]:popover-open:not(#toast-container)');
+      if (!covered) return;
+      container.hidePopover();
+    }
+    container.showPopover();
+  } catch (e) {
+    // Popover API unsupported or container detached; the z-index still applies.
+  }
 }
 
 function createToastContainer() {
   const container = document.createElement('div');
   container.id = 'toast-container';
-  container.className = 'fixed top-4 right-4 z-50 flex flex-col gap-2';
+  container.setAttribute('popover', 'manual');
+  container.className = 'toast toast-end toast-bottom z-[2147483647] m-0 p-0 border-0 overflow-visible';
   document.body.appendChild(container);
   return container;
 }
+
+/**
+ * Show toasts on the next page load, for actions that reload the page.
+ * @param {{message: string, type?: string, duration?: number}[]} toasts
+ */
+function queueToastsForReload(toasts) {
+  try {
+    sessionStorage.setItem('pendingToasts', JSON.stringify(toasts));
+  } catch (e) {
+    toasts.forEach(t => showToast(t.message, t.type, t.duration));
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const container = document.getElementById('toast-container');
+  if (container) raiseToastContainer(container);
+  let pending = [];
+  try {
+    pending = JSON.parse(sessionStorage.getItem('pendingToasts') || '[]');
+    sessionStorage.removeItem('pendingToasts');
+  } catch (e) {
+    pending = [];
+  }
+  pending.forEach(t => showToast(t.message, t.type, t.duration));
+});
 
 
 // Escape HTML to prevent XSS
