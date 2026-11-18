@@ -142,10 +142,7 @@ def stream_template_generation(connection_id, walk_text, inference_id):
     if not grounded_columns:
         yield _sse({
             "phase":   "error",
-            "message": (
-                "No walked OIDs matched a compiled MIB in the grounding index. "
-                "Load the device's MIBs (see data/grounding/) and retry."
-            ),
+            "message": "No walked OIDs matched a compiled MIB in the grounding index.",
         })
         return
 
