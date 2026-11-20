@@ -1,58 +1,154 @@
 {
   "official_key": "isilon_performance",
   "name": "isilon_performance",
-  "description": "Cluster-level and per-node I/O performance for Dell EMC Isilon OneFS: disk read/write bytes and ops, network bytes in/out, CPU busy/idle/system/user ticks, and per-node CPU utilization table. Uses ISILON-MIB (1.3.6.1.4.1.12124).",
+  "description": "Cluster-wide and polled-node /ifs throughput, external network bit rates, CPU usage by state, the per-CPU table, and per-drive performance for Dell EMC Isilon OneFS. CPU values are converted from per mil to fractions (0-1). Uses ISILON-MIB (1.3.6.1.4.1.12124).",
   "vendor": "Dell EMC",
   "product": "Isilon OneFS",
   "model": "Any",
   "get": {
-    "storage.disk.read.bytes":         "1.3.6.1.4.1.12124.2.1.1.0",
-    "storage.disk.write.bytes":        "1.3.6.1.4.1.12124.2.1.2.0",
-    "storage.disk.read.ops":           "1.3.6.1.4.1.12124.2.1.3.0",
-    "storage.disk.write.ops":          "1.3.6.1.4.1.12124.2.1.4.0",
-
-    "network.bytes.in":                "1.3.6.1.4.1.12124.2.2.1.1.0",
-    "network.bytes.out":               "1.3.6.1.4.1.12124.2.2.1.2.0",
-    "network.packets.in":              "1.3.6.1.4.1.12124.2.2.1.3.0",
-    "network.packets.out":             "1.3.6.1.4.1.12124.2.2.1.4.0",
-
-    "system.cpu.busy_ticks":           "1.3.6.1.4.1.12124.2.2.2.1.0",
-    "system.cpu.idle_ticks":           "1.3.6.1.4.1.12124.2.2.2.2.0",
-    "system.cpu.system_ticks":         "1.3.6.1.4.1.12124.2.2.2.3.0",
-    "system.cpu.user_ticks":           "1.3.6.1.4.1.12124.2.2.2.4.0"
+    "observer.cluster.ifs.in.bytes": "1.3.6.1.4.1.12124.1.2.1.1.0",
+    "observer.cluster.ifs.in.bps": "1.3.6.1.4.1.12124.1.2.1.2.0",
+    "observer.cluster.ifs.out.bytes": "1.3.6.1.4.1.12124.1.2.1.3.0",
+    "observer.cluster.ifs.out.bps": "1.3.6.1.4.1.12124.1.2.1.4.0",
+    "observer.cluster.network.in.bps": "1.3.6.1.4.1.12124.1.2.2.2.0",
+    "observer.cluster.network.out.bps": "1.3.6.1.4.1.12124.1.2.2.4.0",
+    "observer.cluster.cpu.user.pct": "1.3.6.1.4.1.12124.1.2.3.1.0",
+    "observer.cluster.cpu.nice.pct": "1.3.6.1.4.1.12124.1.2.3.2.0",
+    "observer.cluster.cpu.system.pct": "1.3.6.1.4.1.12124.1.2.3.3.0",
+    "observer.cluster.cpu.interrupt.pct": "1.3.6.1.4.1.12124.1.2.3.4.0",
+    "observer.cluster.cpu.idle.pct": "1.3.6.1.4.1.12124.1.2.3.5.0",
+    "observer.node.ifs.in.bytes": "1.3.6.1.4.1.12124.2.2.1.1.0",
+    "observer.node.ifs.in.bps": "1.3.6.1.4.1.12124.2.2.1.2.0",
+    "observer.node.ifs.out.bytes": "1.3.6.1.4.1.12124.2.2.1.3.0",
+    "observer.node.ifs.out.bps": "1.3.6.1.4.1.12124.2.2.1.4.0",
+    "observer.node.network.in.bps": "1.3.6.1.4.1.12124.2.2.2.2.0",
+    "observer.node.network.out.bps": "1.3.6.1.4.1.12124.2.2.2.4.0",
+    "observer.node.cpu.user.pct": "1.3.6.1.4.1.12124.2.2.3.1.0",
+    "observer.node.cpu.nice.pct": "1.3.6.1.4.1.12124.2.2.3.2.0",
+    "observer.node.cpu.system.pct": "1.3.6.1.4.1.12124.2.2.3.3.0",
+    "observer.node.cpu.interrupt.pct": "1.3.6.1.4.1.12124.2.2.3.4.0",
+    "observer.node.cpu.idle.pct": "1.3.6.1.4.1.12124.2.2.3.5.0"
   },
   "walk": {},
   "table": {
     "component.node.cpu": {
       "columns": {
-        "index":                        "1.3.6.1.4.1.12124.2.2.3.10.1.1",
-        "cpu_user_pct":                 "1.3.6.1.4.1.12124.2.2.3.10.1.2",
-        "cpu_sys_pct":                  "1.3.6.1.4.1.12124.2.2.3.10.1.3",
-        "cpu_idle_pct":                 "1.3.6.1.4.1.12124.2.2.3.10.1.4",
-        "cpu_intr_pct":                 "1.3.6.1.4.1.12124.2.2.3.10.1.5"
+        "user.pct": "1.3.6.1.4.1.12124.2.2.3.10.1.1",
+        "nice.pct": "1.3.6.1.4.1.12124.2.2.3.10.1.2",
+        "system.pct": "1.3.6.1.4.1.12124.2.2.3.10.1.3",
+        "interrupt.pct": "1.3.6.1.4.1.12124.2.2.3.10.1.4",
+        "idle.pct": "1.3.6.1.4.1.12124.2.2.3.10.1.5"
       }
     },
-    "component.node.disk": {
+    "component.drive_perf": {
       "columns": {
-        "index":                        "1.3.6.1.4.1.12124.2.2.3.1.1",
-        "read_bytes":                   "1.3.6.1.4.1.12124.2.2.3.2.1",
-        "write_bytes":                  "1.3.6.1.4.1.12124.2.2.3.3.1",
-        "read_ops":                     "1.3.6.1.4.1.12124.2.2.3.4.1",
-        "write_ops":                    "1.3.6.1.4.1.12124.2.2.3.5.1"
+        "index": "1.3.6.1.4.1.12124.2.2.52.1.1",
+        "device_name": "1.3.6.1.4.1.12124.2.2.52.1.2",
+        "ops_per_sec": "1.3.6.1.4.1.12124.2.2.52.1.3",
+        "in.bps": "1.3.6.1.4.1.12124.2.2.52.1.4",
+        "out.bps": "1.3.6.1.4.1.12124.2.2.52.1.5"
       }
     }
   },
   "normalizers": [
     {
-      "operation": "ratio",
+      "operation": "multiply",
       "target": {
-        "scope": "get"
+        "scope": "get",
+        "field": "observer.cluster.cpu.user.pct"
       },
       "params": {
-        "value1_field": "system.cpu.busy_ticks",
-        "value2_field": "system.cpu.idle_ticks",
-        "total_output_field": "system.cpu.total_ticks",
-        "ratio1_output_field": "system.cpu.total.norm.pct"
+        "multiply_value": 0.001
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "observer.cluster.cpu.nice.pct"
+      },
+      "params": {
+        "multiply_value": 0.001
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "observer.cluster.cpu.system.pct"
+      },
+      "params": {
+        "multiply_value": 0.001
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "observer.cluster.cpu.interrupt.pct"
+      },
+      "params": {
+        "multiply_value": 0.001
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "observer.cluster.cpu.idle.pct"
+      },
+      "params": {
+        "multiply_value": 0.001
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "observer.node.cpu.user.pct"
+      },
+      "params": {
+        "multiply_value": 0.001
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "observer.node.cpu.nice.pct"
+      },
+      "params": {
+        "multiply_value": 0.001
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "observer.node.cpu.system.pct"
+      },
+      "params": {
+        "multiply_value": 0.001
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "observer.node.cpu.interrupt.pct"
+      },
+      "params": {
+        "multiply_value": 0.001
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "observer.node.cpu.idle.pct"
+      },
+      "params": {
+        "multiply_value": 0.001
       }
     },
     {
@@ -60,10 +156,10 @@
       "target": {
         "scope": "table",
         "table": "component.node.cpu",
-        "field": "component.node.cpu.cpu_user_pct"
+        "field": "component.node.cpu.user.pct"
       },
       "params": {
-        "multiply_value": 0.01
+        "multiply_value": 0.001
       }
     },
     {
@@ -71,10 +167,10 @@
       "target": {
         "scope": "table",
         "table": "component.node.cpu",
-        "field": "component.node.cpu.cpu_sys_pct"
+        "field": "component.node.cpu.nice.pct"
       },
       "params": {
-        "multiply_value": 0.01
+        "multiply_value": 0.001
       }
     },
     {
@@ -82,10 +178,32 @@
       "target": {
         "scope": "table",
         "table": "component.node.cpu",
-        "field": "component.node.cpu.cpu_idle_pct"
+        "field": "component.node.cpu.system.pct"
       },
       "params": {
-        "multiply_value": 0.01
+        "multiply_value": 0.001
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "component.node.cpu",
+        "field": "component.node.cpu.interrupt.pct"
+      },
+      "params": {
+        "multiply_value": 0.001
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "component.node.cpu",
+        "field": "component.node.cpu.idle.pct"
+      },
+      "params": {
+        "multiply_value": 0.001
       }
     }
   ]

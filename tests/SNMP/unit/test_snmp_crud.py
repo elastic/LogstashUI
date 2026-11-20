@@ -2597,16 +2597,18 @@ class TestDeviceVisualizationData:
                 }}]}}
             # Each poll returns several RAM rows (physical, buffers, cache), in
             # arbitrary order. The physical row has the lowest hrStorageIndex.
-            def ram_row(index, pct):
+            # Current pipelines write them to system.storage; older data has
+            # them in system.filesystem.
+            def ram_row(index, pct, table='storage'):
                 return {'_source': {
                     '@timestamp': '2026-08-04T01:00:00Z',
-                    'system': {'filesystem': {'index': index, 'used': {'pct': pct}}},
+                    'system': {table: {'index': index, 'used': {'pct': pct}}},
                 }}
             return {'aggregations': {'by_poll': {'buckets': [
                 {'key': 1, 'physical': {'hits': {'hits': [
                     ram_row(3, 0.50),
                     ram_row(1, 0.98),
-                    ram_row(2, 0.70),
+                    ram_row(2, 0.70, table='filesystem'),
                 ]}}},
             ]}}}
 
@@ -2620,17 +2622,21 @@ class TestDeviceVisualizationData:
         assert metrics['MemorySource'] == 'hrStorageRam'
 
         fs_filters = [fl for fl in captured
-                      if any('term' in f and f['term'].get('event.category') == 'system.filesystem'
+                      if any('terms' in f and set(f['terms'].get('event.category', []))
+                             == {'system.filesystem', 'system.storage'}
                              for f in fl)]
-        assert fs_filters, "expected a system.filesystem query"
+        assert fs_filters, "expected a system.filesystem / system.storage query"
 
         # Rows are selected by hrStorageType, not by a locale-specific description
         # ("RAM" on EOS vs "Physical memory" on net-snmp), and matched under both
-        # possible mappings of that field.
+        # possible mappings of that field, in either storage table.
         shoulds = [f['bool']['should'] for f in fs_filters[0] if 'bool' in f]
         assert shoulds, "expected a bool/should type filter"
         fields = {list(clause['term'].keys())[0] for clause in shoulds[0]}
-        assert fields == {'system.filesystem.type', 'system.filesystem.type.keyword'}
+        assert fields == {
+            'system.filesystem.type', 'system.filesystem.type.keyword',
+            'system.storage.type', 'system.storage.type.keyword',
+        }
         assert all(list(c['term'].values())[0] == '1.3.6.1.2.1.25.2.1.2' for c in shoulds[0])
         assert not any('mount_point' in str(f) for f in fs_filters[0])
 
@@ -2644,6 +2650,61 @@ class TestDeviceVisualizationData:
         assert 'sort' not in top_hits
         assert top_hits['size'] > 1
         assert 'system.filesystem.index' in top_hits['_source']
+        assert 'system.storage.index' in top_hits['_source']
+
+    def test_filesystems_merge_storage_tables_and_keep_newest_row(self, test_device):
+        """Older polls put RAM rows in system.filesystem; newer ones use system.storage."""
+        from SNMP.snmp_crud import _get_device_filesystems
+
+        def bucket(table, index, timestamp, pct, mount):
+            return {'key': index, 'latest_doc': {'hits': {'hits': [{'_source': {
+                '@timestamp': timestamp,
+                'system': {table: {
+                    'index': index, 'mount_point': mount, 'used': {'pct': pct, 'bytes': 10},
+                    'total': {'bytes': 100}, 'allocation_units': 4096,
+                }},
+            }}]}}}
+
+        mock_es = MagicMock()
+        mock_es.search.return_value = {'aggregations': {
+            'system.filesystem': {'buckets': [
+                bucket('filesystem', 1, '2026-08-04T00:00:00Z', 0.9, 'Physical memory'),
+                bucket('filesystem', 31, '2026-08-04T01:00:00Z', 0.4, '/'),
+            ]},
+            'system.storage': {'buckets': [
+                bucket('storage', 1, '2026-08-04T01:00:00Z', 0.7, 'Physical memory'),
+            ]},
+        }}
+
+        result = _get_device_filesystems(test_device, mock_es)
+
+        rows = {r['index']: r for r in result['filesystems']}
+        assert set(rows) == {1, 31}
+        assert rows[1]['used_pct'] == 0.7
+        assert rows[31]['mount_point'] == '/'
+        assert [r['index'] for r in result['filesystems']] == [1, 31]
+        kwargs = mock_es.search.call_args.kwargs
+        assert set(kwargs['aggregations']) == {'system.filesystem', 'system.storage'}
+        assert kwargs['aggregations']['system.storage']['terms']['field'] == 'system.storage.index'
+
+    @pytest.mark.parametrize('total', [4096000, {'bytes': 4096000}])
+    def test_filesystem_total_reads_number_and_legacy_object(self, test_device, total):
+        from SNMP.snmp_crud import _get_device_filesystems
+
+        mock_es = MagicMock()
+        mock_es.search.return_value = {'aggregations': {'system.filesystem': {'buckets': [
+            {'key': 31, 'latest_doc': {'hits': {'hits': [{'_source': {
+                '@timestamp': '2026-08-04T01:00:00Z',
+                'system': {'filesystem': {'index': 31, 'mount_point': '/', 'total': total}},
+            }}]}}},
+        ]}}}
+
+        result = _get_device_filesystems(test_device, mock_es)
+
+        assert result['filesystems'][0]['total_bytes'] == 4096000
+        source = mock_es.search.call_args.kwargs['aggregations']['system.filesystem'][
+            'aggregations']['latest_doc']['top_hits']['_source']
+        assert 'system.filesystem.total' in source
 
     def test_metrics_queries_are_scoped_to_the_device(self, test_device):
         """Every metrics query must filter to this device, not the whole fleet."""

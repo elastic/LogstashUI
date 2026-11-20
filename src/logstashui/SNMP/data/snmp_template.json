@@ -104,6 +104,28 @@
                   "ignore_above": 1024
                 }
               }
+            },
+            "network": {
+              "properties": {
+                "ingress": {
+                  "properties": {
+                    "bytes": {
+                      "type": "long"
+                    }
+                  }
+                },
+                "egress": {
+                  "properties": {
+                    "bytes": {
+                      "type": "long"
+                    }
+                  }
+                }
+              }
+            },
+            "name": {
+              "type": "keyword",
+              "time_series_dimension": true
             }
           }
         },
@@ -248,11 +270,122 @@
                     "norm": {
                       "properties": {
                         "pct": {
-                          "type": "float",
-                          "index": false,
+                          "type": "scaled_float",
+                          "scaling_factor": 1000,
+                          "meta": {
+                            "unit": "percent"
+                          },
                           "time_series_metric": "gauge"
                         }
                       }
+                    },
+                    "pct": {
+                      "type": "scaled_float",
+                      "scaling_factor": 1000,
+                      "meta": {
+                        "unit": "percent"
+                      },
+                      "time_series_metric": "gauge"
+                    }
+                  }
+                },
+                "cores": {
+                  "type": "long",
+                  "time_series_metric": "gauge"
+                },
+                "user": {
+                  "properties": {
+                    "pct": {
+                      "type": "scaled_float",
+                      "scaling_factor": 1000,
+                      "meta": {
+                        "unit": "percent"
+                      },
+                      "time_series_metric": "gauge"
+                    }
+                  }
+                },
+                "system": {
+                  "properties": {
+                    "pct": {
+                      "type": "scaled_float",
+                      "scaling_factor": 1000,
+                      "meta": {
+                        "unit": "percent"
+                      },
+                      "time_series_metric": "gauge"
+                    }
+                  }
+                },
+                "nice": {
+                  "properties": {
+                    "pct": {
+                      "type": "scaled_float",
+                      "scaling_factor": 1000,
+                      "meta": {
+                        "unit": "percent"
+                      },
+                      "time_series_metric": "gauge"
+                    }
+                  }
+                },
+                "idle": {
+                  "properties": {
+                    "pct": {
+                      "type": "scaled_float",
+                      "scaling_factor": 1000,
+                      "meta": {
+                        "unit": "percent"
+                      },
+                      "time_series_metric": "gauge"
+                    }
+                  }
+                },
+                "iowait": {
+                  "properties": {
+                    "pct": {
+                      "type": "scaled_float",
+                      "scaling_factor": 1000,
+                      "meta": {
+                        "unit": "percent"
+                      },
+                      "time_series_metric": "gauge"
+                    }
+                  }
+                },
+                "irq": {
+                  "properties": {
+                    "pct": {
+                      "type": "scaled_float",
+                      "scaling_factor": 1000,
+                      "meta": {
+                        "unit": "percent"
+                      },
+                      "time_series_metric": "gauge"
+                    }
+                  }
+                },
+                "softirq": {
+                  "properties": {
+                    "pct": {
+                      "type": "scaled_float",
+                      "scaling_factor": 1000,
+                      "meta": {
+                        "unit": "percent"
+                      },
+                      "time_series_metric": "gauge"
+                    }
+                  }
+                },
+                "steal": {
+                  "properties": {
+                    "pct": {
+                      "type": "scaled_float",
+                      "scaling_factor": 1000,
+                      "meta": {
+                        "unit": "percent"
+                      },
+                      "time_series_metric": "gauge"
                     }
                   }
                 }
@@ -264,15 +397,42 @@
                   "properties": {
                     "bytes": {
                       "type": "long",
-                      "index": false,
+                      "meta": {
+                        "unit": "byte"
+                      },
                       "time_series_metric": "gauge"
                     },
                     "pct": {
-                      "type": "float",
-                      "index": false,
+                      "type": "scaled_float",
+                      "scaling_factor": 1000,
+                      "meta": {
+                        "unit": "percent"
+                      },
                       "time_series_metric": "gauge"
                     }
                   }
+                },
+                "free": {
+                  "type": "long",
+                  "meta": {
+                    "unit": "byte"
+                  },
+                  "time_series_metric": "gauge"
+                },
+                "total": {
+                  "type": "long",
+                  "meta": {
+                    "unit": "byte"
+                  },
+                  "time_series_metric": "gauge"
+                },
+                "mount_point": {
+                  "type": "keyword",
+                  "time_series_dimension": true
+                },
+                "type": {
+                  "type": "keyword",
+                  "ignore_above": 1024
                 }
               }
             },
@@ -298,25 +458,6 @@
                         }
                       }
                     },
-                    "free": {
-                      "properties": {
-                        "bytes": {
-                          "type": "long",
-                          "index": false,
-                          "time_series_metric": "gauge"
-                        },
-                        "kb": {
-                          "type": "long",
-                          "index": false,
-                          "time_series_metric": "gauge"
-                        },
-                        "pct": {
-                          "type": "float",
-                          "index": false,
-                          "time_series_metric": "gauge"
-                        }
-                      }
-                    },
                     "total": {
                       "properties": {
                         "bytes": {
@@ -335,11 +476,61 @@
                       "properties": {
                         "bytes": {
                           "type": "long",
-                          "index": false,
+                          "meta": {
+                            "unit": "byte"
+                          },
                           "time_series_metric": "gauge"
                         },
                         "pct": {
-                          "type": "float",
+                          "type": "scaled_float",
+                          "scaling_factor": 1000,
+                          "meta": {
+                            "unit": "percent"
+                          },
+                          "time_series_metric": "gauge"
+                        }
+                      }
+                    },
+                    "free": {
+                      "type": "long",
+                      "meta": {
+                        "unit": "byte"
+                      },
+                      "time_series_metric": "gauge"
+                    }
+                  }
+                },
+                "total": {
+                  "type": "long",
+                  "meta": {
+                    "unit": "byte"
+                  },
+                  "time_series_metric": "gauge"
+                },
+                "used": {
+                  "properties": {
+                    "bytes": {
+                      "type": "long",
+                      "meta": {
+                        "unit": "byte"
+                      },
+                      "time_series_metric": "gauge"
+                    }
+                  }
+                },
+                "free": {
+                  "type": "long",
+                  "meta": {
+                    "unit": "byte"
+                  },
+                  "time_series_metric": "gauge"
+                },
+                "physical": {
+                  "properties": {
+                    "total": {
+                      "properties": {
+                        "kb": {
+                          "type": "long",
                           "index": false,
                           "time_series_metric": "gauge"
                         }
@@ -347,17 +538,73 @@
                     }
                   }
                 },
-                "total": {
+                "total_free": {
                   "properties": {
-                    "bytes": {
-                      "type": "float",
-                      "index": false,
-                      "time_series_metric": "gauge"
-                    },
                     "kb": {
                       "type": "long",
                       "index": false,
                       "time_series_metric": "gauge"
+                    }
+                  }
+                }
+              }
+            },
+            "load": {
+              "properties": {
+                "1": {
+                  "type": "scaled_float",
+                  "scaling_factor": 1000,
+                  "time_series_metric": "gauge"
+                },
+                "5": {
+                  "type": "scaled_float",
+                  "scaling_factor": 1000,
+                  "time_series_metric": "gauge"
+                },
+                "15": {
+                  "type": "scaled_float",
+                  "scaling_factor": 1000,
+                  "time_series_metric": "gauge"
+                },
+                "cores": {
+                  "type": "long",
+                  "time_series_metric": "gauge"
+                }
+              }
+            },
+            "diskio": {
+              "properties": {
+                "name": {
+                  "type": "keyword",
+                  "time_series_dimension": true
+                },
+                "read": {
+                  "properties": {
+                    "count": {
+                      "type": "long",
+                      "time_series_metric": "counter"
+                    },
+                    "bytes": {
+                      "type": "long",
+                      "meta": {
+                        "unit": "byte"
+                      },
+                      "time_series_metric": "counter"
+                    }
+                  }
+                },
+                "write": {
+                  "properties": {
+                    "count": {
+                      "type": "long",
+                      "time_series_metric": "counter"
+                    },
+                    "bytes": {
+                      "type": "long",
+                      "meta": {
+                        "unit": "byte"
+                      },
+                      "time_series_metric": "counter"
                     }
                   }
                 }
@@ -656,6 +903,13 @@
                   "time_series_metric": "gauge"
                 }
               }
+            }
+          }
+        },
+        "metricset": {
+          "properties": {
+            "period": {
+              "type": "long"
             }
           }
         }

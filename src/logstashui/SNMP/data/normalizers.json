@@ -10,6 +10,10 @@
         "default": 1.0,
         "description": "The value to multiply the SNMP value by."
       },
+      "multiply_field": {
+        "type": "field_selector",
+        "description": "Optional field to also multiply by (e.g. system.filesystem.allocation_units). Nothing is written when this field is missing."
+      },
       "output_field": {
         "type": "string",
         "description": "Field to write the result to (e.g. 'system.cpu.total.norm.pct'). Leave empty to overwrite the source field."
@@ -76,7 +80,7 @@
       },
       "value2_field": {
         "type": "field_selector",
-        "description": "Second field (e.g., system.memory.actual.free.bytes)"
+        "description": "Second field (e.g., system.memory.actual.free)"
       },
       "total_output_field": {
         "type": "string",
@@ -97,6 +101,80 @@
       "divide_output_field": {
         "type": "string",
         "description": "Field to store value2 / value1. Leave empty to skip."
+      },
+      "difference_output_field": {
+        "type": "string",
+        "description": "Field to store value1 - value2 (e.g. total - used = free). Leave empty to skip."
+      }
+    }
+  },
+  "sum_column": {
+    "label": "Sum column",
+    "description": "Sums (or counts) a numeric table column across all rows and writes the scalar result to the metrics document. In delta mode each row contributes the change in its counter since the previous poll, so cumulative interface octets become bytes per poll.",
+    "applies_to": ["table"],
+    "has_target_field": true,
+    "inputs": {
+      "output_field": {
+        "type": "string",
+        "required": true,
+        "description": "Metrics-doc field to write the sum to (e.g. 'host.network.ingress.bytes')."
+      },
+      "mode": {
+        "type": "string",
+        "description": "'value' (default) sums the raw column; 'delta' sums each row's change since the previous poll and skips the poll when any row has no previous sample or reset; 'count' counts rows with a numeric value."
+      },
+      "exclude_column": {
+        "type": "string",
+        "description": "Optional row column to filter on (e.g. 'type')."
+      },
+      "exclude_values": {
+        "type": "field_list",
+        "description": "Rows whose exclude_column equals one of these values are left out (e.g. 24 for loopback interfaces)."
+      },
+      "multiply_value": {
+        "type": "float",
+        "default": 1.0,
+        "description": "Optional multiplier applied to the sum before writing."
+      }
+    }
+  },
+  "counter_delta": {
+    "label": "Counter delta",
+    "description": "Writes the change in a cumulative counter since the previous poll of the same device (and table row). Nothing is written on the first poll or when the counter goes backwards (reset or wrap). State is kept in Logstash memory: it survives pipeline reloads and resets when Logstash restarts.",
+    "applies_to": ["get", "table"],
+    "has_target_field": true,
+    "inputs": {
+      "output_field": {
+        "type": "string",
+        "required": true,
+        "description": "Field to write the delta to (e.g. 'system.cpu.delta.user')."
+      }
+    }
+  },
+  "share": {
+    "label": "Share of total",
+    "description": "Divides each input field by the sum of all inputs and writes the fractions to the matching output fields, optionally scaled. Nothing is written unless every input is present and the total is positive. Turns per-state CPU tick deltas into Elastic's system.cpu.<state>.pct.",
+    "applies_to": ["get"],
+    "has_target_field": false,
+    "inputs": {
+      "input_fields": {
+        "type": "field_list",
+        "required": true,
+        "description": "Fields that together make up the total (e.g. system.cpu.delta.user, system.cpu.delta.idle)."
+      },
+      "output_fields": {
+        "type": "field_list",
+        "required": true,
+        "description": "One output per input, in the same order (e.g. system.cpu.user.pct, system.cpu.idle.pct)."
+      },
+      "multiply_value": {
+        "type": "float",
+        "default": 1.0,
+        "description": "Optional constant multiplier."
+      },
+      "multiply_field": {
+        "type": "field_selector",
+        "description": "Optional field to multiply by (e.g. system.cpu.cores to sum across cores, as Elastic does)."
       }
     }
   }

@@ -25,7 +25,21 @@ logger = logging.getLogger(__name__)
 
 # Import Device model for discovery IP address filtering
 from .models import Device
-from .snmp_normalizers import _apply_normalizers
+from .snmp_normalizers import _apply_normalizers, COUNTER_DELTA_RUBY_INIT, _SAFE_FIELD_RE
+
+# Normalizers that aggregate table rows inside the split loop and write onto the
+# host metrics document instead of running as standalone filters.
+_LOOP_OPERATIONS = ('average', 'sum_column')
+
+# A host metrics document is stamped `metricset.module: system`, which puts the
+# device on Kibana's Hosts page, only when it carries one of these. RX/TX is left
+# out on purpose: nearly every device has interfaces.
+HOSTS_PAGE_FIELDS = (
+    'system.cpu.total.norm.pct',
+    'system.memory.actual.used.pct',
+    'system.memory.total',
+    'system.load.1',
+)
 
 # Cache for official profile data to avoid repeated file I/O
 _OFFICIAL_PROFILE_CACHE = {}
@@ -566,7 +580,9 @@ def _generate_input(input_data, profile_cache=None, template_filter=None):
                     "config": config
                 })
 
-    return input_components, oid_mappings, all_normalizers
+    # Every input group feeds one filter chain, and some normalizers
+    # (in-place multiply, counter_delta, sum_column) are not idempotent.
+    return input_components, oid_mappings, _deduplicate_normalizers(all_normalizers)
 
 
 
@@ -901,7 +917,8 @@ def _generate_filters(oid_mappings, network, normalizers=None, input_data=None):
             "config": {
                 "add_field": {
                     "[network][name]": f"{network}",
-                    "[metricset][module]": "system",
+                    "[metricset][module]": "snmp",
+                    "[metricset][period]": str(int(getattr(network, 'interval', 30) or 30) * 1000),
                     "[tsds][category]": "metrics",
                     "[tsds][index]": "metrics"
                 }
@@ -910,32 +927,74 @@ def _generate_filters(oid_mappings, network, normalizers=None, input_data=None):
     ]
 
     # Apply normalizers from profiles
-    average_normalizers = []
+    loop_normalizers = []
     if normalizers:
         get_normalizers = [n for n in normalizers if n.get('target', {}).get('scope') == 'get']
         normalizer_filters = _apply_normalizers(get_normalizers)
         filter_components.extend(normalizer_filters)
-        average_normalizers = [n for n in normalizers if n.get('operation') == 'average']
+        loop_normalizers = [n for n in normalizers if n.get('operation') in _LOOP_OPERATIONS]
 
-    # Generate table-split filters, injecting average normalizer logic where applicable.
-    filter_components.extend(_generate_table_split_filters(oid_mappings, average_normalizers))
+    # Generate table-split filters, injecting average/sum_column logic where applicable.
+    filter_components.extend(_generate_table_split_filters(oid_mappings, loop_normalizers))
 
     # Apply table-scope normalizers AFTER table splitters so they run on the
     # already-split row events (which have columns as top-level fields).
-    # Average normalizers are handled inside the split block and are excluded here.
+    # average and sum_column are handled inside the split block and are excluded here.
     if normalizers:
         table_normalizers = [
             n for n in normalizers
-            if n.get('target', {}).get('scope') == 'table' and n.get('operation') != 'average'
+            if n.get('target', {}).get('scope') == 'table' and n.get('operation') not in _LOOP_OPERATIONS
         ]
         table_normalizer_filters = _apply_normalizers(table_normalizers)
         filter_components.extend(table_normalizer_filters)
+
+    # Must run after every normalizer and table split that can write a Hosts page field.
+    filter_components.append(_generate_hosts_page_module_filter())
 
     # Append per-device location and metadata enrichment translate blocks.
     if input_data is not None:
         filter_components.extend(_generate_device_enrichment_filters(input_data))
 
     return filter_components
+
+
+def _generate_hosts_page_module_filter():
+    """Stamp `metricset.module: system` on host metrics documents Kibana can chart.
+
+    Only the host metrics document (`[tsds][category] == "metrics"`) is touched;
+    table rows keep the module set when they were split. A device without any of
+    `HOSTS_PAGE_FIELDS` (a UPS or PDU, say) stays `snmp` and off the Hosts page.
+
+    A bare field reference in a Logstash condition is true for any value but
+    `false`, so a CPU of 0 still counts.
+
+    Returns:
+        Logstash `if` component dict.
+
+    Example:
+        >>> f = _generate_hosts_page_module_filter()
+        >>> '[system][load][1]' in f['config']['condition']
+        True
+    """
+    checks = " or ".join(_format_field_name(field) for field in HOSTS_PAGE_FIELDS)
+    return {
+        "id": "filter_hosts_page_module",
+        "type": "filter",
+        "plugin": "if",
+        "config": {
+            "condition": f"[tsds][category] == \"metrics\" and ({checks})",
+            "plugins": [
+                {
+                    "id": "filter_hosts_page_module_set",
+                    "type": "filter",
+                    "plugin": "mutate",
+                    "config": {
+                        "replace": {"[metricset][module]": "system"}
+                    },
+                }
+            ],
+        },
+    }
 
 
 def _parse_ssl_certificate_authorities(value):
@@ -1366,6 +1425,8 @@ def _ruby_keep_when_statements(table_data):
     inject Ruby.
 
     `table_data['keep_when']` shape: `{"column": "type", "equals": ["10"]}`.
+    Add `"keep_column": true` to leave the discriminator on the row instead of
+    dropping it.
     """
     if not isinstance(table_data, dict):
         return ''
@@ -1384,8 +1445,12 @@ def _ruby_keep_when_statements(table_data):
     if not values:
         return ''
     quoted = ', '.join(f'"{v}"' for v in values)
+    if keep_when.get('keep_column') is True:
+        read_expr = f'row["{column}"]'
+    else:
+        read_expr = f'row.delete("{column}")'
     return (
-        f'    _keep_v = row.delete("{column}")\n'
+        f'    _keep_v = {read_expr}\n'
         f'    next unless [{quoted}].include?(_keep_v.to_s)'
     )
 
@@ -1395,18 +1460,32 @@ def _generate_table_split_filters(oid_mappings, average_normalizers=None):
 
     Each table becomes a ruby filter that renames OID keys, optionally applies
     `keep_when`, clones a LogStash::Event per row, and removes the raw table from
-    the original event. Average normalizers accumulate inside that loop and write
-    scalars onto the metrics doc after the table array is removed.
+    the original event. `average` and `sum_column` normalizers accumulate inside
+    that loop and write scalars onto the metrics doc after the table array is
+    removed.
+
+    Rows from tables named `system.*` are stamped `metricset.module: system` so
+    Kibana's Hosts page (which filters on that module) includes them; all other
+    rows keep `metricset.module: snmp`.
 
     Args:
         oid_mappings: OID maps; only `table` is used.
-        average_normalizers: Optional average normalizer configs.
+        average_normalizers: Optional `average` and `sum_column` normalizer
+            configs. Other operations are ignored.
 
     Returns:
         List of ruby filter dicts, one per table with columns.
+
+    Examples:
+        >>> filters = _generate_table_split_filters(
+        ...     {'table': {'system.filesystem': {'columns': {'index': '1.3.6.1.2.1.25.2.3.1.1'}}}})
+        >>> '"module" => "system"' in filters[0]['config']['code']
+        True
     """
     special_filters = []
-    average_normalizers = average_normalizers or []
+    loop_normalizers = average_normalizers or []
+    average_normalizers = [n for n in loop_normalizers if n.get('operation', 'average') == 'average']
+    sum_normalizers = [n for n in loop_normalizers if n.get('operation') == 'sum_column']
 
     # Generate dynamic table splitters for all tables in oid_mappings
     for table_name, table_data in oid_mappings.get('table', {}).items():
@@ -1450,6 +1529,19 @@ def _generate_table_split_filters(oid_mappings, average_normalizers=None):
                 # Build post-loop event.set calls (written after event.remove so the
                 # raw table array is gone and the namespace is free for scalar fields).
                 avg_post_loop = _ruby_avg_post_loop(table_averages)
+
+                table_sums = [
+                    n for n in sum_normalizers
+                    if n.get('target', {}).get('field', '').startswith(table_name + '.')
+                ]
+                sum_pre_loop = _ruby_sum_pre_loop(table_sums)
+                sum_in_loop = _ruby_sum_in_loop(table_sums, table_name)
+                sum_post_loop = _ruby_sum_post_loop(table_sums)
+                avg_pre_loop = '\n'.join(s for s in (avg_pre_loop, sum_pre_loop) if s)
+                avg_in_loop = '\n'.join(s for s in (avg_in_loop, sum_in_loop) if s)
+                avg_post_loop = '\n'.join(s for s in (avg_post_loop, sum_post_loop) if s)
+
+                row_module = "system" if table_name.startswith("system.") else "snmp"
                 keep_when_statements = _ruby_keep_when_statements(table_data)
 
                 # Build the Ruby code for this table
@@ -1460,6 +1552,7 @@ def _generate_table_split_filters(oid_mappings, average_normalizers=None):
                     f"  host_hostname = event.get(\"[host][hostname]\")\n"
                     f"  host_sysname = event.get(\"[host][sysname]\")\n"
                     f"  host_polled_address = event.get(\"[host][polled_address]\")\n"
+                    f"  host_ip = event.get(\"[host][ip]\")\n"
                     f"  host_type = event.get(\"[host][type]\")\n"
                     f"  host_device_template = event.get(\"[host][device_template]\")\n"
                     f"  observer_vendor = event.get(\"[observer][vendor]\")\n"
@@ -1477,13 +1570,14 @@ def _generate_table_split_filters(oid_mappings, average_normalizers=None):
                     f"      \"@timestamp\" => timestamp,\n"
                     f"      \"host\" => {{ \"name\" => host_name, \"hostname\" => host_hostname, \"type\" => host_type }},\n"
                     f"      \"observer\" => {{ \"vendor\" => observer_vendor, \"os\" => {{ \"full\" => observer_os_full }} }},\n"
-                    f"      \"metricset\" => {{ \"module\" => \"snmp\" }},\n"
+                    f"      \"metricset\" => {{ \"module\" => \"{row_module}\" }},\n"
                     f"      \"event\" => {{ \"category\" => \"{table_name.lower()}\" }}\n"
                     f"    }})\n"
                     f"    new_event.set(\"[network][name]\", network_name)\n"
                     f"    new_event.set(\"[host][device_template]\", host_device_template) if host_device_template\n"
                     f"    new_event.set(\"[host][sysname]\", host_sysname) if host_sysname\n"
                     f"    new_event.set(\"[host][polled_address]\", host_polled_address) if host_polled_address\n"
+                    f"    new_event.set(\"[host][ip]\", host_ip) if host_ip\n"
                     f"    new_event.set(\"{table_set_path}\", row)\n"
                     f"    new_event.set(\"[tsds][category]\", \"{table_name.lower()}\")\n"
                     f"    new_event.set(\"[tsds][index]\", _row_counter.to_s)\n"
@@ -1496,13 +1590,14 @@ def _generate_table_split_filters(oid_mappings, average_normalizers=None):
                     f"end"
                 )
 
+                config = {"code": ruby_code}
+                if any(n.get('params', {}).get('mode') == 'delta' for n in table_sums):
+                    config = {"init": COUNTER_DELTA_RUBY_INIT, "code": ruby_code}
                 special_filters.append({
                     "id": f"comp_table_split_{table_name}",
                     "type": "filter",
                     "plugin": "ruby",
-                    "config": {
-                        "code": ruby_code
-                    }
+                    "config": config
                 })
 
     return special_filters
@@ -1600,6 +1695,124 @@ def _avg_var_name(normalizer):
     # Fallback using target field if output_field is somehow missing
     target_field = normalizer.get('target', {}).get('field', 'unknown').replace('.', '_')
     return f"avg_{target_field}"
+
+
+def _sum_var_name(normalizer):
+    """Build a safe Ruby local prefix for a `sum_column` normalizer.
+
+    Examples:
+        >>> _sum_var_name({'params': {'output_field': 'host.network.ingress.bytes'}})
+        'sum_host_network_ingress_bytes'
+    """
+    return 'sum_' + _avg_var_name(normalizer)[len('avg_'):]
+
+
+def _valid_sum_normalizers(table_sums):
+    """Return `sum_column` normalizers whose output and target fields are safe to embed."""
+    return [
+        n for n in table_sums
+        if _SAFE_FIELD_RE.match(n.get('params', {}).get('output_field', '').strip())
+        and _SAFE_FIELD_RE.match(n.get('target', {}).get('field', ''))
+    ]
+
+
+def _ruby_sum_pre_loop(table_sums):
+    """Declare Ruby sum/count/incomplete locals for `sum_column` normalizers.
+
+    Args:
+        table_sums: `sum_column` normalizer configs for this table.
+
+    Returns:
+        Indented Ruby, or empty string when there are no sums.
+    """
+    lines = []
+    for normalizer in _valid_sum_normalizers(table_sums):
+        var = _sum_var_name(normalizer)
+        lines.append(f"  {var}_sum = 0.0")
+        lines.append(f"  {var}_count = 0")
+        lines.append(f"  {var}_incomplete = false")
+    return "\n".join(lines)
+
+
+def _ruby_sum_in_loop(table_sums, table_name):
+    """Accumulate `sum_column` inputs inside the row loop after column rename.
+
+    With `params.mode == "delta"` each row contributes the change in its counter
+    since the previous poll (keyed by network, polled address, table, row
+    `index` column and field). A row with no previous sample, or whose counter
+    went backwards, marks the sum incomplete so nothing is written that poll.
+    With `mode == "count"` each row holding a numeric value adds 1 (e.g. CPU
+    cores from processor-table rows). Rows matching `exclude_column` /
+    `exclude_values` are skipped.
+
+    Args:
+        table_sums: `sum_column` normalizer configs for this table.
+        table_name: Table key from `oid_mappings` (may contain dots).
+
+    Returns:
+        Indented Ruby, or empty string when there are no sums.
+    """
+    lines = []
+    for normalizer in _valid_sum_normalizers(table_sums):
+        params = normalizer.get('params', {})
+        target_field = normalizer['target']['field']
+        row_expr = _ruby_row_value_expr(table_name, target_field)
+        var = _sum_var_name(normalizer)
+
+        guard = ''
+        exclude_column = str(params.get('exclude_column', '') or '').strip()
+        exclude_values = [
+            str(v) for v in (params.get('exclude_values') or [])
+            if _KEEP_WHEN_VALUE_RE.match(str(v))
+        ]
+        if exclude_column and _KEEP_WHEN_COLUMN_RE.match(exclude_column) and exclude_values:
+            quoted = ', '.join(f'"{v}"' for v in exclude_values)
+            guard = f' unless [{quoted}].include?(row["{exclude_column}"].to_s)'
+
+        lines.append(f"    begin")
+        lines.append(f"      _sum_f = Float({row_expr})")
+        if params.get('mode') == 'count':
+            lines.append(f"      _sum_f = 1.0")
+        if params.get('mode') == 'delta':
+            lines.append(
+                f'      _sum_key = "#{{network_name}}|#{{host_polled_address}}|{table_name}|'
+                f'#{{row["index"] || _row_counter}}|{target_field}"'
+            )
+            lines.append(f"      _sum_f = lsui_counter_delta(_sum_key, _sum_f)")
+            lines.append(f"      if _sum_f.nil?")
+            lines.append(f"        {var}_incomplete = true{guard}")
+            lines.append(f"      else")
+            lines.append(f"        {var}_sum += _sum_f{guard}")
+            lines.append(f"        {var}_count += 1{guard}")
+            lines.append(f"      end")
+        else:
+            lines.append(f"      {var}_sum += _sum_f{guard}")
+            lines.append(f"      {var}_count += 1{guard}")
+        lines.append(f"    rescue ArgumentError, TypeError")
+        lines.append(f"    end")
+    return "\n".join(lines)
+
+
+def _ruby_sum_post_loop(table_sums):
+    """Write computed `sum_column` totals onto the original event.
+
+    Args:
+        table_sums: `sum_column` normalizer configs for this table.
+
+    Returns:
+        Indented Ruby, or empty string when there are no sums.
+    """
+    lines = []
+    for normalizer in _valid_sum_normalizers(table_sums):
+        params = normalizer.get('params', {})
+        output_path = _format_field_name(params['output_field'].strip())
+        var = _sum_var_name(normalizer)
+        value = f"{var}_sum"
+        multiply_value = params.get('multiply_value')
+        if multiply_value is not None and float(multiply_value) != 1.0:
+            value = f"({var}_sum * {float(multiply_value)})"
+        lines.append(f"  event.set(\"{output_path}\", {value}) if {var}_count > 0 && !{var}_incomplete")
+    return "\n".join(lines)
 
 
 def _generate_snmp_error_cleanup_filter():

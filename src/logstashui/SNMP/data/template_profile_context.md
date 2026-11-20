@@ -23,6 +23,852 @@ substrings matched against a device's `sysDescr` for auto-assignment.
 > profile names the template should include, and provide at least one
 > `matching_rules` entry if the target device exposes a recognisable `sysDescr`.
 
+### arista_eos
+
+```json
+{
+  "name": "arista_eos",
+  "description": "System identity, full interface counters, LLDP neighbors, OSPF adjacencies, per-sensor temperature/fan/PSU readings via ENTITY-SENSOR-MIB, PSU inventory, and CPU/memory from HOST-RESOURCES-MIB for Arista EOS switches and routers (DCS-7xxx series).",
+  "vendor": "Arista Networks",
+  "product": "Any",
+  "model": "Any",
+  "matching_rules": [
+    "Arista Networks EOS",
+    "Arista Networks DCS",
+    "Arista EOS"
+  ]
+}
+```
+
+**Profiles included in `arista_eos`:**
+
+#### `generic_system`
+
+```json
+{
+  "name": "generic_system",
+  "description": "Core system identity: hostname, description, uptime, object ID, location, and contact.",
+  "product": "Any",
+  "vendor": "Any",
+  "model": "Any",
+  "get": {
+    "observer.sys_descr": "1.3.6.1.2.1.1.1.0",
+    "observer.object_id": "1.3.6.1.2.1.1.2.0",
+    "host.sysname": "1.3.6.1.2.1.1.5.0",
+    "host.uptime": "1.3.6.1.2.1.1.3.0",
+    "host.contact": "1.3.6.1.2.1.1.4.0"
+  },
+  "walk": {},
+  "table": {}
+}
+```
+
+#### `generic_interfaces`
+
+```json
+{
+  "name": "generic_interfaces",
+  "description": "Interface admin/oper status, speed, MAC, MTU, and traffic/error counters for all SNMP-capable devices.",
+  "product": "Any",
+  "vendor": "Any",
+  "model": "Any",
+  "get": {},
+  "walk": {},
+  "table": {
+    "interface": {
+      "columns": {
+        "index": "1.3.6.1.2.1.2.2.1.1",
+        "name": "1.3.6.1.2.1.2.2.1.2",
+        "type": "1.3.6.1.2.1.2.2.1.3",
+        "admin_status": "1.3.6.1.2.1.2.2.1.7",
+        "oper_status": "1.3.6.1.2.1.2.2.1.8",
+        "alt_name": "1.3.6.1.2.1.31.1.1.1.1",
+        "alias": "1.3.6.1.2.1.31.1.1.1.18",
+        "speed": "1.3.6.1.2.1.2.2.1.5",
+        "speed_high_mbps": "1.3.6.1.2.1.31.1.1.1.15",
+        "mac": "1.3.6.1.2.1.2.2.1.6",
+        "mtu": "1.3.6.1.2.1.2.2.1.4",
+        "in_octets": "1.3.6.1.2.1.31.1.1.1.6",
+        "out_octets": "1.3.6.1.2.1.31.1.1.1.10",
+        "in_broadcast_pkts": "1.3.6.1.2.1.31.1.1.1.9",
+        "out_broadcast_pkts": "1.3.6.1.2.1.31.1.1.1.13",
+        "in_unicast_pkts": "1.3.6.1.2.1.31.1.1.1.7",
+        "out_unicast_pkts": "1.3.6.1.2.1.31.1.1.1.11",
+        "in_multicast_pkts": "1.3.6.1.2.1.31.1.1.1.8",
+        "out_multicast_pkts": "1.3.6.1.2.1.31.1.1.1.12",
+        "last_change": "1.3.6.1.2.1.2.2.1.9",
+        "vlan_id": "1.3.6.1.2.1.17.7.1.4.5.1.1",
+        "in_errors": "1.3.6.1.2.1.2.2.1.14",
+        "out_errors": "1.3.6.1.2.1.2.2.1.20",
+        "in_discards": "1.3.6.1.2.1.2.2.1.13",
+        "out_discards": "1.3.6.1.2.1.2.2.1.19"
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.in_octets"
+      },
+      "params": {
+        "output_field": "host.network.ingress.bytes",
+        "mode": "delta",
+        "exclude_column": "type",
+        "exclude_values": [
+          "24"
+        ]
+      }
+    },
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.out_octets"
+      },
+      "params": {
+        "output_field": "host.network.egress.bytes",
+        "mode": "delta",
+        "exclude_column": "type",
+        "exclude_values": [
+          "24"
+        ]
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.admin_status"
+      },
+      "params": {
+        "mapping": {
+          "1": "UP",
+          "2": "DOWN",
+          "3": "TESTING"
+        }
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.oper_status"
+      },
+      "params": {
+        "mapping": {
+          "1": "UP",
+          "2": "DOWN",
+          "3": "TESTING",
+          "4": "UNKNOWN",
+          "5": "DORMANT",
+          "6": "NOT_PRESENT",
+          "7": "LOWER_LAYER_DOWN"
+        }
+      }
+    }
+  ]
+}
+```
+
+#### `generic_lldp`
+
+```json
+{
+  "name": "generic_lldp",
+  "description": "LLDP neighbor table: device ID, platform, port, capabilities, and management address per local interface.",
+  "product": "Any",
+  "vendor": "Any",
+  "model": "Any",
+  "get": {
+    "network.local.chassis_id_subtype": "1.0.8802.1.1.2.1.3.1.0",
+    "network.local.chassis_id": "1.0.8802.1.1.2.1.3.2.0",
+    "network.local.capabilities_supported": "1.0.8802.1.1.2.1.3.5.0",
+    "network.local.capabilities_enabled": "1.0.8802.1.1.2.1.3.6.0",
+    "network.discovery.last_change": "1.0.8802.1.1.2.1.2.1.0",
+    "network.discovery.inserts": "1.0.8802.1.1.2.1.2.2.0",
+    "network.discovery.deletes": "1.0.8802.1.1.2.1.2.3.0",
+    "network.discovery.drops": "1.0.8802.1.1.2.1.2.4.0",
+    "network.discovery.ageouts": "1.0.8802.1.1.2.1.2.5.0"
+  },
+  "walk": {},
+  "table": {
+    "network.local_port": {
+      "columns": {
+        "index": "1.0.8802.1.1.2.1.3.7.1.1",
+        "id_subtype": "1.0.8802.1.1.2.1.3.7.1.2",
+        "id": "1.0.8802.1.1.2.1.3.7.1.3",
+        "description": "1.0.8802.1.1.2.1.3.7.1.4"
+      }
+    },
+    "network.neighbor": {
+      "columns": {
+        "local_interface.index": "1.0.8802.1.1.2.1.4.1.1.2",
+        "index": "1.0.8802.1.1.2.1.4.1.1.3",
+        "device_id": "1.0.8802.1.1.2.1.4.1.1.9",
+        "platform": "1.0.8802.1.1.2.1.4.1.1.10",
+        "port": "1.0.8802.1.1.2.1.4.1.1.7",
+        "port_description": "1.0.8802.1.1.2.1.4.1.1.8",
+        "capabilities": "1.0.8802.1.1.2.1.4.1.1.12",
+        "capabilities_supported": "1.0.8802.1.1.2.1.4.1.1.11",
+        "chassis_id_subtype": "1.0.8802.1.1.2.1.4.1.1.4",
+        "chassis_id": "1.0.8802.1.1.2.1.4.1.1.5",
+        "port_id_subtype": "1.0.8802.1.1.2.1.4.1.1.6"
+      }
+    },
+    "network.neighbor_address": {
+      "columns": {
+        "addr_subtype": "1.0.8802.1.1.2.1.4.2.1.1",
+        "address": "1.0.8802.1.1.2.1.4.2.1.2",
+        "if_subtype": "1.0.8802.1.1.2.1.4.2.1.3",
+        "if_id": "1.0.8802.1.1.2.1.4.2.1.4",
+        "object_id": "1.0.8802.1.1.2.1.4.2.1.5"
+      }
+    }
+  }
+}
+```
+
+#### `generic_ospf`
+
+```json
+{
+  "name": "generic_ospf",
+  "description": "OSPF neighbor adjacencies: state, router ID, priority, and retransmit count.",
+  "vendor": "Any",
+  "product": "Any",
+  "model": "Any",
+  "get": {},
+  "walk": {},
+  "table": {
+    "ospf_neighbor": {
+      "columns": {
+        "neighbor_ip": "1.3.6.1.2.1.14.10.1.1",
+        "router_id": "1.3.6.1.2.1.14.10.1.3",
+        "priority": "1.3.6.1.2.1.14.10.1.5",
+        "state": "1.3.6.1.2.1.14.10.1.6",
+        "retrans_count": "1.3.6.1.2.1.14.10.1.7"
+      }
+    }
+  }
+}
+```
+
+#### `generic_entity_sensor`
+
+```json
+{
+  "name": "generic_entity_sensor",
+  "description": "Physical sensor readings (temp, fan speed, power, current, voltage) from any ENTITY-SENSOR-MIB compliant device. Description is joined from ENTITY-MIB entPhysicalDescr using the shared entity index.",
+  "vendor": "Any",
+  "product": "Any",
+  "model": "Any",
+  "get": {},
+  "walk": {},
+  "table": {
+    "component.sensor": {
+      "columns": {
+        "description": "1.3.6.1.2.1.47.1.1.1.1.2",
+        "type": "1.3.6.1.2.1.99.1.1.1.1",
+        "scale": "1.3.6.1.2.1.99.1.1.1.2",
+        "precision": "1.3.6.1.2.1.99.1.1.1.3",
+        "value": "1.3.6.1.2.1.99.1.1.1.4",
+        "oper_status": "1.3.6.1.2.1.99.1.1.1.5"
+      }
+    }
+  }
+}
+```
+
+#### `generic_entity_psu`
+
+```json
+{
+  "name": "generic_entity_psu",
+  "description": "Power supply inventory from ENTITY-MIB for any device that exposes entPhysicalClass=6 (powerSupply) entries. Yields PSU name, description, and serial number. Operational status (health/state) is NOT available from this profile; it requires CISCO-ENVMON-MIB or CISCO-ENTITY-FRU-CONTROL-MIB which must be added separately when present.",
+  "vendor": "Any",
+  "product": "Any",
+  "model": "Any",
+  "get": {},
+  "walk": {},
+  "table": {
+    "component.power_supply": {
+      "columns": {
+        "type": "1.3.6.1.2.1.47.1.1.1.1.5",
+        "location": "1.3.6.1.2.1.47.1.1.1.1.7",
+        "description": "1.3.6.1.2.1.47.1.1.1.1.2",
+        "serial_no": "1.3.6.1.2.1.47.1.1.1.1.11"
+      },
+      "keep_when": {
+        "column": "type",
+        "equals": [
+          "6"
+        ]
+      }
+    }
+  }
+}
+```
+
+#### `generic_host_system_metrics`
+
+```json
+{
+  "name": "generic_host_system_metrics",
+  "description": "CPU load and storage usage from HOST-RESOURCES-MIB, supported on Linux, Windows, and most embedded devices. Disks go to system.filesystem (sizes in bytes) and RAM/virtual-memory/other storage to system.storage, so Kibana's Hosts page disk usage only sees real disks.",
+  "vendor": "Any",
+  "product": "Any",
+  "model": "Any",
+  "get": {
+    "host.num_users": "1.3.6.1.2.1.25.1.5.0",
+    "host.num_processes": "1.3.6.1.2.1.25.1.6.0",
+    "system.memory.physical.total.kb": "1.3.6.1.2.1.25.2.2.0"
+  },
+  "walk": {},
+  "table": {
+    "component.cpu": {
+      "columns": {
+        "load_pct": "1.3.6.1.2.1.25.3.3.1.2"
+      }
+    },
+    "system.filesystem": {
+      "columns": {
+        "index": "1.3.6.1.2.1.25.2.3.1.1",
+        "type": "1.3.6.1.2.1.25.2.3.1.2",
+        "mount_point": "1.3.6.1.2.1.25.2.3.1.3",
+        "allocation_units": "1.3.6.1.2.1.25.2.3.1.4",
+        "total": "1.3.6.1.2.1.25.2.3.1.5",
+        "used.bytes": "1.3.6.1.2.1.25.2.3.1.6"
+      },
+      "keep_when": {
+        "column": "type",
+        "equals": [
+          "1.3.6.1.2.1.25.2.1.4",
+          "1.3.6.1.2.1.25.2.1.10"
+        ],
+        "keep_column": true
+      }
+    },
+    "system.storage": {
+      "columns": {
+        "index": "1.3.6.1.2.1.25.2.3.1.1",
+        "type": "1.3.6.1.2.1.25.2.3.1.2",
+        "mount_point": "1.3.6.1.2.1.25.2.3.1.3",
+        "allocation_units": "1.3.6.1.2.1.25.2.3.1.4",
+        "total": "1.3.6.1.2.1.25.2.3.1.5",
+        "used.bytes": "1.3.6.1.2.1.25.2.3.1.6"
+      },
+      "keep_when": {
+        "column": "type",
+        "equals": [
+          "1.3.6.1.2.1.25.2.1.1",
+          "1.3.6.1.2.1.25.2.1.2",
+          "1.3.6.1.2.1.25.2.1.3",
+          "1.3.6.1.2.1.25.2.1.5",
+          "1.3.6.1.2.1.25.2.1.6",
+          "1.3.6.1.2.1.25.2.1.7",
+          "1.3.6.1.2.1.25.2.1.8",
+          "1.3.6.1.2.1.25.2.1.9"
+        ],
+        "keep_column": true
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.physical.total.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.total"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.physical.total.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.actual.total.bytes"
+      }
+    },
+    {
+      "operation": "average",
+      "target": {
+        "scope": "table",
+        "table": "component.cpu",
+        "field": "component.cpu.load_pct"
+      },
+      "params": {
+        "output_field": "system.cpu.total.norm.pct",
+        "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "component.cpu",
+        "field": "component.cpu.load_pct"
+      },
+      "params": {
+        "output_field": "system.cpu.cores",
+        "mode": "count"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "component.cpu",
+        "field": "component.cpu.load_pct"
+      },
+      "params": {
+        "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.filesystem",
+        "field": "system.filesystem.total"
+      },
+      "params": {
+        "multiply_field": "system.filesystem.allocation_units"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.filesystem",
+        "field": "system.filesystem.used.bytes"
+      },
+      "params": {
+        "multiply_field": "system.filesystem.allocation_units"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.storage",
+        "field": "system.storage.total"
+      },
+      "params": {
+        "multiply_field": "system.storage.allocation_units"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.storage",
+        "field": "system.storage.used.bytes"
+      },
+      "params": {
+        "multiply_field": "system.storage.allocation_units"
+      }
+    },
+    {
+      "operation": "ratio",
+      "target": {
+        "scope": "table",
+        "table": "system.filesystem"
+      },
+      "params": {
+        "value1_field": "system.filesystem.total",
+        "value2_field": "system.filesystem.used.bytes",
+        "divide_output_field": "system.filesystem.used.pct",
+        "difference_output_field": "system.filesystem.free"
+      }
+    },
+    {
+      "operation": "ratio",
+      "target": {
+        "scope": "table",
+        "table": "system.storage"
+      },
+      "params": {
+        "value1_field": "system.storage.total",
+        "value2_field": "system.storage.used.bytes",
+        "divide_output_field": "system.storage.used.pct"
+      }
+    }
+  ]
+}
+```
+
+#### `arista_eos`
+
+```json
+{
+  "name": "arista_eos",
+  "description": "Arista EOS switch/router identity: model, serial number, EOS software version, and hardware revision from the ENTITY-MIB chassis entry (index 1). Complements generic_system, generic_interfaces, generic_lldp, generic_entity_sensor, generic_entity_psu, and generic_host_system_metrics.",
+  "vendor": "Arista Networks",
+  "product": "Any",
+  "model": "Any",
+  "get": {
+    "observer.model": "1.3.6.1.2.1.47.1.1.1.1.13.1",
+    "observer.serial_number": "1.3.6.1.2.1.47.1.1.1.1.11.1",
+    "observer.firmware_version": "1.3.6.1.2.1.47.1.1.1.1.10.1",
+    "observer.hardware_version": "1.3.6.1.2.1.47.1.1.1.1.8.1"
+  },
+  "walk": {},
+  "table": {}
+}
+```
+
+### aruba_wireless_controller
+
+```json
+{
+  "name": "aruba_wireless_controller",
+  "description": "System health, CPU, memory, filesystem, total AP and client counts, per-AP status, and per-radio band/channel for Aruba 7000/7200-series wireless LAN controllers.",
+  "vendor": "Aruba",
+  "product": "7000/7200 Series",
+  "model": "Any",
+  "matching_rules": [
+    "ArubaOS",
+    "Aruba7010",
+    "Aruba7020",
+    "Aruba7205",
+    "Aruba7210",
+    "Aruba7220",
+    "Aruba7240"
+  ]
+}
+```
+
+**Profiles included in `aruba_wireless_controller`:**
+
+#### `generic_system`
+
+```json
+{
+  "name": "generic_system",
+  "description": "Core system identity: hostname, description, uptime, object ID, location, and contact.",
+  "product": "Any",
+  "vendor": "Any",
+  "model": "Any",
+  "get": {
+    "observer.sys_descr": "1.3.6.1.2.1.1.1.0",
+    "observer.object_id": "1.3.6.1.2.1.1.2.0",
+    "host.sysname": "1.3.6.1.2.1.1.5.0",
+    "host.uptime": "1.3.6.1.2.1.1.3.0",
+    "host.contact": "1.3.6.1.2.1.1.4.0"
+  },
+  "walk": {},
+  "table": {}
+}
+```
+
+#### `generic_interfaces`
+
+```json
+{
+  "name": "generic_interfaces",
+  "description": "Interface admin/oper status, speed, MAC, MTU, and traffic/error counters for all SNMP-capable devices.",
+  "product": "Any",
+  "vendor": "Any",
+  "model": "Any",
+  "get": {},
+  "walk": {},
+  "table": {
+    "interface": {
+      "columns": {
+        "index": "1.3.6.1.2.1.2.2.1.1",
+        "name": "1.3.6.1.2.1.2.2.1.2",
+        "type": "1.3.6.1.2.1.2.2.1.3",
+        "admin_status": "1.3.6.1.2.1.2.2.1.7",
+        "oper_status": "1.3.6.1.2.1.2.2.1.8",
+        "alt_name": "1.3.6.1.2.1.31.1.1.1.1",
+        "alias": "1.3.6.1.2.1.31.1.1.1.18",
+        "speed": "1.3.6.1.2.1.2.2.1.5",
+        "speed_high_mbps": "1.3.6.1.2.1.31.1.1.1.15",
+        "mac": "1.3.6.1.2.1.2.2.1.6",
+        "mtu": "1.3.6.1.2.1.2.2.1.4",
+        "in_octets": "1.3.6.1.2.1.31.1.1.1.6",
+        "out_octets": "1.3.6.1.2.1.31.1.1.1.10",
+        "in_broadcast_pkts": "1.3.6.1.2.1.31.1.1.1.9",
+        "out_broadcast_pkts": "1.3.6.1.2.1.31.1.1.1.13",
+        "in_unicast_pkts": "1.3.6.1.2.1.31.1.1.1.7",
+        "out_unicast_pkts": "1.3.6.1.2.1.31.1.1.1.11",
+        "in_multicast_pkts": "1.3.6.1.2.1.31.1.1.1.8",
+        "out_multicast_pkts": "1.3.6.1.2.1.31.1.1.1.12",
+        "last_change": "1.3.6.1.2.1.2.2.1.9",
+        "vlan_id": "1.3.6.1.2.1.17.7.1.4.5.1.1",
+        "in_errors": "1.3.6.1.2.1.2.2.1.14",
+        "out_errors": "1.3.6.1.2.1.2.2.1.20",
+        "in_discards": "1.3.6.1.2.1.2.2.1.13",
+        "out_discards": "1.3.6.1.2.1.2.2.1.19"
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.in_octets"
+      },
+      "params": {
+        "output_field": "host.network.ingress.bytes",
+        "mode": "delta",
+        "exclude_column": "type",
+        "exclude_values": [
+          "24"
+        ]
+      }
+    },
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.out_octets"
+      },
+      "params": {
+        "output_field": "host.network.egress.bytes",
+        "mode": "delta",
+        "exclude_column": "type",
+        "exclude_values": [
+          "24"
+        ]
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.admin_status"
+      },
+      "params": {
+        "mapping": {
+          "1": "UP",
+          "2": "DOWN",
+          "3": "TESTING"
+        }
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.oper_status"
+      },
+      "params": {
+        "mapping": {
+          "1": "UP",
+          "2": "DOWN",
+          "3": "TESTING",
+          "4": "UNKNOWN",
+          "5": "DORMANT",
+          "6": "NOT_PRESENT",
+          "7": "LOWER_LAYER_DOWN"
+        }
+      }
+    }
+  ]
+}
+```
+
+#### `aruba_wireless_controller`
+
+```json
+{
+  "name": "aruba_wireless_controller",
+  "description": "System identity, CPU utilization, memory, filesystem usage, total AP and client counts, per-AP name/IP/status, and per-radio band/channel for Aruba 7000/7200-series wireless LAN controllers running ArubaOS. Uses the Aruba enterprise MIB (1.3.6.1.4.1.14823.2.2.1).",
+  "vendor": "Aruba",
+  "product": "7000/7200 Series Wireless Controller",
+  "model": "Any",
+  "get": {
+    "observer.serial_number": "1.3.6.1.4.1.14823.2.2.1.2.1.11.0",
+    "observer.firmware_version": "1.3.6.1.4.1.14823.2.2.1.2.1.28.0",
+    "wireless.controller.ap_count": "1.3.6.1.4.1.14823.2.2.1.2.1.21.0",
+    "wireless.controller.client_count": "1.3.6.1.4.1.14823.2.2.1.2.1.23.0",
+    "system.memory.actual.total.kb": "1.3.6.1.4.1.14823.2.2.1.1.1.11.1.2.1",
+    "system.memory.actual.used.kb": "1.3.6.1.4.1.14823.2.2.1.1.1.11.1.3.1",
+    "system.memory.actual.available.kb": "1.3.6.1.4.1.14823.2.2.1.1.1.11.1.4.1"
+  },
+  "walk": {},
+  "table": {
+    "component.cpu": {
+      "columns": {
+        "name": "1.3.6.1.4.1.14823.2.2.1.1.1.9.1.2",
+        "load_pct": "1.3.6.1.4.1.14823.2.2.1.1.1.9.1.3"
+      }
+    },
+    "system.filesystem": {
+      "columns": {
+        "mount_point": "1.3.6.1.4.1.14823.2.2.1.1.1.10.1.5",
+        "total": "1.3.6.1.4.1.14823.2.2.1.1.1.10.1.3",
+        "used.bytes": "1.3.6.1.4.1.14823.2.2.1.1.1.10.1.4"
+      }
+    },
+    "wireless.ap": {
+      "columns": {
+        "ip": "1.3.6.1.4.1.14823.2.2.1.5.2.1.4.1.2",
+        "name": "1.3.6.1.4.1.14823.2.2.1.5.2.1.4.1.3",
+        "serial": "1.3.6.1.4.1.14823.2.2.1.5.2.1.4.1.6",
+        "status": "1.3.6.1.4.1.14823.2.2.1.5.2.1.4.1.19"
+      }
+    },
+    "wireless.ap.radio": {
+      "columns": {
+        "band": "1.3.6.1.4.1.14823.2.2.1.5.2.1.5.1.2",
+        "channel": "1.3.6.1.4.1.14823.2.2.1.5.2.1.5.1.3"
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "ratio",
+      "target": {
+        "scope": "get"
+      },
+      "params": {
+        "value1_field": "system.memory.actual.total.kb",
+        "value2_field": "system.memory.actual.available.kb",
+        "complement_ratio_output_field": "system.memory.actual.used.pct"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.actual.total.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.total"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.actual.used.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.actual.used.bytes"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.actual.available.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.actual.free"
+      }
+    },
+    {
+      "operation": "average",
+      "target": {
+        "scope": "table",
+        "table": "component.cpu",
+        "field": "component.cpu.load_pct"
+      },
+      "params": {
+        "output_field": "system.cpu.total.norm.pct",
+        "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "component.cpu",
+        "field": "component.cpu.load_pct"
+      },
+      "params": {
+        "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.filesystem",
+        "field": "system.filesystem.total"
+      },
+      "params": {
+        "multiply_value": 1048576
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.filesystem",
+        "field": "system.filesystem.used.bytes"
+      },
+      "params": {
+        "multiply_value": 1048576
+      }
+    },
+    {
+      "operation": "ratio",
+      "target": {
+        "scope": "table",
+        "table": "system.filesystem"
+      },
+      "params": {
+        "value1_field": "system.filesystem.total",
+        "value2_field": "system.filesystem.used.bytes",
+        "divide_output_field": "system.filesystem.used.pct"
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "table",
+        "table": "wireless.ap",
+        "field": "wireless.ap.status"
+      },
+      "params": {
+        "mapping": {
+          "1": "up",
+          "2": "down"
+        }
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "table",
+        "table": "wireless.ap.radio",
+        "field": "wireless.ap.radio.band"
+      },
+      "params": {
+        "mapping": {
+          "1": "2.4GHz",
+          "3": "5GHz"
+        }
+      }
+    }
+  ]
+}
+```
+
 ### brocade_fc_switch
 
 ```json
@@ -117,6 +963,38 @@ _Profile definition not found in bundled files._
     }
   },
   "normalizers": [
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.in_octets"
+      },
+      "params": {
+        "output_field": "host.network.ingress.bytes",
+        "mode": "delta",
+        "exclude_column": "type",
+        "exclude_values": [
+          "24"
+        ]
+      }
+    },
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.out_octets"
+      },
+      "params": {
+        "output_field": "host.network.egress.bytes",
+        "mode": "delta",
+        "exclude_column": "type",
+        "exclude_values": [
+          "24"
+        ]
+      }
+    },
     {
       "operation": "translate",
       "target": {
@@ -240,7 +1118,7 @@ _Profile definition not found in bundled files._
   "get": {
     "system.cpu.total.norm.pct": "1.3.6.1.4.1.9.2.1.57.0",
     "system.memory.actual.used.bytes": "1.3.6.1.4.1.9.9.48.1.1.1.5.1",
-    "system.memory.actual.free.bytes": "1.3.6.1.4.1.9.9.48.1.1.1.6.1"
+    "system.memory.actual.free": "1.3.6.1.4.1.9.9.48.1.1.1.6.1"
   },
   "walk": {},
   "table": {},
@@ -262,10 +1140,9 @@ _Profile definition not found in bundled files._
       },
       "params": {
         "value1_field": "system.memory.actual.used.bytes",
-        "value2_field": "system.memory.actual.free.bytes",
-        "total_output_field": "system.memory.total.bytes",
-        "ratio1_output_field": "system.memory.actual.used.pct",
-        "ratio2_output_field": "system.memory.actual.free.pct"
+        "value2_field": "system.memory.actual.free",
+        "total_output_field": "system.memory.total",
+        "ratio1_output_field": "system.memory.actual.used.pct"
       }
     }
   ]
@@ -315,6 +1192,38 @@ _Profile definition not found in bundled files._
     }
   },
   "normalizers": [
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.in_octets"
+      },
+      "params": {
+        "output_field": "host.network.ingress.bytes",
+        "mode": "delta",
+        "exclude_column": "type",
+        "exclude_values": [
+          "24"
+        ]
+      }
+    },
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.out_octets"
+      },
+      "params": {
+        "output_field": "host.network.egress.bytes",
+        "mode": "delta",
+        "exclude_column": "type",
+        "exclude_values": [
+          "24"
+        ]
+      }
+    },
     {
       "operation": "translate",
       "target": {
@@ -371,6 +1280,36 @@ _Profile definition not found in bundled files._
   },
   "walk": {},
   "table": {}
+}
+```
+
+#### `generic_entity_psu`
+
+```json
+{
+  "name": "generic_entity_psu",
+  "description": "Power supply inventory from ENTITY-MIB for any device that exposes entPhysicalClass=6 (powerSupply) entries. Yields PSU name, description, and serial number. Operational status (health/state) is NOT available from this profile; it requires CISCO-ENVMON-MIB or CISCO-ENTITY-FRU-CONTROL-MIB which must be added separately when present.",
+  "vendor": "Any",
+  "product": "Any",
+  "model": "Any",
+  "get": {},
+  "walk": {},
+  "table": {
+    "component.power_supply": {
+      "columns": {
+        "type": "1.3.6.1.2.1.47.1.1.1.1.5",
+        "location": "1.3.6.1.2.1.47.1.1.1.1.7",
+        "description": "1.3.6.1.2.1.47.1.1.1.1.2",
+        "serial_no": "1.3.6.1.2.1.47.1.1.1.1.11"
+      },
+      "keep_when": {
+        "column": "type",
+        "equals": [
+          "6"
+        ]
+      }
+    }
+  }
 }
 ```
 
@@ -495,6 +1434,38 @@ _Profile definition not found in bundled files._
   },
   "normalizers": [
     {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.in_octets"
+      },
+      "params": {
+        "output_field": "host.network.ingress.bytes",
+        "mode": "delta",
+        "exclude_column": "type",
+        "exclude_values": [
+          "24"
+        ]
+      }
+    },
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.out_octets"
+      },
+      "params": {
+        "output_field": "host.network.egress.bytes",
+        "mode": "delta",
+        "exclude_column": "type",
+        "exclude_values": [
+          "24"
+        ]
+      }
+    },
+    {
       "operation": "translate",
       "target": {
         "scope": "table",
@@ -614,6 +1585,38 @@ _Profile definition not found in bundled files._
   },
   "normalizers": [
     {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.in_octets"
+      },
+      "params": {
+        "output_field": "host.network.ingress.bytes",
+        "mode": "delta",
+        "exclude_column": "type",
+        "exclude_values": [
+          "24"
+        ]
+      }
+    },
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.out_octets"
+      },
+      "params": {
+        "output_field": "host.network.egress.bytes",
+        "mode": "delta",
+        "exclude_column": "type",
+        "exclude_values": [
+          "24"
+        ]
+      }
+    },
+    {
       "operation": "translate",
       "target": {
         "scope": "table",
@@ -672,23 +1675,22 @@ _Profile definition not found in bundled files._
 }
 ```
 
-### eaton_9px
+### dlink_dgs1210_switch
 
 ```json
 {
-  "name": "eaton_9px",
-  "description": "Battery health, runtime, per-phase power quality, ambient temperature, and active alarms for the Eaton 9PX UPS.",
-  "vendor": "Eaton",
-  "product": "9PX",
+  "name": "dlink_dgs1210_switch",
+  "description": "System identity, interface counters, LLDP neighbors, CPU and memory utilisation, and D-Link-specific firmware version, hardware revision, and serial number for D-Link DGS-1210 series smart managed switches.",
+  "vendor": "D-Link",
+  "product": "DGS-1210",
   "model": "Any",
   "matching_rules": [
-    "9PX",
-    "Eaton 9PX"
+    "DGS-1210"
   ]
 }
 ```
 
-**Profiles included in `eaton_9px`:**
+**Profiles included in `dlink_dgs1210_switch`:**
 
 #### `generic_system`
 
@@ -711,12 +1713,645 @@ _Profile definition not found in bundled files._
 }
 ```
 
-#### `eaton_xups`
+#### `generic_interfaces`
 
 ```json
 {
-  "name": "eaton_xups",
-  "description": "Battery capacity, runtime, per-phase input/output power, load, environment, and active alarms for Eaton UPS devices.",
+  "name": "generic_interfaces",
+  "description": "Interface admin/oper status, speed, MAC, MTU, and traffic/error counters for all SNMP-capable devices.",
+  "product": "Any",
+  "vendor": "Any",
+  "model": "Any",
+  "get": {},
+  "walk": {},
+  "table": {
+    "interface": {
+      "columns": {
+        "index": "1.3.6.1.2.1.2.2.1.1",
+        "name": "1.3.6.1.2.1.2.2.1.2",
+        "type": "1.3.6.1.2.1.2.2.1.3",
+        "admin_status": "1.3.6.1.2.1.2.2.1.7",
+        "oper_status": "1.3.6.1.2.1.2.2.1.8",
+        "alt_name": "1.3.6.1.2.1.31.1.1.1.1",
+        "alias": "1.3.6.1.2.1.31.1.1.1.18",
+        "speed": "1.3.6.1.2.1.2.2.1.5",
+        "speed_high_mbps": "1.3.6.1.2.1.31.1.1.1.15",
+        "mac": "1.3.6.1.2.1.2.2.1.6",
+        "mtu": "1.3.6.1.2.1.2.2.1.4",
+        "in_octets": "1.3.6.1.2.1.31.1.1.1.6",
+        "out_octets": "1.3.6.1.2.1.31.1.1.1.10",
+        "in_broadcast_pkts": "1.3.6.1.2.1.31.1.1.1.9",
+        "out_broadcast_pkts": "1.3.6.1.2.1.31.1.1.1.13",
+        "in_unicast_pkts": "1.3.6.1.2.1.31.1.1.1.7",
+        "out_unicast_pkts": "1.3.6.1.2.1.31.1.1.1.11",
+        "in_multicast_pkts": "1.3.6.1.2.1.31.1.1.1.8",
+        "out_multicast_pkts": "1.3.6.1.2.1.31.1.1.1.12",
+        "last_change": "1.3.6.1.2.1.2.2.1.9",
+        "vlan_id": "1.3.6.1.2.1.17.7.1.4.5.1.1",
+        "in_errors": "1.3.6.1.2.1.2.2.1.14",
+        "out_errors": "1.3.6.1.2.1.2.2.1.20",
+        "in_discards": "1.3.6.1.2.1.2.2.1.13",
+        "out_discards": "1.3.6.1.2.1.2.2.1.19"
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.in_octets"
+      },
+      "params": {
+        "output_field": "host.network.ingress.bytes",
+        "mode": "delta",
+        "exclude_column": "type",
+        "exclude_values": [
+          "24"
+        ]
+      }
+    },
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.out_octets"
+      },
+      "params": {
+        "output_field": "host.network.egress.bytes",
+        "mode": "delta",
+        "exclude_column": "type",
+        "exclude_values": [
+          "24"
+        ]
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.admin_status"
+      },
+      "params": {
+        "mapping": {
+          "1": "UP",
+          "2": "DOWN",
+          "3": "TESTING"
+        }
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.oper_status"
+      },
+      "params": {
+        "mapping": {
+          "1": "UP",
+          "2": "DOWN",
+          "3": "TESTING",
+          "4": "UNKNOWN",
+          "5": "DORMANT",
+          "6": "NOT_PRESENT",
+          "7": "LOWER_LAYER_DOWN"
+        }
+      }
+    }
+  ]
+}
+```
+
+#### `generic_lldp`
+
+```json
+{
+  "name": "generic_lldp",
+  "description": "LLDP neighbor table: device ID, platform, port, capabilities, and management address per local interface.",
+  "product": "Any",
+  "vendor": "Any",
+  "model": "Any",
+  "get": {
+    "network.local.chassis_id_subtype": "1.0.8802.1.1.2.1.3.1.0",
+    "network.local.chassis_id": "1.0.8802.1.1.2.1.3.2.0",
+    "network.local.capabilities_supported": "1.0.8802.1.1.2.1.3.5.0",
+    "network.local.capabilities_enabled": "1.0.8802.1.1.2.1.3.6.0",
+    "network.discovery.last_change": "1.0.8802.1.1.2.1.2.1.0",
+    "network.discovery.inserts": "1.0.8802.1.1.2.1.2.2.0",
+    "network.discovery.deletes": "1.0.8802.1.1.2.1.2.3.0",
+    "network.discovery.drops": "1.0.8802.1.1.2.1.2.4.0",
+    "network.discovery.ageouts": "1.0.8802.1.1.2.1.2.5.0"
+  },
+  "walk": {},
+  "table": {
+    "network.local_port": {
+      "columns": {
+        "index": "1.0.8802.1.1.2.1.3.7.1.1",
+        "id_subtype": "1.0.8802.1.1.2.1.3.7.1.2",
+        "id": "1.0.8802.1.1.2.1.3.7.1.3",
+        "description": "1.0.8802.1.1.2.1.3.7.1.4"
+      }
+    },
+    "network.neighbor": {
+      "columns": {
+        "local_interface.index": "1.0.8802.1.1.2.1.4.1.1.2",
+        "index": "1.0.8802.1.1.2.1.4.1.1.3",
+        "device_id": "1.0.8802.1.1.2.1.4.1.1.9",
+        "platform": "1.0.8802.1.1.2.1.4.1.1.10",
+        "port": "1.0.8802.1.1.2.1.4.1.1.7",
+        "port_description": "1.0.8802.1.1.2.1.4.1.1.8",
+        "capabilities": "1.0.8802.1.1.2.1.4.1.1.12",
+        "capabilities_supported": "1.0.8802.1.1.2.1.4.1.1.11",
+        "chassis_id_subtype": "1.0.8802.1.1.2.1.4.1.1.4",
+        "chassis_id": "1.0.8802.1.1.2.1.4.1.1.5",
+        "port_id_subtype": "1.0.8802.1.1.2.1.4.1.1.6"
+      }
+    },
+    "network.neighbor_address": {
+      "columns": {
+        "addr_subtype": "1.0.8802.1.1.2.1.4.2.1.1",
+        "address": "1.0.8802.1.1.2.1.4.2.1.2",
+        "if_subtype": "1.0.8802.1.1.2.1.4.2.1.3",
+        "if_id": "1.0.8802.1.1.2.1.4.2.1.4",
+        "object_id": "1.0.8802.1.1.2.1.4.2.1.5"
+      }
+    }
+  }
+}
+```
+
+#### `dlink_dgs1210`
+
+```json
+{
+  "name": "dlink_dgs1210",
+  "description": "D-Link DGS-1210 series smart managed switch: firmware version, hardware revision, and serial number from the D-Link enterprise MIB (OID 1.3.6.1.4.1.171.10.76). Complements generic_system, generic_interfaces, and generic_lldp_mib.",
+  "vendor": "D-Link",
+  "product": "DGS-1210",
+  "model": "Any",
+  "get": {
+    "observer.firmware_version": "1.3.6.1.4.1.171.10.76.23.1.3.0",
+    "observer.hardware_version": "1.3.6.1.4.1.171.10.76.23.1.2.0",
+    "observer.serial_number": "1.3.6.1.4.1.171.10.76.23.1.18.0"
+  },
+  "walk": {},
+  "table": {}
+}
+```
+
+#### `dlink_dgs1210_system_metrics`
+
+```json
+{
+  "name": "dlink_dgs1210_system_metrics",
+  "description": "CPU and memory utilisation from the D-Link DGS-1210 private MIB (swDevInfoCPUUtilization and swDevInfoDRAMUsage). Values are integers 0-100; normalizers convert to 0.0-1.0 fractions for system.cpu.total.norm.pct and system.memory.actual.used.pct.",
+  "vendor": "D-Link",
+  "product": "DGS-1210",
+  "model": "Any",
+  "get": {
+    "system.cpu.total.pct": "1.3.6.1.4.1.171.10.76.23.1.20.0",
+    "system.memory.actual.used.pct_raw": "1.3.6.1.4.1.171.10.76.23.1.19.0"
+  },
+  "walk": {},
+  "table": {},
+  "normalizers": [
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.total.pct"
+      },
+      "params": {
+        "multiply_value": 0.01,
+        "output_field": "system.cpu.total.norm.pct"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.actual.used.pct_raw"
+      },
+      "params": {
+        "multiply_value": 0.01,
+        "output_field": "system.memory.actual.used.pct"
+      }
+    }
+  ]
+}
+```
+
+### eastpower_ups
+
+```json
+{
+  "name": "eastpower_ups",
+  "description": "Battery health, runtime, per-phase input/output power, and active alarms for EAST Power (Eastpower) UPS devices using the standard UPS-MIB. The iStars SNMP management card (enterprise OID 1.3.6.1.4.1.40614) exposes full UPS-MIB coverage including bypass, test, and config subtrees. Compatible with EAST EA9080 and similar iStars-managed models.",
+  "vendor": "Eastpower",
+  "product": "Any",
+  "model": "Any",
+  "matching_rules": [
+    "EAST",
+    "iStars",
+    "EA9080",
+    "Eastpower",
+    "40614"
+  ]
+}
+```
+
+**Profiles included in `eastpower_ups`:**
+
+#### `generic_system`
+
+```json
+{
+  "name": "generic_system",
+  "description": "Core system identity: hostname, description, uptime, object ID, location, and contact.",
+  "product": "Any",
+  "vendor": "Any",
+  "model": "Any",
+  "get": {
+    "observer.sys_descr": "1.3.6.1.2.1.1.1.0",
+    "observer.object_id": "1.3.6.1.2.1.1.2.0",
+    "host.sysname": "1.3.6.1.2.1.1.5.0",
+    "host.uptime": "1.3.6.1.2.1.1.3.0",
+    "host.contact": "1.3.6.1.2.1.1.4.0"
+  },
+  "walk": {},
+  "table": {}
+}
+```
+
+#### `generic_ups_mib`
+
+```json
+{
+  "name": "generic_ups_mib",
+  "description": "Device identity (manufacturer, model, and firmware), battery health, runtime, per-phase input/output power, and active alarms via the standard RFC 1628 UPS-MIB (1.3.6.1.2.1.33). Supported by virtually all UPS brands (APC, Eaton, Vertiv, CyberPower, etc.). Battery voltage and current are reported in 0.1V/0.1A units by the MIB and normalised to V/A by multiply normalizers. Output and input phase frequencies are similarly normalised from 0.1 Hz.",
+  "vendor": "Any",
+  "product": "Any",
+  "model": "Any",
+  "get": {
+    "observer.vendor": "1.3.6.1.2.1.33.1.1.1.0",
+    "observer.model": "1.3.6.1.2.1.33.1.1.2.0",
+    "observer.firmware_version": "1.3.6.1.2.1.33.1.1.3.0",
+    "ups.battery.status": "1.3.6.1.2.1.33.1.2.1.0",
+    "ups.battery.seconds_on_battery": "1.3.6.1.2.1.33.1.2.2.0",
+    "ups.battery.time_remaining_minutes": "1.3.6.1.2.1.33.1.2.3.0",
+    "ups.battery.capacity_pct": "1.3.6.1.2.1.33.1.2.4.0",
+    "ups.battery.voltage": "1.3.6.1.2.1.33.1.2.5.0",
+    "ups.battery.current_amps": "1.3.6.1.2.1.33.1.2.6.0",
+    "ups.battery.temperature_c": "1.3.6.1.2.1.33.1.2.7.0",
+    "ups.input.line_bads": "1.3.6.1.2.1.33.1.3.1.0",
+    "ups.input.num_phases": "1.3.6.1.2.1.33.1.3.2.0",
+    "ups.output.source": "1.3.6.1.2.1.33.1.4.1.0",
+    "ups.output.frequency_hz": "1.3.6.1.2.1.33.1.4.2.0",
+    "ups.output.num_phases": "1.3.6.1.2.1.33.1.4.3.0",
+    "ups.alarms.present": "1.3.6.1.2.1.33.1.6.1.0"
+  },
+  "walk": {},
+  "table": {
+    "ups.input.phase": {
+      "columns": {
+        "frequency_hz": "1.3.6.1.2.1.33.1.3.3.1.2",
+        "voltage": "1.3.6.1.2.1.33.1.3.3.1.3",
+        "current_amps": "1.3.6.1.2.1.33.1.3.3.1.4",
+        "power_w": "1.3.6.1.2.1.33.1.3.3.1.5"
+      }
+    },
+    "ups.output.phase": {
+      "columns": {
+        "voltage": "1.3.6.1.2.1.33.1.4.4.1.2",
+        "current_amps": "1.3.6.1.2.1.33.1.4.4.1.3",
+        "power_w": "1.3.6.1.2.1.33.1.4.4.1.4",
+        "load_pct": "1.3.6.1.2.1.33.1.4.4.1.5"
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "get",
+        "field": "ups.battery.status"
+      },
+      "params": {
+        "mapping": {
+          "1": "unknown",
+          "2": "normal",
+          "3": "low_battery",
+          "4": "depleted"
+        }
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "get",
+        "field": "ups.output.source"
+      },
+      "params": {
+        "mapping": {
+          "1": "other",
+          "2": "none",
+          "3": "normal",
+          "4": "bypass",
+          "5": "battery",
+          "6": "booster",
+          "7": "reducer"
+        }
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "ups.battery.voltage"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "ups.battery.current_amps"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "ups.output.frequency_hz"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "ups.input.phase",
+        "field": "ups.input.phase.frequency_hz"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "ups.input.phase",
+        "field": "ups.input.phase.current_amps"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "ups.output.phase",
+        "field": "ups.output.phase.current_amps"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "average",
+      "target": {
+        "scope": "table",
+        "table": "ups.output.phase",
+        "field": "ups.output.phase.load_pct"
+      },
+      "params": {
+        "output_field": "ups.output.load_pct"
+      }
+    }
+  ]
+}
+```
+
+### eaton_ups
+
+```json
+{
+  "name": "eaton_ups",
+  "description": "Battery health, runtime, per-phase input/output power, ambient temperature, and active alarms for Eaton UPS devices (9PX, 9SX, 9E, 93E, 9130, 5PX, and compatible).",
+  "vendor": "Eaton",
+  "product": "Any",
+  "model": "Any",
+  "matching_rules": [
+    "EATON",
+    "Eaton",
+    "9PX",
+    "93E",
+    "9SX",
+    "5PX"
+  ]
+}
+```
+
+**Profiles included in `eaton_ups`:**
+
+#### `generic_system`
+
+```json
+{
+  "name": "generic_system",
+  "description": "Core system identity: hostname, description, uptime, object ID, location, and contact.",
+  "product": "Any",
+  "vendor": "Any",
+  "model": "Any",
+  "get": {
+    "observer.sys_descr": "1.3.6.1.2.1.1.1.0",
+    "observer.object_id": "1.3.6.1.2.1.1.2.0",
+    "host.sysname": "1.3.6.1.2.1.1.5.0",
+    "host.uptime": "1.3.6.1.2.1.1.3.0",
+    "host.contact": "1.3.6.1.2.1.1.4.0"
+  },
+  "walk": {},
+  "table": {}
+}
+```
+
+#### `generic_ups_mib`
+
+```json
+{
+  "name": "generic_ups_mib",
+  "description": "Device identity (manufacturer, model, and firmware), battery health, runtime, per-phase input/output power, and active alarms via the standard RFC 1628 UPS-MIB (1.3.6.1.2.1.33). Supported by virtually all UPS brands (APC, Eaton, Vertiv, CyberPower, etc.). Battery voltage and current are reported in 0.1V/0.1A units by the MIB and normalised to V/A by multiply normalizers. Output and input phase frequencies are similarly normalised from 0.1 Hz.",
+  "vendor": "Any",
+  "product": "Any",
+  "model": "Any",
+  "get": {
+    "observer.vendor": "1.3.6.1.2.1.33.1.1.1.0",
+    "observer.model": "1.3.6.1.2.1.33.1.1.2.0",
+    "observer.firmware_version": "1.3.6.1.2.1.33.1.1.3.0",
+    "ups.battery.status": "1.3.6.1.2.1.33.1.2.1.0",
+    "ups.battery.seconds_on_battery": "1.3.6.1.2.1.33.1.2.2.0",
+    "ups.battery.time_remaining_minutes": "1.3.6.1.2.1.33.1.2.3.0",
+    "ups.battery.capacity_pct": "1.3.6.1.2.1.33.1.2.4.0",
+    "ups.battery.voltage": "1.3.6.1.2.1.33.1.2.5.0",
+    "ups.battery.current_amps": "1.3.6.1.2.1.33.1.2.6.0",
+    "ups.battery.temperature_c": "1.3.6.1.2.1.33.1.2.7.0",
+    "ups.input.line_bads": "1.3.6.1.2.1.33.1.3.1.0",
+    "ups.input.num_phases": "1.3.6.1.2.1.33.1.3.2.0",
+    "ups.output.source": "1.3.6.1.2.1.33.1.4.1.0",
+    "ups.output.frequency_hz": "1.3.6.1.2.1.33.1.4.2.0",
+    "ups.output.num_phases": "1.3.6.1.2.1.33.1.4.3.0",
+    "ups.alarms.present": "1.3.6.1.2.1.33.1.6.1.0"
+  },
+  "walk": {},
+  "table": {
+    "ups.input.phase": {
+      "columns": {
+        "frequency_hz": "1.3.6.1.2.1.33.1.3.3.1.2",
+        "voltage": "1.3.6.1.2.1.33.1.3.3.1.3",
+        "current_amps": "1.3.6.1.2.1.33.1.3.3.1.4",
+        "power_w": "1.3.6.1.2.1.33.1.3.3.1.5"
+      }
+    },
+    "ups.output.phase": {
+      "columns": {
+        "voltage": "1.3.6.1.2.1.33.1.4.4.1.2",
+        "current_amps": "1.3.6.1.2.1.33.1.4.4.1.3",
+        "power_w": "1.3.6.1.2.1.33.1.4.4.1.4",
+        "load_pct": "1.3.6.1.2.1.33.1.4.4.1.5"
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "get",
+        "field": "ups.battery.status"
+      },
+      "params": {
+        "mapping": {
+          "1": "unknown",
+          "2": "normal",
+          "3": "low_battery",
+          "4": "depleted"
+        }
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "get",
+        "field": "ups.output.source"
+      },
+      "params": {
+        "mapping": {
+          "1": "other",
+          "2": "none",
+          "3": "normal",
+          "4": "bypass",
+          "5": "battery",
+          "6": "booster",
+          "7": "reducer"
+        }
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "ups.battery.voltage"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "ups.battery.current_amps"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "ups.output.frequency_hz"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "ups.input.phase",
+        "field": "ups.input.phase.frequency_hz"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "ups.input.phase",
+        "field": "ups.input.phase.current_amps"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "ups.output.phase",
+        "field": "ups.output.phase.current_amps"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "average",
+      "target": {
+        "scope": "table",
+        "table": "ups.output.phase",
+        "field": "ups.output.phase.load_pct"
+      },
+      "params": {
+        "output_field": "ups.output.load_pct"
+      }
+    }
+  ]
+}
+```
+
+#### `eaton_ups`
+
+```json
+{
+  "name": "eaton_ups",
+  "description": "Eaton-specific enrichments on top of generic_ups_mib: identity fields, scalar output load, ambient and remote environment temperature/humidity from XUPS-MIB (1.3.6.1.4.1.534.1), and serial number from the Powerware legacy MIB (1.3.6.1.4.1.705.1). Compatible with Eaton 9PX, 9SX, 9E, 93E, 9130, 5PX, and similar models.",
   "vendor": "Eaton",
   "product": "Any",
   "model": "Any",
@@ -724,42 +2359,34 @@ _Profile definition not found in bundled files._
     "observer.model": "1.3.6.1.4.1.534.1.1.2.0",
     "observer.firmware_version": "1.3.6.1.4.1.534.1.1.3.0",
     "observer.serial_number": "1.3.6.1.4.1.705.1.1.7.0",
-    "ups.battery.time_remaining_seconds": "1.3.6.1.4.1.534.1.2.1.0",
-    "ups.battery.voltage": "1.3.6.1.4.1.534.1.2.2.0",
-    "ups.battery.current_amps": "1.3.6.1.4.1.534.1.2.3.0",
-    "ups.battery.capacity_pct": "1.3.6.1.4.1.534.1.2.4.0",
-    "ups.battery.status": "1.3.6.1.4.1.534.1.2.5.0",
-    "ups.input.frequency_01hz": "1.3.6.1.4.1.534.1.3.1.0",
-    "ups.input.line_bads": "1.3.6.1.4.1.534.1.3.2.0",
-    "ups.input.num_phases": "1.3.6.1.4.1.534.1.3.3.0",
     "ups.input.source": "1.3.6.1.4.1.534.1.3.5.0",
-    "ups.output.num_phases": "1.3.6.1.4.1.534.1.4.3.0",
-    "ups.output.source": "1.3.6.1.4.1.534.1.4.5.0",
-    "ups.output.load_pct": "1.3.6.1.4.1.534.1.4.6.0",
+    "ups.output.load_pct": "1.3.6.1.4.1.534.1.4.1.0",
     "ups.env.temperature_c": "1.3.6.1.4.1.534.1.6.1.0",
-    "ups.env.humidity_pct": "1.3.6.1.4.1.534.1.6.2.0",
-    "ups.alarms.present": "1.3.6.1.4.1.534.1.7.1.0"
+    "ups.env.remote_temperature_c": "1.3.6.1.4.1.534.1.6.3.0",
+    "ups.env.humidity_pct": "1.3.6.1.4.1.534.1.6.2.0"
   },
   "walk": {},
-  "table": {
-    "ups.input.phase": {
-      "columns": {
-        "index": "1.3.6.1.4.1.534.1.3.4.1.1",
-        "voltage": "1.3.6.1.4.1.534.1.3.4.1.2",
-        "current": "1.3.6.1.4.1.534.1.3.4.1.4",
-        "voltage_status": "1.3.6.1.4.1.534.1.3.4.1.5"
-      }
-    },
-    "ups.output.phase": {
-      "columns": {
-        "index": "1.3.6.1.4.1.534.1.4.4.1.1",
-        "voltage": "1.3.6.1.4.1.534.1.4.4.1.2",
-        "current": "1.3.6.1.4.1.534.1.4.4.1.3",
-        "load": "1.3.6.1.4.1.534.1.4.4.1.4",
-        "power": "1.3.6.1.4.1.534.1.4.4.1.5"
+  "table": {},
+  "normalizers": [
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "get",
+        "field": "ups.input.source"
+      },
+      "params": {
+        "mapping": {
+          "1": "other",
+          "2": "none",
+          "3": "normal",
+          "4": "bypass",
+          "5": "battery",
+          "6": "booster",
+          "7": "reducer"
+        }
       }
     }
-  }
+  ]
 }
 ```
 
@@ -768,7 +2395,7 @@ _Profile definition not found in bundled files._
 ```json
 {
   "name": "epson_printer",
-  "description": "System identity and interface counters for Epson network printers.",
+  "description": "System identity, interface counters, memory, ink/supply levels, page count, paper trays, cover status, and active alerts for Epson network printers.",
   "vendor": "Epson",
   "product": "Any",
   "model": "Any",
@@ -824,6 +2451,38 @@ _Profile definition not found in bundled files._
   },
   "normalizers": [
     {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.in_octets"
+      },
+      "params": {
+        "output_field": "host.network.ingress.bytes",
+        "mode": "delta",
+        "exclude_column": "type",
+        "exclude_values": [
+          "24"
+        ]
+      }
+    },
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.out_octets"
+      },
+      "params": {
+        "output_field": "host.network.egress.bytes",
+        "mode": "delta",
+        "exclude_column": "type",
+        "exclude_values": [
+          "24"
+        ]
+      }
+    },
+    {
       "operation": "translate",
       "target": {
         "scope": "table",
@@ -879,6 +2538,461 @@ _Profile definition not found in bundled files._
   },
   "walk": {},
   "table": {}
+}
+```
+
+#### `generic_printer_mib`
+
+```json
+{
+  "name": "generic_printer_mib",
+  "description": "Toner/supply levels, page counts, paper tray capacity, cover status, and active alerts for SNMP-capable printers.",
+  "vendor": "Any",
+  "product": "Any",
+  "model": "Any",
+  "get": {
+    "observer.model": "1.3.6.1.2.1.43.5.1.1.16.1",
+    "observer.serial_number": "1.3.6.1.2.1.43.5.1.1.17.1"
+  },
+  "walk": {},
+  "table": {
+    "printer.supply": {
+      "columns": {
+        "description": "1.3.6.1.2.1.43.11.1.1.6",
+        "unit": "1.3.6.1.2.1.43.11.1.1.7",
+        "capacity_max": "1.3.6.1.2.1.43.11.1.1.8",
+        "level": "1.3.6.1.2.1.43.11.1.1.9"
+      }
+    },
+    "printer.marker": {
+      "columns": {
+        "pages_lifetime": "1.3.6.1.2.1.43.10.2.1.4",
+        "pages_power_on": "1.3.6.1.2.1.43.10.2.1.5"
+      }
+    },
+    "printer.tray": {
+      "columns": {
+        "name": "1.3.6.1.2.1.43.8.2.1.13",
+        "level": "1.3.6.1.2.1.43.8.2.1.9",
+        "capacity_max": "1.3.6.1.2.1.43.8.2.1.10"
+      }
+    },
+    "printer.cover": {
+      "columns": {
+        "description": "1.3.6.1.2.1.43.6.1.1.2",
+        "status": "1.3.6.1.2.1.43.6.1.1.3"
+      }
+    },
+    "printer.alert": {
+      "columns": {
+        "code": "1.3.6.1.2.1.43.15.1.1.2",
+        "description": "1.3.6.1.2.1.43.15.1.1.3"
+      }
+    }
+  }
+}
+```
+
+#### `generic_host_system_metrics`
+
+```json
+{
+  "name": "generic_host_system_metrics",
+  "description": "CPU load and storage usage from HOST-RESOURCES-MIB, supported on Linux, Windows, and most embedded devices. Disks go to system.filesystem (sizes in bytes) and RAM/virtual-memory/other storage to system.storage, so Kibana's Hosts page disk usage only sees real disks.",
+  "vendor": "Any",
+  "product": "Any",
+  "model": "Any",
+  "get": {
+    "host.num_users": "1.3.6.1.2.1.25.1.5.0",
+    "host.num_processes": "1.3.6.1.2.1.25.1.6.0",
+    "system.memory.physical.total.kb": "1.3.6.1.2.1.25.2.2.0"
+  },
+  "walk": {},
+  "table": {
+    "component.cpu": {
+      "columns": {
+        "load_pct": "1.3.6.1.2.1.25.3.3.1.2"
+      }
+    },
+    "system.filesystem": {
+      "columns": {
+        "index": "1.3.6.1.2.1.25.2.3.1.1",
+        "type": "1.3.6.1.2.1.25.2.3.1.2",
+        "mount_point": "1.3.6.1.2.1.25.2.3.1.3",
+        "allocation_units": "1.3.6.1.2.1.25.2.3.1.4",
+        "total": "1.3.6.1.2.1.25.2.3.1.5",
+        "used.bytes": "1.3.6.1.2.1.25.2.3.1.6"
+      },
+      "keep_when": {
+        "column": "type",
+        "equals": [
+          "1.3.6.1.2.1.25.2.1.4",
+          "1.3.6.1.2.1.25.2.1.10"
+        ],
+        "keep_column": true
+      }
+    },
+    "system.storage": {
+      "columns": {
+        "index": "1.3.6.1.2.1.25.2.3.1.1",
+        "type": "1.3.6.1.2.1.25.2.3.1.2",
+        "mount_point": "1.3.6.1.2.1.25.2.3.1.3",
+        "allocation_units": "1.3.6.1.2.1.25.2.3.1.4",
+        "total": "1.3.6.1.2.1.25.2.3.1.5",
+        "used.bytes": "1.3.6.1.2.1.25.2.3.1.6"
+      },
+      "keep_when": {
+        "column": "type",
+        "equals": [
+          "1.3.6.1.2.1.25.2.1.1",
+          "1.3.6.1.2.1.25.2.1.2",
+          "1.3.6.1.2.1.25.2.1.3",
+          "1.3.6.1.2.1.25.2.1.5",
+          "1.3.6.1.2.1.25.2.1.6",
+          "1.3.6.1.2.1.25.2.1.7",
+          "1.3.6.1.2.1.25.2.1.8",
+          "1.3.6.1.2.1.25.2.1.9"
+        ],
+        "keep_column": true
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.physical.total.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.total"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.physical.total.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.actual.total.bytes"
+      }
+    },
+    {
+      "operation": "average",
+      "target": {
+        "scope": "table",
+        "table": "component.cpu",
+        "field": "component.cpu.load_pct"
+      },
+      "params": {
+        "output_field": "system.cpu.total.norm.pct",
+        "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "component.cpu",
+        "field": "component.cpu.load_pct"
+      },
+      "params": {
+        "output_field": "system.cpu.cores",
+        "mode": "count"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "component.cpu",
+        "field": "component.cpu.load_pct"
+      },
+      "params": {
+        "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.filesystem",
+        "field": "system.filesystem.total"
+      },
+      "params": {
+        "multiply_field": "system.filesystem.allocation_units"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.filesystem",
+        "field": "system.filesystem.used.bytes"
+      },
+      "params": {
+        "multiply_field": "system.filesystem.allocation_units"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.storage",
+        "field": "system.storage.total"
+      },
+      "params": {
+        "multiply_field": "system.storage.allocation_units"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.storage",
+        "field": "system.storage.used.bytes"
+      },
+      "params": {
+        "multiply_field": "system.storage.allocation_units"
+      }
+    },
+    {
+      "operation": "ratio",
+      "target": {
+        "scope": "table",
+        "table": "system.filesystem"
+      },
+      "params": {
+        "value1_field": "system.filesystem.total",
+        "value2_field": "system.filesystem.used.bytes",
+        "divide_output_field": "system.filesystem.used.pct",
+        "difference_output_field": "system.filesystem.free"
+      }
+    },
+    {
+      "operation": "ratio",
+      "target": {
+        "scope": "table",
+        "table": "system.storage"
+      },
+      "params": {
+        "value1_field": "system.storage.total",
+        "value2_field": "system.storage.used.bytes",
+        "divide_output_field": "system.storage.used.pct"
+      }
+    }
+  ]
+}
+```
+
+### geist_watchdog
+
+```json
+{
+  "name": "geist_watchdog",
+  "description": "Built-in and external temperature probes, built-in humidity sensor, and device identity for Geist WatchDog environmental monitors (sold under Vertiv).",
+  "vendor": "Vertiv",
+  "product": "WatchDog",
+  "model": "Any",
+  "matching_rules": [
+    "Geist",
+    "WatchDog",
+    "WATCHDOG",
+    "21239"
+  ]
+}
+```
+
+**Profiles included in `geist_watchdog`:**
+
+#### `generic_system`
+
+```json
+{
+  "name": "generic_system",
+  "description": "Core system identity: hostname, description, uptime, object ID, location, and contact.",
+  "product": "Any",
+  "vendor": "Any",
+  "model": "Any",
+  "get": {
+    "observer.sys_descr": "1.3.6.1.2.1.1.1.0",
+    "observer.object_id": "1.3.6.1.2.1.1.2.0",
+    "host.sysname": "1.3.6.1.2.1.1.5.0",
+    "host.uptime": "1.3.6.1.2.1.1.3.0",
+    "host.contact": "1.3.6.1.2.1.1.4.0"
+  },
+  "walk": {},
+  "table": {}
+}
+```
+
+#### `generic_interfaces`
+
+```json
+{
+  "name": "generic_interfaces",
+  "description": "Interface admin/oper status, speed, MAC, MTU, and traffic/error counters for all SNMP-capable devices.",
+  "product": "Any",
+  "vendor": "Any",
+  "model": "Any",
+  "get": {},
+  "walk": {},
+  "table": {
+    "interface": {
+      "columns": {
+        "index": "1.3.6.1.2.1.2.2.1.1",
+        "name": "1.3.6.1.2.1.2.2.1.2",
+        "type": "1.3.6.1.2.1.2.2.1.3",
+        "admin_status": "1.3.6.1.2.1.2.2.1.7",
+        "oper_status": "1.3.6.1.2.1.2.2.1.8",
+        "alt_name": "1.3.6.1.2.1.31.1.1.1.1",
+        "alias": "1.3.6.1.2.1.31.1.1.1.18",
+        "speed": "1.3.6.1.2.1.2.2.1.5",
+        "speed_high_mbps": "1.3.6.1.2.1.31.1.1.1.15",
+        "mac": "1.3.6.1.2.1.2.2.1.6",
+        "mtu": "1.3.6.1.2.1.2.2.1.4",
+        "in_octets": "1.3.6.1.2.1.31.1.1.1.6",
+        "out_octets": "1.3.6.1.2.1.31.1.1.1.10",
+        "in_broadcast_pkts": "1.3.6.1.2.1.31.1.1.1.9",
+        "out_broadcast_pkts": "1.3.6.1.2.1.31.1.1.1.13",
+        "in_unicast_pkts": "1.3.6.1.2.1.31.1.1.1.7",
+        "out_unicast_pkts": "1.3.6.1.2.1.31.1.1.1.11",
+        "in_multicast_pkts": "1.3.6.1.2.1.31.1.1.1.8",
+        "out_multicast_pkts": "1.3.6.1.2.1.31.1.1.1.12",
+        "last_change": "1.3.6.1.2.1.2.2.1.9",
+        "vlan_id": "1.3.6.1.2.1.17.7.1.4.5.1.1",
+        "in_errors": "1.3.6.1.2.1.2.2.1.14",
+        "out_errors": "1.3.6.1.2.1.2.2.1.20",
+        "in_discards": "1.3.6.1.2.1.2.2.1.13",
+        "out_discards": "1.3.6.1.2.1.2.2.1.19"
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.in_octets"
+      },
+      "params": {
+        "output_field": "host.network.ingress.bytes",
+        "mode": "delta",
+        "exclude_column": "type",
+        "exclude_values": [
+          "24"
+        ]
+      }
+    },
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.out_octets"
+      },
+      "params": {
+        "output_field": "host.network.egress.bytes",
+        "mode": "delta",
+        "exclude_column": "type",
+        "exclude_values": [
+          "24"
+        ]
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.admin_status"
+      },
+      "params": {
+        "mapping": {
+          "1": "UP",
+          "2": "DOWN",
+          "3": "TESTING"
+        }
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.oper_status"
+      },
+      "params": {
+        "mapping": {
+          "1": "UP",
+          "2": "DOWN",
+          "3": "TESTING",
+          "4": "UNKNOWN",
+          "5": "DORMANT",
+          "6": "NOT_PRESENT",
+          "7": "LOWER_LAYER_DOWN"
+        }
+      }
+    }
+  ]
+}
+```
+
+#### `geist_environment`
+
+```json
+{
+  "name": "geist_environment",
+  "description": "Geist WatchDog environmental monitor (sold under Vertiv): device identity, built-in temperature and humidity sensor as scalars, and external temperature probe readings as a sensor table. Temperature raw values are in tenths of a degree Celsius (multiply 0.1). Source: Geist enterprise MIB (1.3.6.1.4.1.21239.5.1).",
+  "vendor": "Vertiv",
+  "product": "WatchDog",
+  "model": "Any",
+  "get": {
+    "observer.model": "1.3.6.1.4.1.21239.5.1.1.1.0",
+    "observer.firmware_version": "1.3.6.1.4.1.21239.5.1.1.2.0",
+    "observer.serial_number": "1.3.6.1.4.1.21239.5.1.1.10.0",
+    "observer.mac_address": "1.3.6.1.4.1.21239.5.1.1.4.0",
+    "env.sensor_label": "1.3.6.1.4.1.21239.5.1.2.1.3.1",
+    "env.temperature_c": "1.3.6.1.4.1.21239.5.1.2.1.5.1",
+    "env.humidity_pct": "1.3.6.1.4.1.21239.5.1.2.1.6.1"
+  },
+  "walk": {},
+  "table": {
+    "component.sensor": {
+      "columns": {
+        "description": "1.3.6.1.4.1.21239.5.1.4.1.3",
+        "online": "1.3.6.1.4.1.21239.5.1.4.1.4",
+        "temp.celsius": "1.3.6.1.4.1.21239.5.1.4.1.5"
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "env.temperature_c"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "component.sensor",
+        "field": "component.sensor.temp.celsius"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    }
+  ]
 }
 ```
 
@@ -943,6 +3057,38 @@ _Profile definition not found in bundled files._
   },
   "normalizers": [
     {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.in_octets"
+      },
+      "params": {
+        "output_field": "host.network.ingress.bytes",
+        "mode": "delta",
+        "exclude_column": "type",
+        "exclude_values": [
+          "24"
+        ]
+      }
+    },
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.out_octets"
+      },
+      "params": {
+        "output_field": "host.network.egress.bytes",
+        "mode": "delta",
+        "exclude_column": "type",
+        "exclude_values": [
+          "24"
+        ]
+      }
+    },
+    {
       "operation": "translate",
       "target": {
         "scope": "table",
@@ -1006,14 +3152,14 @@ _Profile definition not found in bundled files._
 ```json
 {
   "name": "generic_host_system_metrics",
-  "description": "CPU load and filesystem usage per mount point from HOST-RESOURCES-MIB, supported on Linux, Windows, and most embedded devices.",
+  "description": "CPU load and storage usage from HOST-RESOURCES-MIB, supported on Linux, Windows, and most embedded devices. Disks go to system.filesystem (sizes in bytes) and RAM/virtual-memory/other storage to system.storage, so Kibana's Hosts page disk usage only sees real disks.",
   "vendor": "Any",
   "product": "Any",
   "model": "Any",
   "get": {
     "host.num_users": "1.3.6.1.2.1.25.1.5.0",
     "host.num_processes": "1.3.6.1.2.1.25.1.6.0",
-    "system.memory.total.kb": "1.3.6.1.2.1.25.2.2.0"
+    "system.memory.physical.total.kb": "1.3.6.1.2.1.25.2.2.0"
   },
   "walk": {},
   "table": {
@@ -1028,12 +3174,66 @@ _Profile definition not found in bundled files._
         "type": "1.3.6.1.2.1.25.2.3.1.2",
         "mount_point": "1.3.6.1.2.1.25.2.3.1.3",
         "allocation_units": "1.3.6.1.2.1.25.2.3.1.4",
-        "total.bytes": "1.3.6.1.2.1.25.2.3.1.5",
+        "total": "1.3.6.1.2.1.25.2.3.1.5",
         "used.bytes": "1.3.6.1.2.1.25.2.3.1.6"
+      },
+      "keep_when": {
+        "column": "type",
+        "equals": [
+          "1.3.6.1.2.1.25.2.1.4",
+          "1.3.6.1.2.1.25.2.1.10"
+        ],
+        "keep_column": true
+      }
+    },
+    "system.storage": {
+      "columns": {
+        "index": "1.3.6.1.2.1.25.2.3.1.1",
+        "type": "1.3.6.1.2.1.25.2.3.1.2",
+        "mount_point": "1.3.6.1.2.1.25.2.3.1.3",
+        "allocation_units": "1.3.6.1.2.1.25.2.3.1.4",
+        "total": "1.3.6.1.2.1.25.2.3.1.5",
+        "used.bytes": "1.3.6.1.2.1.25.2.3.1.6"
+      },
+      "keep_when": {
+        "column": "type",
+        "equals": [
+          "1.3.6.1.2.1.25.2.1.1",
+          "1.3.6.1.2.1.25.2.1.2",
+          "1.3.6.1.2.1.25.2.1.3",
+          "1.3.6.1.2.1.25.2.1.5",
+          "1.3.6.1.2.1.25.2.1.6",
+          "1.3.6.1.2.1.25.2.1.7",
+          "1.3.6.1.2.1.25.2.1.8",
+          "1.3.6.1.2.1.25.2.1.9"
+        ],
+        "keep_column": true
       }
     }
   },
   "normalizers": [
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.physical.total.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.total"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.physical.total.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.actual.total.bytes"
+      }
+    },
     {
       "operation": "average",
       "target": {
@@ -1044,6 +3244,18 @@ _Profile definition not found in bundled files._
       "params": {
         "output_field": "system.cpu.total.norm.pct",
         "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "component.cpu",
+        "field": "component.cpu.load_pct"
+      },
+      "params": {
+        "output_field": "system.cpu.cores",
+        "mode": "count"
       }
     },
     {
@@ -1058,15 +3270,72 @@ _Profile definition not found in bundled files._
       }
     },
     {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.filesystem",
+        "field": "system.filesystem.total"
+      },
+      "params": {
+        "multiply_field": "system.filesystem.allocation_units"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.filesystem",
+        "field": "system.filesystem.used.bytes"
+      },
+      "params": {
+        "multiply_field": "system.filesystem.allocation_units"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.storage",
+        "field": "system.storage.total"
+      },
+      "params": {
+        "multiply_field": "system.storage.allocation_units"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.storage",
+        "field": "system.storage.used.bytes"
+      },
+      "params": {
+        "multiply_field": "system.storage.allocation_units"
+      }
+    },
+    {
       "operation": "ratio",
       "target": {
         "scope": "table",
         "table": "system.filesystem"
       },
       "params": {
-        "value1_field": "system.filesystem.total.bytes",
+        "value1_field": "system.filesystem.total",
         "value2_field": "system.filesystem.used.bytes",
-        "divide_output_field": "system.filesystem.used.pct"
+        "divide_output_field": "system.filesystem.used.pct",
+        "difference_output_field": "system.filesystem.free"
+      }
+    },
+    {
+      "operation": "ratio",
+      "target": {
+        "scope": "table",
+        "table": "system.storage"
+      },
+      "params": {
+        "value1_field": "system.storage.total",
+        "value2_field": "system.storage.used.bytes",
+        "divide_output_field": "system.storage.used.pct"
       }
     }
   ]
@@ -1078,18 +3347,20 @@ _Profile definition not found in bundled files._
 ```json
 {
   "name": "generic_ucd_system_metrics",
-  "description": "Memory, load averages, and per-state CPU counters via Net-SNMP for Linux and BSD devices.",
+  "description": "Memory, load averages, per-state CPU, and disk I/O counters via Net-SNMP for Linux and BSD devices. Field names follow the Elastic System integration so Kibana's Hosts page can read them.",
   "vendor": "Any",
   "product": "Any",
   "model": "Any",
   "get": {
     "system.memory.actual.total.kb": "1.3.6.1.4.1.2021.4.5.0",
     "system.memory.actual.available.kb": "1.3.6.1.4.1.2021.4.6.0",
-    "system.memory.actual.free.kb": "1.3.6.1.4.1.2021.4.11.0",
+    "system.memory.total_free.kb": "1.3.6.1.4.1.2021.4.11.0",
     "system.memory.actual.cached.kb": "1.3.6.1.4.1.2021.4.15.0",
-    "system.load.1": "1.3.6.1.4.1.2021.10.1.3.1",
-    "system.load.5": "1.3.6.1.4.1.2021.10.1.3.2",
-    "system.load.15": "1.3.6.1.4.1.2021.10.1.3.3",
+    "system.load.1": "1.3.6.1.4.1.2021.10.1.5.1",
+    "system.load.5": "1.3.6.1.4.1.2021.10.1.5.2",
+    "system.load.15": "1.3.6.1.4.1.2021.10.1.5.3",
+    "system.cpu.pct.user": "1.3.6.1.4.1.2021.11.9.0",
+    "system.cpu.pct.system": "1.3.6.1.4.1.2021.11.10.0",
     "system.cpu.raw.user": "1.3.6.1.4.1.2021.11.50.0",
     "system.cpu.raw.nice": "1.3.6.1.4.1.2021.11.51.0",
     "system.cpu.raw.system": "1.3.6.1.4.1.2021.11.52.0",
@@ -1097,11 +3368,133 @@ _Profile definition not found in bundled files._
     "system.cpu.raw.wait": "1.3.6.1.4.1.2021.11.54.0",
     "system.cpu.raw.kernel": "1.3.6.1.4.1.2021.11.55.0",
     "system.cpu.raw.interrupt": "1.3.6.1.4.1.2021.11.56.0",
-    "system.cpu.num_cpus": "1.3.6.1.4.1.2021.11.67.0"
+    "system.cpu.raw.softirq": "1.3.6.1.4.1.2021.11.61.0",
+    "system.cpu.raw.steal": "1.3.6.1.4.1.2021.11.64.0",
+    "system.cpu.cores": "1.3.6.1.4.1.2021.11.67.0"
   },
   "walk": {},
-  "table": {},
+  "table": {
+    "system.diskio": {
+      "columns": {
+        "index": "1.3.6.1.4.1.2021.13.15.1.1.1",
+        "name": "1.3.6.1.4.1.2021.13.15.1.1.2",
+        "read.count": "1.3.6.1.4.1.2021.13.15.1.1.5",
+        "write.count": "1.3.6.1.4.1.2021.13.15.1.1.6",
+        "read.bytes": "1.3.6.1.4.1.2021.13.15.1.1.12",
+        "write.bytes": "1.3.6.1.4.1.2021.13.15.1.1.13"
+      }
+    }
+  },
   "normalizers": [
+    {
+      "operation": "sum",
+      "target": {
+        "scope": "get"
+      },
+      "params": {
+        "input_fields": [
+          "system.cpu.pct.user",
+          "system.cpu.pct.system"
+        ],
+        "output_field": "system.cpu.active.pct"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.active.pct"
+      },
+      "params": {
+        "multiply_value": 0.01,
+        "output_field": "system.cpu.total.norm.pct"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.load.1"
+      },
+      "params": {
+        "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.load.5"
+      },
+      "params": {
+        "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.load.15"
+      },
+      "params": {
+        "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.actual.total.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.total"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.actual.total.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.actual.total.bytes"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.actual.available.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.free"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.actual.available.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.actual.free"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.cores"
+      },
+      "params": {
+        "multiply_value": 1,
+        "output_field": "system.load.cores"
+      }
+    },
     {
       "operation": "ratio",
       "target": {
@@ -1110,7 +3503,152 @@ _Profile definition not found in bundled files._
       "params": {
         "value1_field": "system.memory.actual.total.kb",
         "value2_field": "system.memory.actual.available.kb",
-        "complement_ratio_output_field": "system.memory.actual.used.pct"
+        "complement_ratio_output_field": "system.memory.actual.used.pct",
+        "difference_output_field": "system.memory.actual.used.kb"
+      }
+    },
+    {
+      "operation": "sum",
+      "target": {
+        "scope": "get"
+      },
+      "params": {
+        "input_fields": [
+          "system.memory.actual.used.kb",
+          "system.memory.actual.cached.kb"
+        ],
+        "output_field": "system.memory.used.kb"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.actual.used.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.actual.used.bytes"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.used.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.used.bytes"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.user"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.user"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.nice"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.nice"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.kernel"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.system"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.idle"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.idle"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.wait"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.iowait"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.interrupt"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.irq"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.softirq"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.softirq"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.steal"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.steal"
+      }
+    },
+    {
+      "operation": "share",
+      "target": {
+        "scope": "get"
+      },
+      "params": {
+        "input_fields": [
+          "system.cpu.delta.user",
+          "system.cpu.delta.nice",
+          "system.cpu.delta.system",
+          "system.cpu.delta.idle",
+          "system.cpu.delta.iowait",
+          "system.cpu.delta.irq",
+          "system.cpu.delta.softirq",
+          "system.cpu.delta.steal"
+        ],
+        "output_fields": [
+          "system.cpu.user.pct",
+          "system.cpu.nice.pct",
+          "system.cpu.system.pct",
+          "system.cpu.idle.pct",
+          "system.cpu.iowait.pct",
+          "system.cpu.irq.pct",
+          "system.cpu.softirq.pct",
+          "system.cpu.steal.pct"
+        ],
+        "multiply_field": "system.cpu.cores"
       }
     }
   ]
@@ -1179,6 +3717,38 @@ _Profile definition not found in bundled files._
   },
   "normalizers": [
     {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.in_octets"
+      },
+      "params": {
+        "output_field": "host.network.ingress.bytes",
+        "mode": "delta",
+        "exclude_column": "type",
+        "exclude_values": [
+          "24"
+        ]
+      }
+    },
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.out_octets"
+      },
+      "params": {
+        "output_field": "host.network.egress.bytes",
+        "mode": "delta",
+        "exclude_column": "type",
+        "exclude_values": [
+          "24"
+        ]
+      }
+    },
+    {
       "operation": "translate",
       "target": {
         "scope": "table",
@@ -1242,7 +3812,7 @@ _Profile definition not found in bundled files._
 ```json
 {
   "name": "generic_ont",
-  "description": "System identity, memory utilization, and per-port link/speed for generic ONT devices.",
+  "description": "System identity, memory utilization, CPU utilization, and per-port link/speed for generic ONT devices.",
   "vendor": "Unknown",
   "product": "Any",
   "model": "Any",
@@ -1253,7 +3823,8 @@ _Profile definition not found in bundled files._
     "observer.product_id": "1.3.6.1.4.1.52208.100.1.100.0",
     "observer.serial_number": "1.3.6.1.4.1.52208.100.1.101.0",
     "system.memory.actual.total.bytes": "1.3.6.1.4.1.52208.100.1.11.6.0",
-    "system.memory.actual.used.bytes": "1.3.6.1.4.1.52208.100.1.11.7.0"
+    "system.memory.actual.used.bytes": "1.3.6.1.4.1.52208.100.1.11.7.0",
+    "system.cpu.total.norm.pct": "1.3.6.1.4.1.52208.100.1.11.2.0"
   },
   "walk": {},
   "table": {
@@ -1269,6 +3840,16 @@ _Profile definition not found in bundled files._
     }
   },
   "normalizers": [
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.total.norm.pct"
+      },
+      "params": {
+        "multiply_value": 0.01
+      }
+    },
     {
       "operation": "ratio",
       "target": {
@@ -1318,6 +3899,202 @@ _Profile definition not found in bundled files._
 }
 ```
 
+### generic_ups
+
+```json
+{
+  "name": "generic_ups",
+  "description": "Catch-all template for any UPS device that implements the standard RFC 1628 UPS-MIB (1.3.6.1.2.1.33). Covers device identity, battery health, runtime, per-phase input/output power, and active alarms. Use vendor-specific templates (eaton_ups, huawei_ups, etc.) for devices with additional proprietary enrichments.",
+  "vendor": "Any",
+  "product": "Any",
+  "model": "Any",
+  "matching_rules": [
+    "UPS-MIB"
+  ]
+}
+```
+
+**Profiles included in `generic_ups`:**
+
+#### `generic_system`
+
+```json
+{
+  "name": "generic_system",
+  "description": "Core system identity: hostname, description, uptime, object ID, location, and contact.",
+  "product": "Any",
+  "vendor": "Any",
+  "model": "Any",
+  "get": {
+    "observer.sys_descr": "1.3.6.1.2.1.1.1.0",
+    "observer.object_id": "1.3.6.1.2.1.1.2.0",
+    "host.sysname": "1.3.6.1.2.1.1.5.0",
+    "host.uptime": "1.3.6.1.2.1.1.3.0",
+    "host.contact": "1.3.6.1.2.1.1.4.0"
+  },
+  "walk": {},
+  "table": {}
+}
+```
+
+#### `generic_ups_mib`
+
+```json
+{
+  "name": "generic_ups_mib",
+  "description": "Device identity (manufacturer, model, and firmware), battery health, runtime, per-phase input/output power, and active alarms via the standard RFC 1628 UPS-MIB (1.3.6.1.2.1.33). Supported by virtually all UPS brands (APC, Eaton, Vertiv, CyberPower, etc.). Battery voltage and current are reported in 0.1V/0.1A units by the MIB and normalised to V/A by multiply normalizers. Output and input phase frequencies are similarly normalised from 0.1 Hz.",
+  "vendor": "Any",
+  "product": "Any",
+  "model": "Any",
+  "get": {
+    "observer.vendor": "1.3.6.1.2.1.33.1.1.1.0",
+    "observer.model": "1.3.6.1.2.1.33.1.1.2.0",
+    "observer.firmware_version": "1.3.6.1.2.1.33.1.1.3.0",
+    "ups.battery.status": "1.3.6.1.2.1.33.1.2.1.0",
+    "ups.battery.seconds_on_battery": "1.3.6.1.2.1.33.1.2.2.0",
+    "ups.battery.time_remaining_minutes": "1.3.6.1.2.1.33.1.2.3.0",
+    "ups.battery.capacity_pct": "1.3.6.1.2.1.33.1.2.4.0",
+    "ups.battery.voltage": "1.3.6.1.2.1.33.1.2.5.0",
+    "ups.battery.current_amps": "1.3.6.1.2.1.33.1.2.6.0",
+    "ups.battery.temperature_c": "1.3.6.1.2.1.33.1.2.7.0",
+    "ups.input.line_bads": "1.3.6.1.2.1.33.1.3.1.0",
+    "ups.input.num_phases": "1.3.6.1.2.1.33.1.3.2.0",
+    "ups.output.source": "1.3.6.1.2.1.33.1.4.1.0",
+    "ups.output.frequency_hz": "1.3.6.1.2.1.33.1.4.2.0",
+    "ups.output.num_phases": "1.3.6.1.2.1.33.1.4.3.0",
+    "ups.alarms.present": "1.3.6.1.2.1.33.1.6.1.0"
+  },
+  "walk": {},
+  "table": {
+    "ups.input.phase": {
+      "columns": {
+        "frequency_hz": "1.3.6.1.2.1.33.1.3.3.1.2",
+        "voltage": "1.3.6.1.2.1.33.1.3.3.1.3",
+        "current_amps": "1.3.6.1.2.1.33.1.3.3.1.4",
+        "power_w": "1.3.6.1.2.1.33.1.3.3.1.5"
+      }
+    },
+    "ups.output.phase": {
+      "columns": {
+        "voltage": "1.3.6.1.2.1.33.1.4.4.1.2",
+        "current_amps": "1.3.6.1.2.1.33.1.4.4.1.3",
+        "power_w": "1.3.6.1.2.1.33.1.4.4.1.4",
+        "load_pct": "1.3.6.1.2.1.33.1.4.4.1.5"
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "get",
+        "field": "ups.battery.status"
+      },
+      "params": {
+        "mapping": {
+          "1": "unknown",
+          "2": "normal",
+          "3": "low_battery",
+          "4": "depleted"
+        }
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "get",
+        "field": "ups.output.source"
+      },
+      "params": {
+        "mapping": {
+          "1": "other",
+          "2": "none",
+          "3": "normal",
+          "4": "bypass",
+          "5": "battery",
+          "6": "booster",
+          "7": "reducer"
+        }
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "ups.battery.voltage"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "ups.battery.current_amps"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "ups.output.frequency_hz"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "ups.input.phase",
+        "field": "ups.input.phase.frequency_hz"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "ups.input.phase",
+        "field": "ups.input.phase.current_amps"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "ups.output.phase",
+        "field": "ups.output.phase.current_amps"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "average",
+      "target": {
+        "scope": "table",
+        "table": "ups.output.phase",
+        "field": "ups.output.phase.load_pct"
+      },
+      "params": {
+        "output_field": "ups.output.load_pct"
+      }
+    }
+  ]
+}
+```
+
 ### hp_laserjet_mfp_m281cdw
 
 ```json
@@ -1354,6 +4131,119 @@ _Profile definition not found in bundled files._
   },
   "walk": {},
   "table": {}
+}
+```
+
+#### `generic_interfaces`
+
+```json
+{
+  "name": "generic_interfaces",
+  "description": "Interface admin/oper status, speed, MAC, MTU, and traffic/error counters for all SNMP-capable devices.",
+  "product": "Any",
+  "vendor": "Any",
+  "model": "Any",
+  "get": {},
+  "walk": {},
+  "table": {
+    "interface": {
+      "columns": {
+        "index": "1.3.6.1.2.1.2.2.1.1",
+        "name": "1.3.6.1.2.1.2.2.1.2",
+        "type": "1.3.6.1.2.1.2.2.1.3",
+        "admin_status": "1.3.6.1.2.1.2.2.1.7",
+        "oper_status": "1.3.6.1.2.1.2.2.1.8",
+        "alt_name": "1.3.6.1.2.1.31.1.1.1.1",
+        "alias": "1.3.6.1.2.1.31.1.1.1.18",
+        "speed": "1.3.6.1.2.1.2.2.1.5",
+        "speed_high_mbps": "1.3.6.1.2.1.31.1.1.1.15",
+        "mac": "1.3.6.1.2.1.2.2.1.6",
+        "mtu": "1.3.6.1.2.1.2.2.1.4",
+        "in_octets": "1.3.6.1.2.1.31.1.1.1.6",
+        "out_octets": "1.3.6.1.2.1.31.1.1.1.10",
+        "in_broadcast_pkts": "1.3.6.1.2.1.31.1.1.1.9",
+        "out_broadcast_pkts": "1.3.6.1.2.1.31.1.1.1.13",
+        "in_unicast_pkts": "1.3.6.1.2.1.31.1.1.1.7",
+        "out_unicast_pkts": "1.3.6.1.2.1.31.1.1.1.11",
+        "in_multicast_pkts": "1.3.6.1.2.1.31.1.1.1.8",
+        "out_multicast_pkts": "1.3.6.1.2.1.31.1.1.1.12",
+        "last_change": "1.3.6.1.2.1.2.2.1.9",
+        "vlan_id": "1.3.6.1.2.1.17.7.1.4.5.1.1",
+        "in_errors": "1.3.6.1.2.1.2.2.1.14",
+        "out_errors": "1.3.6.1.2.1.2.2.1.20",
+        "in_discards": "1.3.6.1.2.1.2.2.1.13",
+        "out_discards": "1.3.6.1.2.1.2.2.1.19"
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.in_octets"
+      },
+      "params": {
+        "output_field": "host.network.ingress.bytes",
+        "mode": "delta",
+        "exclude_column": "type",
+        "exclude_values": [
+          "24"
+        ]
+      }
+    },
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.out_octets"
+      },
+      "params": {
+        "output_field": "host.network.egress.bytes",
+        "mode": "delta",
+        "exclude_column": "type",
+        "exclude_values": [
+          "24"
+        ]
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.admin_status"
+      },
+      "params": {
+        "mapping": {
+          "1": "UP",
+          "2": "DOWN",
+          "3": "TESTING"
+        }
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.oper_status"
+      },
+      "params": {
+        "mapping": {
+          "1": "UP",
+          "2": "DOWN",
+          "3": "TESTING",
+          "4": "UNKNOWN",
+          "5": "DORMANT",
+          "6": "NOT_PRESENT",
+          "7": "LOWER_LAYER_DOWN"
+        }
+      }
+    }
+  ]
 }
 ```
 
@@ -1473,6 +4363,1529 @@ _Profile definition not found in bundled files._
     }
   },
   "normalizers": [
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.in_octets"
+      },
+      "params": {
+        "output_field": "host.network.ingress.bytes",
+        "mode": "delta",
+        "exclude_column": "type",
+        "exclude_values": [
+          "24"
+        ]
+      }
+    },
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.out_octets"
+      },
+      "params": {
+        "output_field": "host.network.egress.bytes",
+        "mode": "delta",
+        "exclude_column": "type",
+        "exclude_values": [
+          "24"
+        ]
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.admin_status"
+      },
+      "params": {
+        "mapping": {
+          "1": "UP",
+          "2": "DOWN",
+          "3": "TESTING"
+        }
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.oper_status"
+      },
+      "params": {
+        "mapping": {
+          "1": "UP",
+          "2": "DOWN",
+          "3": "TESTING",
+          "4": "UNKNOWN",
+          "5": "DORMANT",
+          "6": "NOT_PRESENT",
+          "7": "LOWER_LAYER_DOWN"
+        }
+      }
+    }
+  ]
+}
+```
+
+#### `generic_system`
+
+```json
+{
+  "name": "generic_system",
+  "description": "Core system identity: hostname, description, uptime, object ID, location, and contact.",
+  "product": "Any",
+  "vendor": "Any",
+  "model": "Any",
+  "get": {
+    "observer.sys_descr": "1.3.6.1.2.1.1.1.0",
+    "observer.object_id": "1.3.6.1.2.1.1.2.0",
+    "host.sysname": "1.3.6.1.2.1.1.5.0",
+    "host.uptime": "1.3.6.1.2.1.1.3.0",
+    "host.contact": "1.3.6.1.2.1.1.4.0"
+  },
+  "walk": {},
+  "table": {}
+}
+```
+
+### huawei_ups
+
+```json
+{
+  "name": "huawei_ups",
+  "description": "Normalized battery health, runtime, per-phase input/output power, active alarms, and identity for Huawei UPS devices. Uses standard UPS-MIB OIDs where supported and Huawei OIDs where the UPS5000 reports unsupported standard values.",
+  "vendor": "Huawei",
+  "product": "Any",
+  "model": "Any",
+  "matching_rules": [
+    "HUAWEI",
+    "Huawei",
+    "UPS5000",
+    "2011.6.174"
+  ]
+}
+```
+
+**Profiles included in `huawei_ups`:**
+
+#### `generic_system`
+
+```json
+{
+  "name": "generic_system",
+  "description": "Core system identity: hostname, description, uptime, object ID, location, and contact.",
+  "product": "Any",
+  "vendor": "Any",
+  "model": "Any",
+  "get": {
+    "observer.sys_descr": "1.3.6.1.2.1.1.1.0",
+    "observer.object_id": "1.3.6.1.2.1.1.2.0",
+    "host.sysname": "1.3.6.1.2.1.1.5.0",
+    "host.uptime": "1.3.6.1.2.1.1.3.0",
+    "host.contact": "1.3.6.1.2.1.1.4.0"
+  },
+  "walk": {},
+  "table": {}
+}
+```
+
+#### `huawei_ups`
+
+```json
+{
+  "name": "huawei_ups",
+  "description": "Complete normalized polling profile for Huawei UPS devices. Uses standard UPS-MIB OIDs where supported and Huawei OIDs for battery capacity and runtime, which return -1 through UPS-MIB on the UPS5000. Compatible with Huawei UPS5000-E and similar models.",
+  "vendor": "Huawei",
+  "product": "Any",
+  "model": "Any",
+  "get": {
+    "observer.vendor": "1.3.6.1.2.1.33.1.1.1.0",
+    "observer.model": "1.3.6.1.2.1.33.1.1.2.0",
+    "observer.firmware_version": "1.3.6.1.2.1.33.1.1.3.0",
+    "observer.serial_number": "1.3.6.1.4.1.2011.6.174.1.2.100.1.5.1",
+    "ups.battery.status": "1.3.6.1.2.1.33.1.2.1.0",
+    "ups.battery.seconds_on_battery": "1.3.6.1.2.1.33.1.2.2.0",
+    "ups.battery.time_remaining_minutes": "1.3.6.1.4.1.2011.6.174.1.12.1.0",
+    "ups.battery.capacity_pct": "1.3.6.1.4.1.2011.6.174.1.6.100.1.3.1",
+    "ups.battery.voltage": "1.3.6.1.2.1.33.1.2.5.0",
+    "ups.battery.current_amps": "1.3.6.1.2.1.33.1.2.6.0",
+    "ups.input.num_phases": "1.3.6.1.2.1.33.1.3.2.0",
+    "ups.output.source": "1.3.6.1.2.1.33.1.4.1.0",
+    "ups.output.frequency_hz": "1.3.6.1.2.1.33.1.4.2.0",
+    "ups.output.num_phases": "1.3.6.1.2.1.33.1.4.3.0",
+    "ups.alarms.present": "1.3.6.1.2.1.33.1.6.1.0"
+  },
+  "walk": {},
+  "table": {
+    "ups.input.phase": {
+      "columns": {
+        "frequency_hz": "1.3.6.1.2.1.33.1.3.3.1.2",
+        "voltage": "1.3.6.1.2.1.33.1.3.3.1.3",
+        "current_amps": "1.3.6.1.2.1.33.1.3.3.1.4"
+      }
+    },
+    "ups.output.phase": {
+      "columns": {
+        "voltage": "1.3.6.1.2.1.33.1.4.4.1.2",
+        "current_amps": "1.3.6.1.2.1.33.1.4.4.1.3",
+        "power_w": "1.3.6.1.2.1.33.1.4.4.1.4",
+        "load_pct": "1.3.6.1.2.1.33.1.4.4.1.5"
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "get",
+        "field": "ups.battery.status"
+      },
+      "params": {
+        "mapping": {
+          "1": "unknown",
+          "2": "normal",
+          "3": "low_battery",
+          "4": "depleted"
+        }
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "get",
+        "field": "ups.output.source"
+      },
+      "params": {
+        "mapping": {
+          "1": "other",
+          "2": "none",
+          "3": "normal",
+          "4": "bypass",
+          "5": "battery",
+          "6": "booster",
+          "7": "reducer"
+        }
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "ups.battery.voltage"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "ups.battery.current_amps"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "ups.output.frequency_hz"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "ups.input.phase",
+        "field": "ups.input.phase.frequency_hz"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "ups.input.phase",
+        "field": "ups.input.phase.current_amps"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "ups.output.phase",
+        "field": "ups.output.phase.current_amps"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "average",
+      "target": {
+        "scope": "table",
+        "table": "ups.output.phase",
+        "field": "ups.output.phase.load_pct"
+      },
+      "params": {
+        "output_field": "ups.output.load_pct"
+      }
+    }
+  ]
+}
+```
+
+### ingrasys_ups
+
+```json
+{
+  "name": "ingrasys_ups",
+  "description": "Battery health, runtime, per-phase input/output power, and active alarms for UPS devices managed by an Ingrasys WebPower Pro SNMP card (enterprise OID 1.3.6.1.4.1.2468). The card exposes full UPS-MIB coverage with no proprietary extensions. Commonly found on Santak (Eaton China) Array-series and similar models.",
+  "vendor": "Ingrasys",
+  "product": "Any",
+  "model": "Any",
+  "matching_rules": [
+    "Santak",
+    "Array-3A",
+    "WebPower",
+    "2468"
+  ]
+}
+```
+
+**Profiles included in `ingrasys_ups`:**
+
+#### `generic_system`
+
+```json
+{
+  "name": "generic_system",
+  "description": "Core system identity: hostname, description, uptime, object ID, location, and contact.",
+  "product": "Any",
+  "vendor": "Any",
+  "model": "Any",
+  "get": {
+    "observer.sys_descr": "1.3.6.1.2.1.1.1.0",
+    "observer.object_id": "1.3.6.1.2.1.1.2.0",
+    "host.sysname": "1.3.6.1.2.1.1.5.0",
+    "host.uptime": "1.3.6.1.2.1.1.3.0",
+    "host.contact": "1.3.6.1.2.1.1.4.0"
+  },
+  "walk": {},
+  "table": {}
+}
+```
+
+#### `generic_ups_mib`
+
+```json
+{
+  "name": "generic_ups_mib",
+  "description": "Device identity (manufacturer, model, and firmware), battery health, runtime, per-phase input/output power, and active alarms via the standard RFC 1628 UPS-MIB (1.3.6.1.2.1.33). Supported by virtually all UPS brands (APC, Eaton, Vertiv, CyberPower, etc.). Battery voltage and current are reported in 0.1V/0.1A units by the MIB and normalised to V/A by multiply normalizers. Output and input phase frequencies are similarly normalised from 0.1 Hz.",
+  "vendor": "Any",
+  "product": "Any",
+  "model": "Any",
+  "get": {
+    "observer.vendor": "1.3.6.1.2.1.33.1.1.1.0",
+    "observer.model": "1.3.6.1.2.1.33.1.1.2.0",
+    "observer.firmware_version": "1.3.6.1.2.1.33.1.1.3.0",
+    "ups.battery.status": "1.3.6.1.2.1.33.1.2.1.0",
+    "ups.battery.seconds_on_battery": "1.3.6.1.2.1.33.1.2.2.0",
+    "ups.battery.time_remaining_minutes": "1.3.6.1.2.1.33.1.2.3.0",
+    "ups.battery.capacity_pct": "1.3.6.1.2.1.33.1.2.4.0",
+    "ups.battery.voltage": "1.3.6.1.2.1.33.1.2.5.0",
+    "ups.battery.current_amps": "1.3.6.1.2.1.33.1.2.6.0",
+    "ups.battery.temperature_c": "1.3.6.1.2.1.33.1.2.7.0",
+    "ups.input.line_bads": "1.3.6.1.2.1.33.1.3.1.0",
+    "ups.input.num_phases": "1.3.6.1.2.1.33.1.3.2.0",
+    "ups.output.source": "1.3.6.1.2.1.33.1.4.1.0",
+    "ups.output.frequency_hz": "1.3.6.1.2.1.33.1.4.2.0",
+    "ups.output.num_phases": "1.3.6.1.2.1.33.1.4.3.0",
+    "ups.alarms.present": "1.3.6.1.2.1.33.1.6.1.0"
+  },
+  "walk": {},
+  "table": {
+    "ups.input.phase": {
+      "columns": {
+        "frequency_hz": "1.3.6.1.2.1.33.1.3.3.1.2",
+        "voltage": "1.3.6.1.2.1.33.1.3.3.1.3",
+        "current_amps": "1.3.6.1.2.1.33.1.3.3.1.4",
+        "power_w": "1.3.6.1.2.1.33.1.3.3.1.5"
+      }
+    },
+    "ups.output.phase": {
+      "columns": {
+        "voltage": "1.3.6.1.2.1.33.1.4.4.1.2",
+        "current_amps": "1.3.6.1.2.1.33.1.4.4.1.3",
+        "power_w": "1.3.6.1.2.1.33.1.4.4.1.4",
+        "load_pct": "1.3.6.1.2.1.33.1.4.4.1.5"
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "get",
+        "field": "ups.battery.status"
+      },
+      "params": {
+        "mapping": {
+          "1": "unknown",
+          "2": "normal",
+          "3": "low_battery",
+          "4": "depleted"
+        }
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "get",
+        "field": "ups.output.source"
+      },
+      "params": {
+        "mapping": {
+          "1": "other",
+          "2": "none",
+          "3": "normal",
+          "4": "bypass",
+          "5": "battery",
+          "6": "booster",
+          "7": "reducer"
+        }
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "ups.battery.voltage"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "ups.battery.current_amps"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "ups.output.frequency_hz"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "ups.input.phase",
+        "field": "ups.input.phase.frequency_hz"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "ups.input.phase",
+        "field": "ups.input.phase.current_amps"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "ups.output.phase",
+        "field": "ups.output.phase.current_amps"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "average",
+      "target": {
+        "scope": "table",
+        "table": "ups.output.phase",
+        "field": "ups.output.phase.load_pct"
+      },
+      "params": {
+        "output_field": "ups.output.load_pct"
+      }
+    }
+  ]
+}
+```
+
+### isilon_onefs
+
+```json
+{
+  "name": "isilon_onefs",
+  "description": "Dell EMC Isilon scale-out NAS cluster running OneFS. Covers cluster and per-node health, disk capacity, I/O performance (CPU, disk, cache), network throughput, and protocol statistics (NFS, SMB, HTTP, FTP, NDMP).",
+  "vendor": "Dell EMC",
+  "product": "Isilon OneFS",
+  "model": "Any",
+  "matching_rules": [
+    "Isilon OneFS",
+    "OneFS"
+  ]
+}
+```
+
+**Profiles included in `isilon_onefs`:**
+
+#### `isilon_system`
+
+```json
+{
+  "name": "isilon_system",
+  "description": "Cluster identity and health, /ifs capacity from 64-bit counters, polled-node status, and hardware inventory (chassis, drives, fans, temperature and power sensors) plus the license table for Dell EMC Isilon OneFS. Uses ISILON-MIB (1.3.6.1.4.1.12124).",
+  "vendor": "Dell EMC",
+  "product": "Isilon OneFS",
+  "model": "Any",
+  "get": {
+    "observer.cluster.name": "1.3.6.1.4.1.12124.1.1.1.0",
+    "observer.cluster.health": "1.3.6.1.4.1.12124.1.1.2.0",
+    "observer.cluster.guid": "1.3.6.1.4.1.12124.1.1.3.0",
+    "observer.cluster.node_count": "1.3.6.1.4.1.12124.1.1.4.0",
+    "observer.cluster.nodes_configured": "1.3.6.1.4.1.12124.1.1.5.0",
+    "observer.cluster.nodes_online": "1.3.6.1.4.1.12124.1.1.6.0",
+    "observer.cluster.nodes_offline": "1.3.6.1.4.1.12124.1.1.7.0",
+    "storage.disk.total.bytes": "1.3.6.1.4.1.12124.1.3.1.0",
+    "storage.disk.used.bytes": "1.3.6.1.4.1.12124.1.3.2.0",
+    "storage.disk.avail.bytes": "1.3.6.1.4.1.12124.1.3.3.0",
+    "storage.disk.free.bytes": "1.3.6.1.4.1.12124.1.3.4.0",
+    "observer.node.name": "1.3.6.1.4.1.12124.2.1.1.0",
+    "observer.node.health": "1.3.6.1.4.1.12124.2.1.2.0",
+    "observer.node.type": "1.3.6.1.4.1.12124.2.1.3.0",
+    "observer.node.read_only": "1.3.6.1.4.1.12124.2.1.4.0"
+  },
+  "walk": {},
+  "table": {
+    "component.chassis": {
+      "columns": {
+        "index": "1.3.6.1.4.1.12124.2.51.1.1",
+        "config_number": "1.3.6.1.4.1.12124.2.51.1.2",
+        "serial_no": "1.3.6.1.4.1.12124.2.51.1.3",
+        "model": "1.3.6.1.4.1.12124.2.51.1.4",
+        "unit_id_led": "1.3.6.1.4.1.12124.2.51.1.5"
+      }
+    },
+    "component.drive": {
+      "columns": {
+        "index": "1.3.6.1.4.1.12124.2.52.1.1",
+        "logical_number": "1.3.6.1.4.1.12124.2.52.1.2",
+        "chassis": "1.3.6.1.4.1.12124.2.52.1.3",
+        "device_name": "1.3.6.1.4.1.12124.2.52.1.4",
+        "status": "1.3.6.1.4.1.12124.2.52.1.5",
+        "model": "1.3.6.1.4.1.12124.2.52.1.6",
+        "serial_no": "1.3.6.1.4.1.12124.2.52.1.7",
+        "firmware_version": "1.3.6.1.4.1.12124.2.52.1.8",
+        "size.bytes": "1.3.6.1.4.1.12124.2.52.1.9"
+      }
+    },
+    "component.fan": {
+      "columns": {
+        "index": "1.3.6.1.4.1.12124.2.53.1.1",
+        "description": "1.3.6.1.4.1.12124.2.53.1.3",
+        "rpm": "1.3.6.1.4.1.12124.2.53.1.4"
+      }
+    },
+    "component.sensor": {
+      "columns": {
+        "index": "1.3.6.1.4.1.12124.2.54.1.1",
+        "description": "1.3.6.1.4.1.12124.2.54.1.3",
+        "temp.celsius": "1.3.6.1.4.1.12124.2.54.1.4"
+      }
+    },
+    "component.power_sensor": {
+      "columns": {
+        "index": "1.3.6.1.4.1.12124.2.55.1.1",
+        "name": "1.3.6.1.4.1.12124.2.55.1.2",
+        "description": "1.3.6.1.4.1.12124.2.55.1.3",
+        "value": "1.3.6.1.4.1.12124.2.55.1.4"
+      }
+    },
+    "observer.cluster.license": {
+      "columns": {
+        "name": "1.3.6.1.4.1.12124.1.5.1.1.2",
+        "status": "1.3.6.1.4.1.12124.1.5.1.1.3",
+        "expiration": "1.3.6.1.4.1.12124.1.5.1.1.5"
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "get",
+        "field": "observer.cluster.health"
+      },
+      "params": {
+        "mapping": {
+          "0": "ok",
+          "1": "attn",
+          "2": "down",
+          "3": "invalid"
+        }
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "get",
+        "field": "observer.node.health"
+      },
+      "params": {
+        "mapping": {
+          "0": "ok",
+          "1": "attn",
+          "2": "down",
+          "3": "invalid"
+        }
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "get",
+        "field": "observer.node.type"
+      },
+      "params": {
+        "mapping": {
+          "0": "storage",
+          "1": "accelerator"
+        }
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "get",
+        "field": "observer.node.read_only"
+      },
+      "params": {
+        "mapping": {
+          "0": "no",
+          "1": "yes"
+        }
+      }
+    },
+    {
+      "operation": "ratio",
+      "target": {
+        "scope": "get"
+      },
+      "params": {
+        "value1_field": "storage.disk.total.bytes",
+        "value2_field": "storage.disk.used.bytes",
+        "divide_output_field": "storage.disk.used.pct"
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "table",
+        "table": "component.chassis",
+        "field": "component.chassis.unit_id_led"
+      },
+      "params": {
+        "mapping": {
+          "-1": "na",
+          "0": "no",
+          "1": "yes"
+        }
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "table",
+        "table": "observer.cluster.license",
+        "field": "observer.cluster.license.status"
+      },
+      "params": {
+        "mapping": {
+          "0": "activated",
+          "1": "evaluation",
+          "-1": "expired",
+          "-2": "inactive"
+        }
+      }
+    }
+  ]
+}
+```
+
+#### `isilon_performance`
+
+```json
+{
+  "name": "isilon_performance",
+  "description": "Cluster-wide and polled-node /ifs throughput, external network bit rates, CPU usage by state, the per-CPU table, and per-drive performance for Dell EMC Isilon OneFS. CPU values are converted from per mil to fractions (0-1). Uses ISILON-MIB (1.3.6.1.4.1.12124).",
+  "vendor": "Dell EMC",
+  "product": "Isilon OneFS",
+  "model": "Any",
+  "get": {
+    "observer.cluster.ifs.in.bytes": "1.3.6.1.4.1.12124.1.2.1.1.0",
+    "observer.cluster.ifs.in.bps": "1.3.6.1.4.1.12124.1.2.1.2.0",
+    "observer.cluster.ifs.out.bytes": "1.3.6.1.4.1.12124.1.2.1.3.0",
+    "observer.cluster.ifs.out.bps": "1.3.6.1.4.1.12124.1.2.1.4.0",
+    "observer.cluster.network.in.bps": "1.3.6.1.4.1.12124.1.2.2.2.0",
+    "observer.cluster.network.out.bps": "1.3.6.1.4.1.12124.1.2.2.4.0",
+    "observer.cluster.cpu.user.pct": "1.3.6.1.4.1.12124.1.2.3.1.0",
+    "observer.cluster.cpu.nice.pct": "1.3.6.1.4.1.12124.1.2.3.2.0",
+    "observer.cluster.cpu.system.pct": "1.3.6.1.4.1.12124.1.2.3.3.0",
+    "observer.cluster.cpu.interrupt.pct": "1.3.6.1.4.1.12124.1.2.3.4.0",
+    "observer.cluster.cpu.idle.pct": "1.3.6.1.4.1.12124.1.2.3.5.0",
+    "observer.node.ifs.in.bytes": "1.3.6.1.4.1.12124.2.2.1.1.0",
+    "observer.node.ifs.in.bps": "1.3.6.1.4.1.12124.2.2.1.2.0",
+    "observer.node.ifs.out.bytes": "1.3.6.1.4.1.12124.2.2.1.3.0",
+    "observer.node.ifs.out.bps": "1.3.6.1.4.1.12124.2.2.1.4.0",
+    "observer.node.network.in.bps": "1.3.6.1.4.1.12124.2.2.2.2.0",
+    "observer.node.network.out.bps": "1.3.6.1.4.1.12124.2.2.2.4.0",
+    "observer.node.cpu.user.pct": "1.3.6.1.4.1.12124.2.2.3.1.0",
+    "observer.node.cpu.nice.pct": "1.3.6.1.4.1.12124.2.2.3.2.0",
+    "observer.node.cpu.system.pct": "1.3.6.1.4.1.12124.2.2.3.3.0",
+    "observer.node.cpu.interrupt.pct": "1.3.6.1.4.1.12124.2.2.3.4.0",
+    "observer.node.cpu.idle.pct": "1.3.6.1.4.1.12124.2.2.3.5.0"
+  },
+  "walk": {},
+  "table": {
+    "component.node.cpu": {
+      "columns": {
+        "user.pct": "1.3.6.1.4.1.12124.2.2.3.10.1.1",
+        "nice.pct": "1.3.6.1.4.1.12124.2.2.3.10.1.2",
+        "system.pct": "1.3.6.1.4.1.12124.2.2.3.10.1.3",
+        "interrupt.pct": "1.3.6.1.4.1.12124.2.2.3.10.1.4",
+        "idle.pct": "1.3.6.1.4.1.12124.2.2.3.10.1.5"
+      }
+    },
+    "component.drive_perf": {
+      "columns": {
+        "index": "1.3.6.1.4.1.12124.2.2.52.1.1",
+        "device_name": "1.3.6.1.4.1.12124.2.2.52.1.2",
+        "ops_per_sec": "1.3.6.1.4.1.12124.2.2.52.1.3",
+        "in.bps": "1.3.6.1.4.1.12124.2.2.52.1.4",
+        "out.bps": "1.3.6.1.4.1.12124.2.2.52.1.5"
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "observer.cluster.cpu.user.pct"
+      },
+      "params": {
+        "multiply_value": 0.001
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "observer.cluster.cpu.nice.pct"
+      },
+      "params": {
+        "multiply_value": 0.001
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "observer.cluster.cpu.system.pct"
+      },
+      "params": {
+        "multiply_value": 0.001
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "observer.cluster.cpu.interrupt.pct"
+      },
+      "params": {
+        "multiply_value": 0.001
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "observer.cluster.cpu.idle.pct"
+      },
+      "params": {
+        "multiply_value": 0.001
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "observer.node.cpu.user.pct"
+      },
+      "params": {
+        "multiply_value": 0.001
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "observer.node.cpu.nice.pct"
+      },
+      "params": {
+        "multiply_value": 0.001
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "observer.node.cpu.system.pct"
+      },
+      "params": {
+        "multiply_value": 0.001
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "observer.node.cpu.interrupt.pct"
+      },
+      "params": {
+        "multiply_value": 0.001
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "observer.node.cpu.idle.pct"
+      },
+      "params": {
+        "multiply_value": 0.001
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "component.node.cpu",
+        "field": "component.node.cpu.user.pct"
+      },
+      "params": {
+        "multiply_value": 0.001
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "component.node.cpu",
+        "field": "component.node.cpu.nice.pct"
+      },
+      "params": {
+        "multiply_value": 0.001
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "component.node.cpu",
+        "field": "component.node.cpu.system.pct"
+      },
+      "params": {
+        "multiply_value": 0.001
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "component.node.cpu",
+        "field": "component.node.cpu.interrupt.pct"
+      },
+      "params": {
+        "multiply_value": 0.001
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "component.node.cpu",
+        "field": "component.node.cpu.idle.pct"
+      },
+      "params": {
+        "multiply_value": 0.001
+      }
+    }
+  ]
+}
+```
+
+#### `isilon_protocols`
+
+```json
+{
+  "name": "isilon_protocols",
+  "description": "Per-protocol performance on the polled node for Dell EMC Isilon OneFS (SMB1, SMB2, NFS3, NFS4, NLM, FTP, HTTP, iSCSI, SyncIQ): operation counts and rates, request/response sizes, bit rates, and latency in microseconds. Uses ISILON-MIB nodeProtocolPerfTable (1.3.6.1.4.1.12124.2.2.10).",
+  "vendor": "Dell EMC",
+  "product": "Isilon OneFS",
+  "model": "Any",
+  "get": {},
+  "walk": {},
+  "table": {
+    "storage.protocol": {
+      "columns": {
+        "name": "1.3.6.1.4.1.12124.2.2.10.1.1",
+        "op_count": "1.3.6.1.4.1.12124.2.2.10.1.2",
+        "ops_per_sec": "1.3.6.1.4.1.12124.2.2.10.1.3",
+        "in.min_bytes": "1.3.6.1.4.1.12124.2.2.10.1.4",
+        "in.max_bytes": "1.3.6.1.4.1.12124.2.2.10.1.5",
+        "in.avg_bytes": "1.3.6.1.4.1.12124.2.2.10.1.6",
+        "in.stddev_bytes": "1.3.6.1.4.1.12124.2.2.10.1.7",
+        "in.bps": "1.3.6.1.4.1.12124.2.2.10.1.8",
+        "out.min_bytes": "1.3.6.1.4.1.12124.2.2.10.1.9",
+        "out.max_bytes": "1.3.6.1.4.1.12124.2.2.10.1.10",
+        "out.avg_bytes": "1.3.6.1.4.1.12124.2.2.10.1.11",
+        "out.stddev_bytes": "1.3.6.1.4.1.12124.2.2.10.1.12",
+        "out.bps": "1.3.6.1.4.1.12124.2.2.10.1.13",
+        "latency.min_us": "1.3.6.1.4.1.12124.2.2.10.1.14",
+        "latency.max_us": "1.3.6.1.4.1.12124.2.2.10.1.15",
+        "latency.avg_us": "1.3.6.1.4.1.12124.2.2.10.1.16",
+        "latency.stddev_us": "1.3.6.1.4.1.12124.2.2.10.1.17"
+      }
+    }
+  },
+  "normalizers": []
+}
+```
+
+#### `generic_host_system_metrics`
+
+```json
+{
+  "name": "generic_host_system_metrics",
+  "description": "CPU load and storage usage from HOST-RESOURCES-MIB, supported on Linux, Windows, and most embedded devices. Disks go to system.filesystem (sizes in bytes) and RAM/virtual-memory/other storage to system.storage, so Kibana's Hosts page disk usage only sees real disks.",
+  "vendor": "Any",
+  "product": "Any",
+  "model": "Any",
+  "get": {
+    "host.num_users": "1.3.6.1.2.1.25.1.5.0",
+    "host.num_processes": "1.3.6.1.2.1.25.1.6.0",
+    "system.memory.physical.total.kb": "1.3.6.1.2.1.25.2.2.0"
+  },
+  "walk": {},
+  "table": {
+    "component.cpu": {
+      "columns": {
+        "load_pct": "1.3.6.1.2.1.25.3.3.1.2"
+      }
+    },
+    "system.filesystem": {
+      "columns": {
+        "index": "1.3.6.1.2.1.25.2.3.1.1",
+        "type": "1.3.6.1.2.1.25.2.3.1.2",
+        "mount_point": "1.3.6.1.2.1.25.2.3.1.3",
+        "allocation_units": "1.3.6.1.2.1.25.2.3.1.4",
+        "total": "1.3.6.1.2.1.25.2.3.1.5",
+        "used.bytes": "1.3.6.1.2.1.25.2.3.1.6"
+      },
+      "keep_when": {
+        "column": "type",
+        "equals": [
+          "1.3.6.1.2.1.25.2.1.4",
+          "1.3.6.1.2.1.25.2.1.10"
+        ],
+        "keep_column": true
+      }
+    },
+    "system.storage": {
+      "columns": {
+        "index": "1.3.6.1.2.1.25.2.3.1.1",
+        "type": "1.3.6.1.2.1.25.2.3.1.2",
+        "mount_point": "1.3.6.1.2.1.25.2.3.1.3",
+        "allocation_units": "1.3.6.1.2.1.25.2.3.1.4",
+        "total": "1.3.6.1.2.1.25.2.3.1.5",
+        "used.bytes": "1.3.6.1.2.1.25.2.3.1.6"
+      },
+      "keep_when": {
+        "column": "type",
+        "equals": [
+          "1.3.6.1.2.1.25.2.1.1",
+          "1.3.6.1.2.1.25.2.1.2",
+          "1.3.6.1.2.1.25.2.1.3",
+          "1.3.6.1.2.1.25.2.1.5",
+          "1.3.6.1.2.1.25.2.1.6",
+          "1.3.6.1.2.1.25.2.1.7",
+          "1.3.6.1.2.1.25.2.1.8",
+          "1.3.6.1.2.1.25.2.1.9"
+        ],
+        "keep_column": true
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.physical.total.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.total"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.physical.total.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.actual.total.bytes"
+      }
+    },
+    {
+      "operation": "average",
+      "target": {
+        "scope": "table",
+        "table": "component.cpu",
+        "field": "component.cpu.load_pct"
+      },
+      "params": {
+        "output_field": "system.cpu.total.norm.pct",
+        "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "component.cpu",
+        "field": "component.cpu.load_pct"
+      },
+      "params": {
+        "output_field": "system.cpu.cores",
+        "mode": "count"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "component.cpu",
+        "field": "component.cpu.load_pct"
+      },
+      "params": {
+        "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.filesystem",
+        "field": "system.filesystem.total"
+      },
+      "params": {
+        "multiply_field": "system.filesystem.allocation_units"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.filesystem",
+        "field": "system.filesystem.used.bytes"
+      },
+      "params": {
+        "multiply_field": "system.filesystem.allocation_units"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.storage",
+        "field": "system.storage.total"
+      },
+      "params": {
+        "multiply_field": "system.storage.allocation_units"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.storage",
+        "field": "system.storage.used.bytes"
+      },
+      "params": {
+        "multiply_field": "system.storage.allocation_units"
+      }
+    },
+    {
+      "operation": "ratio",
+      "target": {
+        "scope": "table",
+        "table": "system.filesystem"
+      },
+      "params": {
+        "value1_field": "system.filesystem.total",
+        "value2_field": "system.filesystem.used.bytes",
+        "divide_output_field": "system.filesystem.used.pct",
+        "difference_output_field": "system.filesystem.free"
+      }
+    },
+    {
+      "operation": "ratio",
+      "target": {
+        "scope": "table",
+        "table": "system.storage"
+      },
+      "params": {
+        "value1_field": "system.storage.total",
+        "value2_field": "system.storage.used.bytes",
+        "divide_output_field": "system.storage.used.pct"
+      }
+    }
+  ]
+}
+```
+
+#### `generic_ucd_system_metrics`
+
+```json
+{
+  "name": "generic_ucd_system_metrics",
+  "description": "Memory, load averages, per-state CPU, and disk I/O counters via Net-SNMP for Linux and BSD devices. Field names follow the Elastic System integration so Kibana's Hosts page can read them.",
+  "vendor": "Any",
+  "product": "Any",
+  "model": "Any",
+  "get": {
+    "system.memory.actual.total.kb": "1.3.6.1.4.1.2021.4.5.0",
+    "system.memory.actual.available.kb": "1.3.6.1.4.1.2021.4.6.0",
+    "system.memory.total_free.kb": "1.3.6.1.4.1.2021.4.11.0",
+    "system.memory.actual.cached.kb": "1.3.6.1.4.1.2021.4.15.0",
+    "system.load.1": "1.3.6.1.4.1.2021.10.1.5.1",
+    "system.load.5": "1.3.6.1.4.1.2021.10.1.5.2",
+    "system.load.15": "1.3.6.1.4.1.2021.10.1.5.3",
+    "system.cpu.pct.user": "1.3.6.1.4.1.2021.11.9.0",
+    "system.cpu.pct.system": "1.3.6.1.4.1.2021.11.10.0",
+    "system.cpu.raw.user": "1.3.6.1.4.1.2021.11.50.0",
+    "system.cpu.raw.nice": "1.3.6.1.4.1.2021.11.51.0",
+    "system.cpu.raw.system": "1.3.6.1.4.1.2021.11.52.0",
+    "system.cpu.raw.idle": "1.3.6.1.4.1.2021.11.53.0",
+    "system.cpu.raw.wait": "1.3.6.1.4.1.2021.11.54.0",
+    "system.cpu.raw.kernel": "1.3.6.1.4.1.2021.11.55.0",
+    "system.cpu.raw.interrupt": "1.3.6.1.4.1.2021.11.56.0",
+    "system.cpu.raw.softirq": "1.3.6.1.4.1.2021.11.61.0",
+    "system.cpu.raw.steal": "1.3.6.1.4.1.2021.11.64.0",
+    "system.cpu.cores": "1.3.6.1.4.1.2021.11.67.0"
+  },
+  "walk": {},
+  "table": {
+    "system.diskio": {
+      "columns": {
+        "index": "1.3.6.1.4.1.2021.13.15.1.1.1",
+        "name": "1.3.6.1.4.1.2021.13.15.1.1.2",
+        "read.count": "1.3.6.1.4.1.2021.13.15.1.1.5",
+        "write.count": "1.3.6.1.4.1.2021.13.15.1.1.6",
+        "read.bytes": "1.3.6.1.4.1.2021.13.15.1.1.12",
+        "write.bytes": "1.3.6.1.4.1.2021.13.15.1.1.13"
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "sum",
+      "target": {
+        "scope": "get"
+      },
+      "params": {
+        "input_fields": [
+          "system.cpu.pct.user",
+          "system.cpu.pct.system"
+        ],
+        "output_field": "system.cpu.active.pct"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.active.pct"
+      },
+      "params": {
+        "multiply_value": 0.01,
+        "output_field": "system.cpu.total.norm.pct"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.load.1"
+      },
+      "params": {
+        "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.load.5"
+      },
+      "params": {
+        "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.load.15"
+      },
+      "params": {
+        "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.actual.total.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.total"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.actual.total.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.actual.total.bytes"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.actual.available.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.free"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.actual.available.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.actual.free"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.cores"
+      },
+      "params": {
+        "multiply_value": 1,
+        "output_field": "system.load.cores"
+      }
+    },
+    {
+      "operation": "ratio",
+      "target": {
+        "scope": "get"
+      },
+      "params": {
+        "value1_field": "system.memory.actual.total.kb",
+        "value2_field": "system.memory.actual.available.kb",
+        "complement_ratio_output_field": "system.memory.actual.used.pct",
+        "difference_output_field": "system.memory.actual.used.kb"
+      }
+    },
+    {
+      "operation": "sum",
+      "target": {
+        "scope": "get"
+      },
+      "params": {
+        "input_fields": [
+          "system.memory.actual.used.kb",
+          "system.memory.actual.cached.kb"
+        ],
+        "output_field": "system.memory.used.kb"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.actual.used.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.actual.used.bytes"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.used.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.used.bytes"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.user"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.user"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.nice"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.nice"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.kernel"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.system"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.idle"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.idle"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.wait"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.iowait"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.interrupt"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.irq"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.softirq"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.softirq"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.steal"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.steal"
+      }
+    },
+    {
+      "operation": "share",
+      "target": {
+        "scope": "get"
+      },
+      "params": {
+        "input_fields": [
+          "system.cpu.delta.user",
+          "system.cpu.delta.nice",
+          "system.cpu.delta.system",
+          "system.cpu.delta.idle",
+          "system.cpu.delta.iowait",
+          "system.cpu.delta.irq",
+          "system.cpu.delta.softirq",
+          "system.cpu.delta.steal"
+        ],
+        "output_fields": [
+          "system.cpu.user.pct",
+          "system.cpu.nice.pct",
+          "system.cpu.system.pct",
+          "system.cpu.idle.pct",
+          "system.cpu.iowait.pct",
+          "system.cpu.irq.pct",
+          "system.cpu.softirq.pct",
+          "system.cpu.steal.pct"
+        ],
+        "multiply_field": "system.cpu.cores"
+      }
+    }
+  ]
+}
+```
+
+#### `generic_interfaces`
+
+```json
+{
+  "name": "generic_interfaces",
+  "description": "Interface admin/oper status, speed, MAC, MTU, and traffic/error counters for all SNMP-capable devices.",
+  "product": "Any",
+  "vendor": "Any",
+  "model": "Any",
+  "get": {},
+  "walk": {},
+  "table": {
+    "interface": {
+      "columns": {
+        "index": "1.3.6.1.2.1.2.2.1.1",
+        "name": "1.3.6.1.2.1.2.2.1.2",
+        "type": "1.3.6.1.2.1.2.2.1.3",
+        "admin_status": "1.3.6.1.2.1.2.2.1.7",
+        "oper_status": "1.3.6.1.2.1.2.2.1.8",
+        "alt_name": "1.3.6.1.2.1.31.1.1.1.1",
+        "alias": "1.3.6.1.2.1.31.1.1.1.18",
+        "speed": "1.3.6.1.2.1.2.2.1.5",
+        "speed_high_mbps": "1.3.6.1.2.1.31.1.1.1.15",
+        "mac": "1.3.6.1.2.1.2.2.1.6",
+        "mtu": "1.3.6.1.2.1.2.2.1.4",
+        "in_octets": "1.3.6.1.2.1.31.1.1.1.6",
+        "out_octets": "1.3.6.1.2.1.31.1.1.1.10",
+        "in_broadcast_pkts": "1.3.6.1.2.1.31.1.1.1.9",
+        "out_broadcast_pkts": "1.3.6.1.2.1.31.1.1.1.13",
+        "in_unicast_pkts": "1.3.6.1.2.1.31.1.1.1.7",
+        "out_unicast_pkts": "1.3.6.1.2.1.31.1.1.1.11",
+        "in_multicast_pkts": "1.3.6.1.2.1.31.1.1.1.8",
+        "out_multicast_pkts": "1.3.6.1.2.1.31.1.1.1.12",
+        "last_change": "1.3.6.1.2.1.2.2.1.9",
+        "vlan_id": "1.3.6.1.2.1.17.7.1.4.5.1.1",
+        "in_errors": "1.3.6.1.2.1.2.2.1.14",
+        "out_errors": "1.3.6.1.2.1.2.2.1.20",
+        "in_discards": "1.3.6.1.2.1.2.2.1.13",
+        "out_discards": "1.3.6.1.2.1.2.2.1.19"
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.in_octets"
+      },
+      "params": {
+        "output_field": "host.network.ingress.bytes",
+        "mode": "delta",
+        "exclude_column": "type",
+        "exclude_values": [
+          "24"
+        ]
+      }
+    },
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.out_octets"
+      },
+      "params": {
+        "output_field": "host.network.egress.bytes",
+        "mode": "delta",
+        "exclude_column": "type",
+        "exclude_values": [
+          "24"
+        ]
+      }
+    },
     {
       "operation": "translate",
       "target": {
@@ -1594,6 +6007,38 @@ _Profile definition not found in bundled files._
   },
   "normalizers": [
     {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.in_octets"
+      },
+      "params": {
+        "output_field": "host.network.ingress.bytes",
+        "mode": "delta",
+        "exclude_column": "type",
+        "exclude_values": [
+          "24"
+        ]
+      }
+    },
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.out_octets"
+      },
+      "params": {
+        "output_field": "host.network.egress.bytes",
+        "mode": "delta",
+        "exclude_column": "type",
+        "exclude_values": [
+          "24"
+        ]
+      }
+    },
+    {
       "operation": "translate",
       "target": {
         "scope": "table",
@@ -1657,7 +6102,7 @@ _Profile definition not found in bundled files._
 ```json
 {
   "name": "generic_entity_sensor",
-  "description": "Physical sensor readings (temp, fan speed, power, current, voltage) from any ENTITY-SENSOR-MIB compliant device.",
+  "description": "Physical sensor readings (temp, fan speed, power, current, voltage) from any ENTITY-SENSOR-MIB compliant device. Description is joined from ENTITY-MIB entPhysicalDescr using the shared entity index.",
   "vendor": "Any",
   "product": "Any",
   "model": "Any",
@@ -1666,15 +6111,210 @@ _Profile definition not found in bundled files._
   "table": {
     "component.sensor": {
       "columns": {
+        "description": "1.3.6.1.2.1.47.1.1.1.1.2",
         "type": "1.3.6.1.2.1.99.1.1.1.1",
         "scale": "1.3.6.1.2.1.99.1.1.1.2",
         "precision": "1.3.6.1.2.1.99.1.1.1.3",
         "value": "1.3.6.1.2.1.99.1.1.1.4",
-        "oper_status": "1.3.6.1.2.1.99.1.1.1.5",
-        "units_display": "1.3.6.1.2.1.99.1.1.1.6"
+        "oper_status": "1.3.6.1.2.1.99.1.1.1.5"
       }
     }
   }
+}
+```
+
+#### `generic_host_system_metrics`
+
+```json
+{
+  "name": "generic_host_system_metrics",
+  "description": "CPU load and storage usage from HOST-RESOURCES-MIB, supported on Linux, Windows, and most embedded devices. Disks go to system.filesystem (sizes in bytes) and RAM/virtual-memory/other storage to system.storage, so Kibana's Hosts page disk usage only sees real disks.",
+  "vendor": "Any",
+  "product": "Any",
+  "model": "Any",
+  "get": {
+    "host.num_users": "1.3.6.1.2.1.25.1.5.0",
+    "host.num_processes": "1.3.6.1.2.1.25.1.6.0",
+    "system.memory.physical.total.kb": "1.3.6.1.2.1.25.2.2.0"
+  },
+  "walk": {},
+  "table": {
+    "component.cpu": {
+      "columns": {
+        "load_pct": "1.3.6.1.2.1.25.3.3.1.2"
+      }
+    },
+    "system.filesystem": {
+      "columns": {
+        "index": "1.3.6.1.2.1.25.2.3.1.1",
+        "type": "1.3.6.1.2.1.25.2.3.1.2",
+        "mount_point": "1.3.6.1.2.1.25.2.3.1.3",
+        "allocation_units": "1.3.6.1.2.1.25.2.3.1.4",
+        "total": "1.3.6.1.2.1.25.2.3.1.5",
+        "used.bytes": "1.3.6.1.2.1.25.2.3.1.6"
+      },
+      "keep_when": {
+        "column": "type",
+        "equals": [
+          "1.3.6.1.2.1.25.2.1.4",
+          "1.3.6.1.2.1.25.2.1.10"
+        ],
+        "keep_column": true
+      }
+    },
+    "system.storage": {
+      "columns": {
+        "index": "1.3.6.1.2.1.25.2.3.1.1",
+        "type": "1.3.6.1.2.1.25.2.3.1.2",
+        "mount_point": "1.3.6.1.2.1.25.2.3.1.3",
+        "allocation_units": "1.3.6.1.2.1.25.2.3.1.4",
+        "total": "1.3.6.1.2.1.25.2.3.1.5",
+        "used.bytes": "1.3.6.1.2.1.25.2.3.1.6"
+      },
+      "keep_when": {
+        "column": "type",
+        "equals": [
+          "1.3.6.1.2.1.25.2.1.1",
+          "1.3.6.1.2.1.25.2.1.2",
+          "1.3.6.1.2.1.25.2.1.3",
+          "1.3.6.1.2.1.25.2.1.5",
+          "1.3.6.1.2.1.25.2.1.6",
+          "1.3.6.1.2.1.25.2.1.7",
+          "1.3.6.1.2.1.25.2.1.8",
+          "1.3.6.1.2.1.25.2.1.9"
+        ],
+        "keep_column": true
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.physical.total.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.total"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.physical.total.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.actual.total.bytes"
+      }
+    },
+    {
+      "operation": "average",
+      "target": {
+        "scope": "table",
+        "table": "component.cpu",
+        "field": "component.cpu.load_pct"
+      },
+      "params": {
+        "output_field": "system.cpu.total.norm.pct",
+        "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "component.cpu",
+        "field": "component.cpu.load_pct"
+      },
+      "params": {
+        "output_field": "system.cpu.cores",
+        "mode": "count"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "component.cpu",
+        "field": "component.cpu.load_pct"
+      },
+      "params": {
+        "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.filesystem",
+        "field": "system.filesystem.total"
+      },
+      "params": {
+        "multiply_field": "system.filesystem.allocation_units"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.filesystem",
+        "field": "system.filesystem.used.bytes"
+      },
+      "params": {
+        "multiply_field": "system.filesystem.allocation_units"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.storage",
+        "field": "system.storage.total"
+      },
+      "params": {
+        "multiply_field": "system.storage.allocation_units"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.storage",
+        "field": "system.storage.used.bytes"
+      },
+      "params": {
+        "multiply_field": "system.storage.allocation_units"
+      }
+    },
+    {
+      "operation": "ratio",
+      "target": {
+        "scope": "table",
+        "table": "system.filesystem"
+      },
+      "params": {
+        "value1_field": "system.filesystem.total",
+        "value2_field": "system.filesystem.used.bytes",
+        "divide_output_field": "system.filesystem.used.pct",
+        "difference_output_field": "system.filesystem.free"
+      }
+    },
+    {
+      "operation": "ratio",
+      "target": {
+        "scope": "table",
+        "table": "system.storage"
+      },
+      "params": {
+        "value1_field": "system.storage.total",
+        "value2_field": "system.storage.used.bytes",
+        "divide_output_field": "system.storage.used.pct"
+      }
+    }
+  ]
 }
 ```
 
@@ -1697,11 +6337,660 @@ _Profile definition not found in bundled files._
 }
 ```
 
-### paloalto_firewall
+### netapp_7mode
 
 ```json
 {
-  "name": "paloalto_firewall",
+  "name": "netapp_7mode",
+  "description": "NetApp FAS / ONTAP filers running Data ONTAP 7-Mode. Covers system health, disk inventory, filesystem/aggregate capacity, protocol throughput (NFS, CIFS, iSCSI, FCP), and data-protection status (SnapMirror, SnapVault, SIS).",
+  "vendor": "NetApp",
+  "product": "ONTAP 7-Mode",
+  "model": "Any",
+  "matching_rules": [
+    "NetApp Release",
+    "7-Mode"
+  ]
+}
+```
+
+**Profiles included in `netapp_7mode`:**
+
+#### `netapp_7mode_system`
+
+```json
+{
+  "name": "netapp_7mode_system",
+  "description": "System identity, global health status, CPU utilization, and disk inventory summary for NetApp FAS/ONTAP 7-Mode filers. Uses NETAPP-MIB (1.3.6.1.4.1.789).",
+  "vendor": "NetApp",
+  "product": "ONTAP 7-Mode",
+  "model": "Any",
+  "get": {
+    "observer.product.model": "1.3.6.1.4.1.789.1.1.5.0",
+    "observer.product.version": "1.3.6.1.4.1.789.1.1.2.0",
+    "observer.product.chassis_serial": "1.3.6.1.4.1.789.1.1.9.0",
+    "observer.product.num_disks": "1.3.6.1.4.1.789.1.1.11.0",
+    "system.status": "1.3.6.1.4.1.789.1.2.1.10.0",
+    "system.cpu.busy_ticks": "1.3.6.1.4.1.789.1.2.1.12.0",
+    "system.cpu.elapsed_ticks": "1.3.6.1.4.1.789.1.2.1.13.0",
+    "storage.disk.total": "1.3.6.1.4.1.789.1.3.1.1.2.0",
+    "storage.disk.active": "1.3.6.1.4.1.789.1.3.1.1.2.0",
+    "storage.disk.reconstructing": "1.3.6.1.4.1.789.1.3.1.1.3.0",
+    "storage.disk.failed": "1.3.6.1.4.1.789.1.3.1.1.4.0",
+    "storage.disk.spare": "1.3.6.1.4.1.789.1.3.1.1.5.0",
+    "component.fan.ok": "1.3.6.1.4.1.789.1.2.4.1.0",
+    "component.fan.message": "1.3.6.1.4.1.789.1.2.4.3.0",
+    "component.power_supply.ok": "1.3.6.1.4.1.789.1.2.4.4.0",
+    "component.power_supply.message": "1.3.6.1.4.1.789.1.2.4.5.0"
+  },
+  "walk": {},
+  "table": {},
+  "normalizers": [
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "get",
+        "field": "system.status"
+      },
+      "params": {
+        "mapping": {
+          "1": "NORMAL",
+          "2": "OK",
+          "3": "OK_WITH_SUPPRESSED",
+          "4": "DEGRADED",
+          "5": "REBOOTING",
+          "6": "HALTED",
+          "7": "WAITING_FOR_GIVEBACK",
+          "8": "WAITING_FOR_TAKEOVER"
+        }
+      }
+    },
+    {
+      "operation": "ratio",
+      "target": {
+        "scope": "get"
+      },
+      "params": {
+        "value1_field": "system.cpu.busy_ticks",
+        "value2_field": "system.cpu.elapsed_ticks",
+        "ratio1_output_field": "system.cpu.total.norm.pct"
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "get",
+        "field": "component.fan.ok"
+      },
+      "params": {
+        "mapping": {
+          "1": "OK",
+          "0": "FAILED"
+        },
+        "output_field": "component.fan.status"
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "get",
+        "field": "component.power_supply.ok"
+      },
+      "params": {
+        "mapping": {
+          "1": "OK",
+          "0": "FAILED"
+        },
+        "output_field": "component.power_supply.status"
+      }
+    }
+  ]
+}
+```
+
+#### `netapp_7mode_volumes`
+
+```json
+{
+  "name": "netapp_7mode_volumes",
+  "description": "Per-filesystem (dfTable) capacity, inode usage, and mount status; per-aggregate total/used/available bytes; and flexible volume state for NetApp ONTAP 7-Mode filers. Uses NETAPP-MIB (1.3.6.1.4.1.789).",
+  "vendor": "NetApp",
+  "product": "ONTAP 7-Mode",
+  "model": "Any",
+  "get": {
+    "storage.volume.total_count": "1.3.6.1.4.1.789.1.5.1.0",
+    "storage.aggregate.total_count": "1.3.6.1.4.1.789.1.17.1.0"
+  },
+  "walk": {},
+  "table": {
+    "storage.filesystem": {
+      "columns": {
+        "index": "1.3.6.1.4.1.789.1.5.4.1.1",
+        "name": "1.3.6.1.4.1.789.1.5.4.1.2",
+        "total.kb": "1.3.6.1.4.1.789.1.5.4.1.29",
+        "used.kb": "1.3.6.1.4.1.789.1.5.4.1.30",
+        "avail.kb": "1.3.6.1.4.1.789.1.5.4.1.31",
+        "used.pct": "1.3.6.1.4.1.789.1.5.4.1.6",
+        "inodes.used.count": "1.3.6.1.4.1.789.1.5.4.1.7",
+        "inodes.free": "1.3.6.1.4.1.789.1.5.4.1.8",
+        "inodes.used.pct": "1.3.6.1.4.1.789.1.5.4.1.9",
+        "mounted": "1.3.6.1.4.1.789.1.5.4.1.10"
+      }
+    },
+    "storage.aggregate": {
+      "columns": {
+        "index": "1.3.6.1.4.1.789.1.17.15.2.1.1",
+        "name": "1.3.6.1.4.1.789.1.17.15.2.1.2",
+        "state": "1.3.6.1.4.1.789.1.17.15.2.1.3",
+        "status": "1.3.6.1.4.1.789.1.17.15.2.1.4",
+        "total.kb": "1.3.6.1.4.1.789.1.17.15.2.1.14",
+        "used.kb": "1.3.6.1.4.1.789.1.17.15.2.1.15",
+        "avail.kb": "1.3.6.1.4.1.789.1.17.15.2.1.16",
+        "used.pct": "1.3.6.1.4.1.789.1.17.15.2.1.8"
+      }
+    },
+    "storage.volume": {
+      "columns": {
+        "index": "1.3.6.1.4.1.789.1.21.1.2.1.1",
+        "state": "1.3.6.1.4.1.789.1.21.1.2.1.2",
+        "type": "1.3.6.1.4.1.789.1.21.1.2.1.3",
+        "name": "1.3.6.1.4.1.789.1.21.1.2.1.4",
+        "aggregate": "1.3.6.1.4.1.789.1.21.1.2.1.5",
+        "total.kb": "1.3.6.1.4.1.789.1.21.1.2.1.6",
+        "used.kb": "1.3.6.1.4.1.789.1.21.1.2.1.7",
+        "avail.kb": "1.3.6.1.4.1.789.1.21.1.2.1.8"
+      }
+    },
+    "storage.lun": {
+      "columns": {
+        "index": "1.3.6.1.4.1.789.1.22.1.2.1.1",
+        "path": "1.3.6.1.4.1.789.1.22.1.2.1.2",
+        "size.bytes": "1.3.6.1.4.1.789.1.22.1.2.1.3",
+        "mapped": "1.3.6.1.4.1.789.1.22.1.2.1.5",
+        "state": "1.3.6.1.4.1.789.1.22.1.2.1.6",
+        "backend_serial": "1.3.6.1.4.1.789.1.22.1.2.1.8"
+      }
+    },
+    "storage.raid_volume": {
+      "columns": {
+        "index": "1.3.6.1.4.1.789.1.4.4.1.1",
+        "name": "1.3.6.1.4.1.789.1.4.4.1.2",
+        "plex_num": "1.3.6.1.4.1.789.1.4.4.1.3",
+        "rg_index": "1.3.6.1.4.1.789.1.4.4.1.4",
+        "disk_name": "1.3.6.1.4.1.789.1.4.4.1.5"
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "table",
+        "table": "storage.filesystem",
+        "field": "storage.filesystem.mounted"
+      },
+      "params": {
+        "mapping": {
+          "1": "MOUNTED",
+          "2": "UNMOUNTED",
+          "3": "FROZEN",
+          "4": "DESTROYING",
+          "5": "CREATING",
+          "6": "MOUNTING",
+          "7": "UNMOUNTING",
+          "8": "NOFSINFO",
+          "9": "REPLAYING",
+          "10": "REPLAYED"
+        }
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "table",
+        "table": "storage.aggregate",
+        "field": "storage.aggregate.state"
+      },
+      "params": {
+        "mapping": {
+          "1": "ONLINE",
+          "2": "RESTRICTED",
+          "3": "OFFLINE",
+          "4": "CREATING",
+          "5": "DESTROYING",
+          "6": "FAILED",
+          "7": "INCONSISTENT",
+          "8": "IRON_RESTRICTED",
+          "9": "UNKNOWN"
+        }
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "table",
+        "table": "storage.volume",
+        "field": "storage.volume.state"
+      },
+      "params": {
+        "mapping": {
+          "1": "ONLINE",
+          "2": "RESTRICTED",
+          "3": "OFFLINE",
+          "4": "ERROR"
+        }
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "storage.filesystem",
+        "field": "storage.filesystem.used.pct"
+      },
+      "params": {
+        "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "storage.filesystem",
+        "field": "storage.filesystem.inodes.used.pct"
+      },
+      "params": {
+        "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "storage.aggregate",
+        "field": "storage.aggregate.used.pct"
+      },
+      "params": {
+        "multiply_value": 0.01
+      }
+    }
+  ]
+}
+```
+
+#### `netapp_7mode_disks`
+
+```json
+{
+  "name": "netapp_7mode_disks",
+  "description": "Per-physical-disk inventory for NetApp ONTAP 7-Mode filers: slot address (e.g. 'data disk 0b.20.13'), operational state, and used/total capacity in KB. Uses the disk detail table at NETAPP-MIB 1.3.6.1.4.1.789.1.6.1.1.*. Provides the data foundation for a disk grid view.",
+  "vendor": "NetApp",
+  "product": "ONTAP 7-Mode",
+  "model": "Any",
+  "get": {},
+  "walk": {},
+  "table": {
+    "component.disk": {
+      "columns": {
+        "index": "1.3.6.1.4.1.789.1.6.1.1.1",
+        "description": "1.3.6.1.4.1.789.1.6.1.1.2",
+        "state": "1.3.6.1.4.1.789.1.6.1.1.3",
+        "used.kb": "1.3.6.1.4.1.789.1.6.1.1.6",
+        "total.kb": "1.3.6.1.4.1.789.1.6.1.1.7"
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "table",
+        "table": "component.disk",
+        "field": "component.disk.state"
+      },
+      "params": {
+        "mapping": {
+          "1": "ACTIVE",
+          "2": "RECONSTRUCTING",
+          "3": "FAILED",
+          "4": "SPARE"
+        }
+      }
+    },
+    {
+      "operation": "ratio",
+      "target": {
+        "scope": "table",
+        "table": "component.disk"
+      },
+      "params": {
+        "value1_field": "component.disk.used.kb",
+        "value2_field": "component.disk.total.kb",
+        "ratio1_output_field": "component.disk.used.pct"
+      }
+    }
+  ]
+}
+```
+
+#### `netapp_7mode_protocols`
+
+```json
+{
+  "name": "netapp_7mode_protocols",
+  "description": "Cumulative protocol operation counters (NFS, CIFS, HTTP), per-client NFS statistics table, per-share CIFS statistics table, iSCSI connection table, and FCP throughput for NetApp ONTAP 7-Mode filers. Uses NETAPP-MIB (1.3.6.1.4.1.789).",
+  "vendor": "NetApp",
+  "product": "ONTAP 7-Mode",
+  "model": "Any",
+  "get": {
+    "network.protocol.nfs.ops": "1.3.6.1.4.1.789.1.2.1.1.0",
+    "network.protocol.cifs.ops": "1.3.6.1.4.1.789.1.2.1.2.0",
+    "network.protocol.http.ops": "1.3.6.1.4.1.789.1.2.1.3.0",
+    "network.bytes.received.kb": "1.3.6.1.4.1.789.1.2.1.4.0",
+    "network.bytes.sent.kb": "1.3.6.1.4.1.789.1.2.1.5.0",
+    "storage.disk.read.ops": "1.3.6.1.4.1.789.1.2.1.6.0",
+    "storage.disk.write.ops": "1.3.6.1.4.1.789.1.2.1.7.0",
+    "network.protocol.nfs.version": "1.3.6.1.4.1.789.1.24.1.0",
+    "network.protocol.cifs.connections": "1.3.6.1.4.1.789.1.23.1.0"
+  },
+  "walk": {},
+  "table": {
+    "network.protocol.nfs.client": {
+      "columns": {
+        "index": "1.3.6.1.4.1.789.1.24.2.1.1",
+        "host_addr": "1.3.6.1.4.1.789.1.24.2.1.2",
+        "nfs_ops": "1.3.6.1.4.1.789.1.24.2.1.3",
+        "read_ops": "1.3.6.1.4.1.789.1.24.2.1.4",
+        "write_ops": "1.3.6.1.4.1.789.1.24.2.1.5",
+        "bytes_read": "1.3.6.1.4.1.789.1.24.2.1.6",
+        "bytes_written": "1.3.6.1.4.1.789.1.24.2.1.7"
+      }
+    },
+    "network.protocol.cifs.share": {
+      "columns": {
+        "index": "1.3.6.1.4.1.789.1.23.2.1.1",
+        "name": "1.3.6.1.4.1.789.1.23.2.1.2",
+        "type": "1.3.6.1.4.1.789.1.23.2.1.3",
+        "mounted": "1.3.6.1.4.1.789.1.23.2.1.4"
+      }
+    },
+    "network.protocol.iscsi.lun": {
+      "columns": {
+        "index": "1.3.6.1.4.1.789.1.25.4.1.1",
+        "lun_id": "1.3.6.1.4.1.789.1.25.4.1.2",
+        "filer_name": "1.3.6.1.4.1.789.1.25.4.1.3",
+        "license_name": "1.3.6.1.4.1.789.1.25.4.1.4"
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "get",
+        "field": "network.protocol.nfs.version"
+      },
+      "params": {
+        "mapping": {
+          "1": "DISABLED",
+          "2": "NFSv3",
+          "3": "NFSv4",
+          "4": "NFSv3_NFSv4"
+        }
+      }
+    }
+  ]
+}
+```
+
+#### `netapp_7mode_data_protection`
+
+```json
+{
+  "name": "netapp_7mode_data_protection",
+  "description": "SnapMirror relationship state and lag, SnapVault destination status, and SIS (dedup/compression) efficiency statistics for NetApp ONTAP 7-Mode filers. Uses NETAPP-MIB (1.3.6.1.4.1.789).",
+  "vendor": "NetApp",
+  "product": "ONTAP 7-Mode",
+  "model": "Any",
+  "get": {
+    "data_protection.snapmirror.enabled": "1.3.6.1.4.1.789.1.9.1.0",
+    "data_protection.snapmirror.relation_count": "1.3.6.1.4.1.789.1.9.2.0",
+    "data_protection.snapvault.enabled": "1.3.6.1.4.1.789.1.16.1.0",
+    "data_protection.sis.enabled": "1.3.6.1.4.1.789.1.18.1.1.0",
+    "data_protection.sis.compression_enabled": "1.3.6.1.4.1.789.1.18.1.2.0"
+  },
+  "walk": {},
+  "table": {
+    "data_protection.snapmirror.relation": {
+      "columns": {
+        "index": "1.3.6.1.4.1.789.1.9.3.1.1",
+        "source_path": "1.3.6.1.4.1.789.1.9.3.1.2",
+        "destination_path": "1.3.6.1.4.1.789.1.9.3.1.3",
+        "state": "1.3.6.1.4.1.789.1.9.3.1.4",
+        "lag_secs": "1.3.6.1.4.1.789.1.9.3.1.5",
+        "last_transfer_secs": "1.3.6.1.4.1.789.1.9.3.1.6",
+        "status": "1.3.6.1.4.1.789.1.9.3.1.7",
+        "in_progress": "1.3.6.1.4.1.789.1.9.3.1.8"
+      }
+    },
+    "data_protection.snapvault.destination": {
+      "columns": {
+        "index": "1.3.6.1.4.1.789.1.16.4.1.1",
+        "vfiler_name": "1.3.6.1.4.1.789.1.16.3.1.2",
+        "status": "1.3.6.1.4.1.789.1.16.3.1.7",
+        "state": "1.3.6.1.4.1.789.1.16.3.1.9"
+      }
+    },
+    "data_protection.sis.volume": {
+      "columns": {
+        "index": "1.3.6.1.4.1.789.1.18.2.1.0",
+        "savings_pct": "1.3.6.1.4.1.789.1.18.2.5.0",
+        "last_op_size_kb": "1.3.6.1.4.1.789.1.18.2.9.0",
+        "last_op_status": "1.3.6.1.4.1.789.1.18.2.16.0"
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "get",
+        "field": "data_protection.snapmirror.enabled"
+      },
+      "params": {
+        "mapping": {
+          "1": "ENABLED",
+          "2": "DISABLED"
+        }
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "get",
+        "field": "data_protection.snapvault.enabled"
+      },
+      "params": {
+        "mapping": {
+          "1": "ENABLED",
+          "2": "DISABLED"
+        }
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "table",
+        "table": "data_protection.snapmirror.relation",
+        "field": "data_protection.snapmirror.relation.state"
+      },
+      "params": {
+        "mapping": {
+          "1": "UNINITIALIZED",
+          "2": "SNAPMIRRORED",
+          "3": "BROKEN_OFF",
+          "4": "QUIESCED",
+          "5": "SOURCE",
+          "6": "UNKNOWN"
+        }
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "table",
+        "table": "data_protection.snapmirror.relation",
+        "field": "data_protection.snapmirror.relation.in_progress"
+      },
+      "params": {
+        "mapping": {
+          "1": "TRUE",
+          "2": "FALSE"
+        }
+      }
+    }
+  ]
+}
+```
+
+#### `generic_interfaces`
+
+```json
+{
+  "name": "generic_interfaces",
+  "description": "Interface admin/oper status, speed, MAC, MTU, and traffic/error counters for all SNMP-capable devices.",
+  "product": "Any",
+  "vendor": "Any",
+  "model": "Any",
+  "get": {},
+  "walk": {},
+  "table": {
+    "interface": {
+      "columns": {
+        "index": "1.3.6.1.2.1.2.2.1.1",
+        "name": "1.3.6.1.2.1.2.2.1.2",
+        "type": "1.3.6.1.2.1.2.2.1.3",
+        "admin_status": "1.3.6.1.2.1.2.2.1.7",
+        "oper_status": "1.3.6.1.2.1.2.2.1.8",
+        "alt_name": "1.3.6.1.2.1.31.1.1.1.1",
+        "alias": "1.3.6.1.2.1.31.1.1.1.18",
+        "speed": "1.3.6.1.2.1.2.2.1.5",
+        "speed_high_mbps": "1.3.6.1.2.1.31.1.1.1.15",
+        "mac": "1.3.6.1.2.1.2.2.1.6",
+        "mtu": "1.3.6.1.2.1.2.2.1.4",
+        "in_octets": "1.3.6.1.2.1.31.1.1.1.6",
+        "out_octets": "1.3.6.1.2.1.31.1.1.1.10",
+        "in_broadcast_pkts": "1.3.6.1.2.1.31.1.1.1.9",
+        "out_broadcast_pkts": "1.3.6.1.2.1.31.1.1.1.13",
+        "in_unicast_pkts": "1.3.6.1.2.1.31.1.1.1.7",
+        "out_unicast_pkts": "1.3.6.1.2.1.31.1.1.1.11",
+        "in_multicast_pkts": "1.3.6.1.2.1.31.1.1.1.8",
+        "out_multicast_pkts": "1.3.6.1.2.1.31.1.1.1.12",
+        "last_change": "1.3.6.1.2.1.2.2.1.9",
+        "vlan_id": "1.3.6.1.2.1.17.7.1.4.5.1.1",
+        "in_errors": "1.3.6.1.2.1.2.2.1.14",
+        "out_errors": "1.3.6.1.2.1.2.2.1.20",
+        "in_discards": "1.3.6.1.2.1.2.2.1.13",
+        "out_discards": "1.3.6.1.2.1.2.2.1.19"
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.in_octets"
+      },
+      "params": {
+        "output_field": "host.network.ingress.bytes",
+        "mode": "delta",
+        "exclude_column": "type",
+        "exclude_values": [
+          "24"
+        ]
+      }
+    },
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.out_octets"
+      },
+      "params": {
+        "output_field": "host.network.egress.bytes",
+        "mode": "delta",
+        "exclude_column": "type",
+        "exclude_values": [
+          "24"
+        ]
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.admin_status"
+      },
+      "params": {
+        "mapping": {
+          "1": "UP",
+          "2": "DOWN",
+          "3": "TESTING"
+        }
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.oper_status"
+      },
+      "params": {
+        "mapping": {
+          "1": "UP",
+          "2": "DOWN",
+          "3": "TESTING",
+          "4": "UNKNOWN",
+          "5": "DORMANT",
+          "6": "NOT_PRESENT",
+          "7": "LOWER_LAYER_DOWN"
+        }
+      }
+    }
+  ]
+}
+```
+
+#### `generic_system`
+
+```json
+{
+  "name": "generic_system",
+  "description": "Core system identity: hostname, description, uptime, object ID, location, and contact.",
+  "product": "Any",
+  "vendor": "Any",
+  "model": "Any",
+  "get": {
+    "observer.sys_descr": "1.3.6.1.2.1.1.1.0",
+    "observer.object_id": "1.3.6.1.2.1.1.2.0",
+    "host.sysname": "1.3.6.1.2.1.1.5.0",
+    "host.uptime": "1.3.6.1.2.1.1.3.0",
+    "host.contact": "1.3.6.1.2.1.1.4.0"
+  },
+  "walk": {},
+  "table": {}
+}
+```
+
+### palo_alto_firewall
+
+```json
+{
+  "name": "palo_alto_firewall",
   "description": "Palo Alto firewalls: HOST-RESOURCES CPU and memory, interfaces, chassis identity, and Cisco-schema fans and temperature sensors.",
   "vendor": "Palo Alto",
   "product": "PAN-OS",
@@ -1712,7 +7001,7 @@ _Profile definition not found in bundled files._
 }
 ```
 
-**Profiles included in `paloalto_firewall`:**
+**Profiles included in `palo_alto_firewall`:**
 
 #### `paloalto_system`
 
@@ -1782,14 +7071,14 @@ _Profile definition not found in bundled files._
 ```json
 {
   "name": "generic_host_system_metrics",
-  "description": "CPU load and filesystem usage per mount point from HOST-RESOURCES-MIB, supported on Linux, Windows, and most embedded devices.",
+  "description": "CPU load and storage usage from HOST-RESOURCES-MIB, supported on Linux, Windows, and most embedded devices. Disks go to system.filesystem (sizes in bytes) and RAM/virtual-memory/other storage to system.storage, so Kibana's Hosts page disk usage only sees real disks.",
   "vendor": "Any",
   "product": "Any",
   "model": "Any",
   "get": {
     "host.num_users": "1.3.6.1.2.1.25.1.5.0",
     "host.num_processes": "1.3.6.1.2.1.25.1.6.0",
-    "system.memory.total.kb": "1.3.6.1.2.1.25.2.2.0"
+    "system.memory.physical.total.kb": "1.3.6.1.2.1.25.2.2.0"
   },
   "walk": {},
   "table": {
@@ -1804,12 +7093,66 @@ _Profile definition not found in bundled files._
         "type": "1.3.6.1.2.1.25.2.3.1.2",
         "mount_point": "1.3.6.1.2.1.25.2.3.1.3",
         "allocation_units": "1.3.6.1.2.1.25.2.3.1.4",
-        "total.bytes": "1.3.6.1.2.1.25.2.3.1.5",
+        "total": "1.3.6.1.2.1.25.2.3.1.5",
         "used.bytes": "1.3.6.1.2.1.25.2.3.1.6"
+      },
+      "keep_when": {
+        "column": "type",
+        "equals": [
+          "1.3.6.1.2.1.25.2.1.4",
+          "1.3.6.1.2.1.25.2.1.10"
+        ],
+        "keep_column": true
+      }
+    },
+    "system.storage": {
+      "columns": {
+        "index": "1.3.6.1.2.1.25.2.3.1.1",
+        "type": "1.3.6.1.2.1.25.2.3.1.2",
+        "mount_point": "1.3.6.1.2.1.25.2.3.1.3",
+        "allocation_units": "1.3.6.1.2.1.25.2.3.1.4",
+        "total": "1.3.6.1.2.1.25.2.3.1.5",
+        "used.bytes": "1.3.6.1.2.1.25.2.3.1.6"
+      },
+      "keep_when": {
+        "column": "type",
+        "equals": [
+          "1.3.6.1.2.1.25.2.1.1",
+          "1.3.6.1.2.1.25.2.1.2",
+          "1.3.6.1.2.1.25.2.1.3",
+          "1.3.6.1.2.1.25.2.1.5",
+          "1.3.6.1.2.1.25.2.1.6",
+          "1.3.6.1.2.1.25.2.1.7",
+          "1.3.6.1.2.1.25.2.1.8",
+          "1.3.6.1.2.1.25.2.1.9"
+        ],
+        "keep_column": true
       }
     }
   },
   "normalizers": [
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.physical.total.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.total"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.physical.total.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.actual.total.bytes"
+      }
+    },
     {
       "operation": "average",
       "target": {
@@ -1820,6 +7163,18 @@ _Profile definition not found in bundled files._
       "params": {
         "output_field": "system.cpu.total.norm.pct",
         "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "component.cpu",
+        "field": "component.cpu.load_pct"
+      },
+      "params": {
+        "output_field": "system.cpu.cores",
+        "mode": "count"
       }
     },
     {
@@ -1834,15 +7189,72 @@ _Profile definition not found in bundled files._
       }
     },
     {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.filesystem",
+        "field": "system.filesystem.total"
+      },
+      "params": {
+        "multiply_field": "system.filesystem.allocation_units"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.filesystem",
+        "field": "system.filesystem.used.bytes"
+      },
+      "params": {
+        "multiply_field": "system.filesystem.allocation_units"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.storage",
+        "field": "system.storage.total"
+      },
+      "params": {
+        "multiply_field": "system.storage.allocation_units"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.storage",
+        "field": "system.storage.used.bytes"
+      },
+      "params": {
+        "multiply_field": "system.storage.allocation_units"
+      }
+    },
+    {
       "operation": "ratio",
       "target": {
         "scope": "table",
         "table": "system.filesystem"
       },
       "params": {
-        "value1_field": "system.filesystem.total.bytes",
+        "value1_field": "system.filesystem.total",
         "value2_field": "system.filesystem.used.bytes",
-        "divide_output_field": "system.filesystem.used.pct"
+        "divide_output_field": "system.filesystem.used.pct",
+        "difference_output_field": "system.filesystem.free"
+      }
+    },
+    {
+      "operation": "ratio",
+      "target": {
+        "scope": "table",
+        "table": "system.storage"
+      },
+      "params": {
+        "value1_field": "system.storage.total",
+        "value2_field": "system.storage.used.bytes",
+        "divide_output_field": "system.storage.used.pct"
       }
     }
   ]
@@ -1892,6 +7304,38 @@ _Profile definition not found in bundled files._
     }
   },
   "normalizers": [
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.in_octets"
+      },
+      "params": {
+        "output_field": "host.network.ingress.bytes",
+        "mode": "delta",
+        "exclude_column": "type",
+        "exclude_values": [
+          "24"
+        ]
+      }
+    },
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.out_octets"
+      },
+      "params": {
+        "output_field": "host.network.egress.bytes",
+        "mode": "delta",
+        "exclude_column": "type",
+        "exclude_values": [
+          "24"
+        ]
+      }
+    },
     {
       "operation": "translate",
       "target": {
@@ -1974,6 +7418,234 @@ _Profile definition not found in bundled files._
 }
 ```
 
+#### `generic_entity_psu`
+
+```json
+{
+  "name": "generic_entity_psu",
+  "description": "Power supply inventory from ENTITY-MIB for any device that exposes entPhysicalClass=6 (powerSupply) entries. Yields PSU name, description, and serial number. Operational status (health/state) is NOT available from this profile; it requires CISCO-ENVMON-MIB or CISCO-ENTITY-FRU-CONTROL-MIB which must be added separately when present.",
+  "vendor": "Any",
+  "product": "Any",
+  "model": "Any",
+  "get": {},
+  "walk": {},
+  "table": {
+    "component.power_supply": {
+      "columns": {
+        "type": "1.3.6.1.2.1.47.1.1.1.1.5",
+        "location": "1.3.6.1.2.1.47.1.1.1.1.7",
+        "description": "1.3.6.1.2.1.47.1.1.1.1.2",
+        "serial_no": "1.3.6.1.2.1.47.1.1.1.1.11"
+      },
+      "keep_when": {
+        "column": "type",
+        "equals": [
+          "6"
+        ]
+      }
+    }
+  }
+}
+```
+
+### phoenixtec_ups
+
+```json
+{
+  "name": "phoenixtec_ups",
+  "description": "Battery health, runtime, per-phase input/output power, and active alarms for Phoenixtec/Powercom UPS devices (enterprise OID 1.3.6.1.4.1.935). These devices implement the full standard UPS-MIB alongside a parallel Powercom enterprise MIB. Compatible with Powercom, Phoenixtec, and OEM models (e.g. ION, Kert) built on the same platform.",
+  "vendor": "Phoenixtec",
+  "product": "Any",
+  "model": "Any",
+  "matching_rules": [
+    "Phoenixtec",
+    "Powercom",
+    "935"
+  ]
+}
+```
+
+**Profiles included in `phoenixtec_ups`:**
+
+#### `generic_system`
+
+```json
+{
+  "name": "generic_system",
+  "description": "Core system identity: hostname, description, uptime, object ID, location, and contact.",
+  "product": "Any",
+  "vendor": "Any",
+  "model": "Any",
+  "get": {
+    "observer.sys_descr": "1.3.6.1.2.1.1.1.0",
+    "observer.object_id": "1.3.6.1.2.1.1.2.0",
+    "host.sysname": "1.3.6.1.2.1.1.5.0",
+    "host.uptime": "1.3.6.1.2.1.1.3.0",
+    "host.contact": "1.3.6.1.2.1.1.4.0"
+  },
+  "walk": {},
+  "table": {}
+}
+```
+
+#### `generic_ups_mib`
+
+```json
+{
+  "name": "generic_ups_mib",
+  "description": "Device identity (manufacturer, model, and firmware), battery health, runtime, per-phase input/output power, and active alarms via the standard RFC 1628 UPS-MIB (1.3.6.1.2.1.33). Supported by virtually all UPS brands (APC, Eaton, Vertiv, CyberPower, etc.). Battery voltage and current are reported in 0.1V/0.1A units by the MIB and normalised to V/A by multiply normalizers. Output and input phase frequencies are similarly normalised from 0.1 Hz.",
+  "vendor": "Any",
+  "product": "Any",
+  "model": "Any",
+  "get": {
+    "observer.vendor": "1.3.6.1.2.1.33.1.1.1.0",
+    "observer.model": "1.3.6.1.2.1.33.1.1.2.0",
+    "observer.firmware_version": "1.3.6.1.2.1.33.1.1.3.0",
+    "ups.battery.status": "1.3.6.1.2.1.33.1.2.1.0",
+    "ups.battery.seconds_on_battery": "1.3.6.1.2.1.33.1.2.2.0",
+    "ups.battery.time_remaining_minutes": "1.3.6.1.2.1.33.1.2.3.0",
+    "ups.battery.capacity_pct": "1.3.6.1.2.1.33.1.2.4.0",
+    "ups.battery.voltage": "1.3.6.1.2.1.33.1.2.5.0",
+    "ups.battery.current_amps": "1.3.6.1.2.1.33.1.2.6.0",
+    "ups.battery.temperature_c": "1.3.6.1.2.1.33.1.2.7.0",
+    "ups.input.line_bads": "1.3.6.1.2.1.33.1.3.1.0",
+    "ups.input.num_phases": "1.3.6.1.2.1.33.1.3.2.0",
+    "ups.output.source": "1.3.6.1.2.1.33.1.4.1.0",
+    "ups.output.frequency_hz": "1.3.6.1.2.1.33.1.4.2.0",
+    "ups.output.num_phases": "1.3.6.1.2.1.33.1.4.3.0",
+    "ups.alarms.present": "1.3.6.1.2.1.33.1.6.1.0"
+  },
+  "walk": {},
+  "table": {
+    "ups.input.phase": {
+      "columns": {
+        "frequency_hz": "1.3.6.1.2.1.33.1.3.3.1.2",
+        "voltage": "1.3.6.1.2.1.33.1.3.3.1.3",
+        "current_amps": "1.3.6.1.2.1.33.1.3.3.1.4",
+        "power_w": "1.3.6.1.2.1.33.1.3.3.1.5"
+      }
+    },
+    "ups.output.phase": {
+      "columns": {
+        "voltage": "1.3.6.1.2.1.33.1.4.4.1.2",
+        "current_amps": "1.3.6.1.2.1.33.1.4.4.1.3",
+        "power_w": "1.3.6.1.2.1.33.1.4.4.1.4",
+        "load_pct": "1.3.6.1.2.1.33.1.4.4.1.5"
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "get",
+        "field": "ups.battery.status"
+      },
+      "params": {
+        "mapping": {
+          "1": "unknown",
+          "2": "normal",
+          "3": "low_battery",
+          "4": "depleted"
+        }
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "get",
+        "field": "ups.output.source"
+      },
+      "params": {
+        "mapping": {
+          "1": "other",
+          "2": "none",
+          "3": "normal",
+          "4": "bypass",
+          "5": "battery",
+          "6": "booster",
+          "7": "reducer"
+        }
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "ups.battery.voltage"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "ups.battery.current_amps"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "ups.output.frequency_hz"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "ups.input.phase",
+        "field": "ups.input.phase.frequency_hz"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "ups.input.phase",
+        "field": "ups.input.phase.current_amps"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "ups.output.phase",
+        "field": "ups.output.phase.current_amps"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "average",
+      "target": {
+        "scope": "table",
+        "table": "ups.output.phase",
+        "field": "ups.output.phase.load_pct"
+      },
+      "params": {
+        "output_field": "ups.output.load_pct"
+      }
+    }
+  ]
+}
+```
+
 ### ubiquiti_unifi_ap
 
 ```json
@@ -2034,6 +7706,38 @@ _Profile definition not found in bundled files._
     }
   },
   "normalizers": [
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.in_octets"
+      },
+      "params": {
+        "output_field": "host.network.ingress.bytes",
+        "mode": "delta",
+        "exclude_column": "type",
+        "exclude_values": [
+          "24"
+        ]
+      }
+    },
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.out_octets"
+      },
+      "params": {
+        "output_field": "host.network.egress.bytes",
+        "mode": "delta",
+        "exclude_column": "type",
+        "exclude_values": [
+          "24"
+        ]
+      }
+    },
     {
       "operation": "translate",
       "target": {
@@ -2098,14 +7802,14 @@ _Profile definition not found in bundled files._
 ```json
 {
   "name": "generic_host_system_metrics",
-  "description": "CPU load and filesystem usage per mount point from HOST-RESOURCES-MIB, supported on Linux, Windows, and most embedded devices.",
+  "description": "CPU load and storage usage from HOST-RESOURCES-MIB, supported on Linux, Windows, and most embedded devices. Disks go to system.filesystem (sizes in bytes) and RAM/virtual-memory/other storage to system.storage, so Kibana's Hosts page disk usage only sees real disks.",
   "vendor": "Any",
   "product": "Any",
   "model": "Any",
   "get": {
     "host.num_users": "1.3.6.1.2.1.25.1.5.0",
     "host.num_processes": "1.3.6.1.2.1.25.1.6.0",
-    "system.memory.total.kb": "1.3.6.1.2.1.25.2.2.0"
+    "system.memory.physical.total.kb": "1.3.6.1.2.1.25.2.2.0"
   },
   "walk": {},
   "table": {
@@ -2120,12 +7824,66 @@ _Profile definition not found in bundled files._
         "type": "1.3.6.1.2.1.25.2.3.1.2",
         "mount_point": "1.3.6.1.2.1.25.2.3.1.3",
         "allocation_units": "1.3.6.1.2.1.25.2.3.1.4",
-        "total.bytes": "1.3.6.1.2.1.25.2.3.1.5",
+        "total": "1.3.6.1.2.1.25.2.3.1.5",
         "used.bytes": "1.3.6.1.2.1.25.2.3.1.6"
+      },
+      "keep_when": {
+        "column": "type",
+        "equals": [
+          "1.3.6.1.2.1.25.2.1.4",
+          "1.3.6.1.2.1.25.2.1.10"
+        ],
+        "keep_column": true
+      }
+    },
+    "system.storage": {
+      "columns": {
+        "index": "1.3.6.1.2.1.25.2.3.1.1",
+        "type": "1.3.6.1.2.1.25.2.3.1.2",
+        "mount_point": "1.3.6.1.2.1.25.2.3.1.3",
+        "allocation_units": "1.3.6.1.2.1.25.2.3.1.4",
+        "total": "1.3.6.1.2.1.25.2.3.1.5",
+        "used.bytes": "1.3.6.1.2.1.25.2.3.1.6"
+      },
+      "keep_when": {
+        "column": "type",
+        "equals": [
+          "1.3.6.1.2.1.25.2.1.1",
+          "1.3.6.1.2.1.25.2.1.2",
+          "1.3.6.1.2.1.25.2.1.3",
+          "1.3.6.1.2.1.25.2.1.5",
+          "1.3.6.1.2.1.25.2.1.6",
+          "1.3.6.1.2.1.25.2.1.7",
+          "1.3.6.1.2.1.25.2.1.8",
+          "1.3.6.1.2.1.25.2.1.9"
+        ],
+        "keep_column": true
       }
     }
   },
   "normalizers": [
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.physical.total.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.total"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.physical.total.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.actual.total.bytes"
+      }
+    },
     {
       "operation": "average",
       "target": {
@@ -2136,6 +7894,18 @@ _Profile definition not found in bundled files._
       "params": {
         "output_field": "system.cpu.total.norm.pct",
         "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "component.cpu",
+        "field": "component.cpu.load_pct"
+      },
+      "params": {
+        "output_field": "system.cpu.cores",
+        "mode": "count"
       }
     },
     {
@@ -2150,15 +7920,72 @@ _Profile definition not found in bundled files._
       }
     },
     {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.filesystem",
+        "field": "system.filesystem.total"
+      },
+      "params": {
+        "multiply_field": "system.filesystem.allocation_units"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.filesystem",
+        "field": "system.filesystem.used.bytes"
+      },
+      "params": {
+        "multiply_field": "system.filesystem.allocation_units"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.storage",
+        "field": "system.storage.total"
+      },
+      "params": {
+        "multiply_field": "system.storage.allocation_units"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.storage",
+        "field": "system.storage.used.bytes"
+      },
+      "params": {
+        "multiply_field": "system.storage.allocation_units"
+      }
+    },
+    {
       "operation": "ratio",
       "target": {
         "scope": "table",
         "table": "system.filesystem"
       },
       "params": {
-        "value1_field": "system.filesystem.total.bytes",
+        "value1_field": "system.filesystem.total",
         "value2_field": "system.filesystem.used.bytes",
-        "divide_output_field": "system.filesystem.used.pct"
+        "divide_output_field": "system.filesystem.used.pct",
+        "difference_output_field": "system.filesystem.free"
+      }
+    },
+    {
+      "operation": "ratio",
+      "target": {
+        "scope": "table",
+        "table": "system.storage"
+      },
+      "params": {
+        "value1_field": "system.storage.total",
+        "value2_field": "system.storage.used.bytes",
+        "divide_output_field": "system.storage.used.pct"
       }
     }
   ]
@@ -2170,18 +7997,20 @@ _Profile definition not found in bundled files._
 ```json
 {
   "name": "generic_ucd_system_metrics",
-  "description": "Memory, load averages, and per-state CPU counters via Net-SNMP for Linux and BSD devices.",
+  "description": "Memory, load averages, per-state CPU, and disk I/O counters via Net-SNMP for Linux and BSD devices. Field names follow the Elastic System integration so Kibana's Hosts page can read them.",
   "vendor": "Any",
   "product": "Any",
   "model": "Any",
   "get": {
     "system.memory.actual.total.kb": "1.3.6.1.4.1.2021.4.5.0",
     "system.memory.actual.available.kb": "1.3.6.1.4.1.2021.4.6.0",
-    "system.memory.actual.free.kb": "1.3.6.1.4.1.2021.4.11.0",
+    "system.memory.total_free.kb": "1.3.6.1.4.1.2021.4.11.0",
     "system.memory.actual.cached.kb": "1.3.6.1.4.1.2021.4.15.0",
-    "system.load.1": "1.3.6.1.4.1.2021.10.1.3.1",
-    "system.load.5": "1.3.6.1.4.1.2021.10.1.3.2",
-    "system.load.15": "1.3.6.1.4.1.2021.10.1.3.3",
+    "system.load.1": "1.3.6.1.4.1.2021.10.1.5.1",
+    "system.load.5": "1.3.6.1.4.1.2021.10.1.5.2",
+    "system.load.15": "1.3.6.1.4.1.2021.10.1.5.3",
+    "system.cpu.pct.user": "1.3.6.1.4.1.2021.11.9.0",
+    "system.cpu.pct.system": "1.3.6.1.4.1.2021.11.10.0",
     "system.cpu.raw.user": "1.3.6.1.4.1.2021.11.50.0",
     "system.cpu.raw.nice": "1.3.6.1.4.1.2021.11.51.0",
     "system.cpu.raw.system": "1.3.6.1.4.1.2021.11.52.0",
@@ -2189,11 +8018,133 @@ _Profile definition not found in bundled files._
     "system.cpu.raw.wait": "1.3.6.1.4.1.2021.11.54.0",
     "system.cpu.raw.kernel": "1.3.6.1.4.1.2021.11.55.0",
     "system.cpu.raw.interrupt": "1.3.6.1.4.1.2021.11.56.0",
-    "system.cpu.num_cpus": "1.3.6.1.4.1.2021.11.67.0"
+    "system.cpu.raw.softirq": "1.3.6.1.4.1.2021.11.61.0",
+    "system.cpu.raw.steal": "1.3.6.1.4.1.2021.11.64.0",
+    "system.cpu.cores": "1.3.6.1.4.1.2021.11.67.0"
   },
   "walk": {},
-  "table": {},
+  "table": {
+    "system.diskio": {
+      "columns": {
+        "index": "1.3.6.1.4.1.2021.13.15.1.1.1",
+        "name": "1.3.6.1.4.1.2021.13.15.1.1.2",
+        "read.count": "1.3.6.1.4.1.2021.13.15.1.1.5",
+        "write.count": "1.3.6.1.4.1.2021.13.15.1.1.6",
+        "read.bytes": "1.3.6.1.4.1.2021.13.15.1.1.12",
+        "write.bytes": "1.3.6.1.4.1.2021.13.15.1.1.13"
+      }
+    }
+  },
   "normalizers": [
+    {
+      "operation": "sum",
+      "target": {
+        "scope": "get"
+      },
+      "params": {
+        "input_fields": [
+          "system.cpu.pct.user",
+          "system.cpu.pct.system"
+        ],
+        "output_field": "system.cpu.active.pct"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.active.pct"
+      },
+      "params": {
+        "multiply_value": 0.01,
+        "output_field": "system.cpu.total.norm.pct"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.load.1"
+      },
+      "params": {
+        "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.load.5"
+      },
+      "params": {
+        "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.load.15"
+      },
+      "params": {
+        "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.actual.total.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.total"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.actual.total.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.actual.total.bytes"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.actual.available.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.free"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.actual.available.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.actual.free"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.cores"
+      },
+      "params": {
+        "multiply_value": 1,
+        "output_field": "system.load.cores"
+      }
+    },
     {
       "operation": "ratio",
       "target": {
@@ -2202,7 +8153,152 @@ _Profile definition not found in bundled files._
       "params": {
         "value1_field": "system.memory.actual.total.kb",
         "value2_field": "system.memory.actual.available.kb",
-        "complement_ratio_output_field": "system.memory.actual.used.pct"
+        "complement_ratio_output_field": "system.memory.actual.used.pct",
+        "difference_output_field": "system.memory.actual.used.kb"
+      }
+    },
+    {
+      "operation": "sum",
+      "target": {
+        "scope": "get"
+      },
+      "params": {
+        "input_fields": [
+          "system.memory.actual.used.kb",
+          "system.memory.actual.cached.kb"
+        ],
+        "output_field": "system.memory.used.kb"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.actual.used.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.actual.used.bytes"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.used.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.used.bytes"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.user"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.user"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.nice"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.nice"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.kernel"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.system"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.idle"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.idle"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.wait"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.iowait"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.interrupt"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.irq"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.softirq"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.softirq"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.steal"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.steal"
+      }
+    },
+    {
+      "operation": "share",
+      "target": {
+        "scope": "get"
+      },
+      "params": {
+        "input_fields": [
+          "system.cpu.delta.user",
+          "system.cpu.delta.nice",
+          "system.cpu.delta.system",
+          "system.cpu.delta.idle",
+          "system.cpu.delta.iowait",
+          "system.cpu.delta.irq",
+          "system.cpu.delta.softirq",
+          "system.cpu.delta.steal"
+        ],
+        "output_fields": [
+          "system.cpu.user.pct",
+          "system.cpu.nice.pct",
+          "system.cpu.system.pct",
+          "system.cpu.idle.pct",
+          "system.cpu.iowait.pct",
+          "system.cpu.irq.pct",
+          "system.cpu.softirq.pct",
+          "system.cpu.steal.pct"
+        ],
+        "multiply_field": "system.cpu.cores"
       }
     }
   ]
@@ -2334,6 +8430,38 @@ _Profile definition not found in bundled files._
   },
   "normalizers": [
     {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.in_octets"
+      },
+      "params": {
+        "output_field": "host.network.ingress.bytes",
+        "mode": "delta",
+        "exclude_column": "type",
+        "exclude_values": [
+          "24"
+        ]
+      }
+    },
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.out_octets"
+      },
+      "params": {
+        "output_field": "host.network.egress.bytes",
+        "mode": "delta",
+        "exclude_column": "type",
+        "exclude_values": [
+          "24"
+        ]
+      }
+    },
+    {
       "operation": "translate",
       "target": {
         "scope": "table",
@@ -2414,6 +8542,24 @@ _Profile definition not found in bundled files._
 }
 ```
 
+#### `ubiquiti_unifi_switch_system`
+
+```json
+{
+  "name": "ubiquiti_unifi_switch_system",
+  "description": "CPU raw tick counters for Ubiquiti UniFi switches running the Edgecore platform (sysObjectID 1.3.6.1.4.1.4413). Collects idle ticks and total ticks as snapshot gauges. CPU utilization percentage must be derived externally as (total - idle) / total because the existing normalizer operations do not support complement-ratio computation. Memory is not exposed by this platform via SNMP.",
+  "vendor": "Ubiquiti",
+  "product": "UniFi Switch",
+  "model": "Any",
+  "get": {
+    "system.cpu.raw.idle": "1.3.6.1.4.1.4413.1.1.1.1.4.1.0",
+    "system.cpu.raw.total": "1.3.6.1.4.1.4413.1.1.1.1.4.2.0"
+  },
+  "walk": {},
+  "table": {}
+}
+```
+
 ### ubiquiti_unifi_udm
 
 ```json
@@ -2474,6 +8620,38 @@ _Profile definition not found in bundled files._
     }
   },
   "normalizers": [
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.in_octets"
+      },
+      "params": {
+        "output_field": "host.network.ingress.bytes",
+        "mode": "delta",
+        "exclude_column": "type",
+        "exclude_values": [
+          "24"
+        ]
+      }
+    },
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.out_octets"
+      },
+      "params": {
+        "output_field": "host.network.egress.bytes",
+        "mode": "delta",
+        "exclude_column": "type",
+        "exclude_values": [
+          "24"
+        ]
+      }
+    },
     {
       "operation": "translate",
       "target": {
@@ -2538,18 +8716,20 @@ _Profile definition not found in bundled files._
 ```json
 {
   "name": "generic_ucd_system_metrics",
-  "description": "Memory, load averages, and per-state CPU counters via Net-SNMP for Linux and BSD devices.",
+  "description": "Memory, load averages, per-state CPU, and disk I/O counters via Net-SNMP for Linux and BSD devices. Field names follow the Elastic System integration so Kibana's Hosts page can read them.",
   "vendor": "Any",
   "product": "Any",
   "model": "Any",
   "get": {
     "system.memory.actual.total.kb": "1.3.6.1.4.1.2021.4.5.0",
     "system.memory.actual.available.kb": "1.3.6.1.4.1.2021.4.6.0",
-    "system.memory.actual.free.kb": "1.3.6.1.4.1.2021.4.11.0",
+    "system.memory.total_free.kb": "1.3.6.1.4.1.2021.4.11.0",
     "system.memory.actual.cached.kb": "1.3.6.1.4.1.2021.4.15.0",
-    "system.load.1": "1.3.6.1.4.1.2021.10.1.3.1",
-    "system.load.5": "1.3.6.1.4.1.2021.10.1.3.2",
-    "system.load.15": "1.3.6.1.4.1.2021.10.1.3.3",
+    "system.load.1": "1.3.6.1.4.1.2021.10.1.5.1",
+    "system.load.5": "1.3.6.1.4.1.2021.10.1.5.2",
+    "system.load.15": "1.3.6.1.4.1.2021.10.1.5.3",
+    "system.cpu.pct.user": "1.3.6.1.4.1.2021.11.9.0",
+    "system.cpu.pct.system": "1.3.6.1.4.1.2021.11.10.0",
     "system.cpu.raw.user": "1.3.6.1.4.1.2021.11.50.0",
     "system.cpu.raw.nice": "1.3.6.1.4.1.2021.11.51.0",
     "system.cpu.raw.system": "1.3.6.1.4.1.2021.11.52.0",
@@ -2557,11 +8737,133 @@ _Profile definition not found in bundled files._
     "system.cpu.raw.wait": "1.3.6.1.4.1.2021.11.54.0",
     "system.cpu.raw.kernel": "1.3.6.1.4.1.2021.11.55.0",
     "system.cpu.raw.interrupt": "1.3.6.1.4.1.2021.11.56.0",
-    "system.cpu.num_cpus": "1.3.6.1.4.1.2021.11.67.0"
+    "system.cpu.raw.softirq": "1.3.6.1.4.1.2021.11.61.0",
+    "system.cpu.raw.steal": "1.3.6.1.4.1.2021.11.64.0",
+    "system.cpu.cores": "1.3.6.1.4.1.2021.11.67.0"
   },
   "walk": {},
-  "table": {},
+  "table": {
+    "system.diskio": {
+      "columns": {
+        "index": "1.3.6.1.4.1.2021.13.15.1.1.1",
+        "name": "1.3.6.1.4.1.2021.13.15.1.1.2",
+        "read.count": "1.3.6.1.4.1.2021.13.15.1.1.5",
+        "write.count": "1.3.6.1.4.1.2021.13.15.1.1.6",
+        "read.bytes": "1.3.6.1.4.1.2021.13.15.1.1.12",
+        "write.bytes": "1.3.6.1.4.1.2021.13.15.1.1.13"
+      }
+    }
+  },
   "normalizers": [
+    {
+      "operation": "sum",
+      "target": {
+        "scope": "get"
+      },
+      "params": {
+        "input_fields": [
+          "system.cpu.pct.user",
+          "system.cpu.pct.system"
+        ],
+        "output_field": "system.cpu.active.pct"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.active.pct"
+      },
+      "params": {
+        "multiply_value": 0.01,
+        "output_field": "system.cpu.total.norm.pct"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.load.1"
+      },
+      "params": {
+        "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.load.5"
+      },
+      "params": {
+        "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.load.15"
+      },
+      "params": {
+        "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.actual.total.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.total"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.actual.total.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.actual.total.bytes"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.actual.available.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.free"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.actual.available.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.actual.free"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.cores"
+      },
+      "params": {
+        "multiply_value": 1,
+        "output_field": "system.load.cores"
+      }
+    },
     {
       "operation": "ratio",
       "target": {
@@ -2570,10 +8872,756 @@ _Profile definition not found in bundled files._
       "params": {
         "value1_field": "system.memory.actual.total.kb",
         "value2_field": "system.memory.actual.available.kb",
-        "complement_ratio_output_field": "system.memory.actual.used.pct"
+        "complement_ratio_output_field": "system.memory.actual.used.pct",
+        "difference_output_field": "system.memory.actual.used.kb"
+      }
+    },
+    {
+      "operation": "sum",
+      "target": {
+        "scope": "get"
+      },
+      "params": {
+        "input_fields": [
+          "system.memory.actual.used.kb",
+          "system.memory.actual.cached.kb"
+        ],
+        "output_field": "system.memory.used.kb"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.actual.used.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.actual.used.bytes"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.used.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.used.bytes"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.user"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.user"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.nice"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.nice"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.kernel"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.system"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.idle"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.idle"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.wait"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.iowait"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.interrupt"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.irq"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.softirq"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.softirq"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.steal"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.steal"
+      }
+    },
+    {
+      "operation": "share",
+      "target": {
+        "scope": "get"
+      },
+      "params": {
+        "input_fields": [
+          "system.cpu.delta.user",
+          "system.cpu.delta.nice",
+          "system.cpu.delta.system",
+          "system.cpu.delta.idle",
+          "system.cpu.delta.iowait",
+          "system.cpu.delta.irq",
+          "system.cpu.delta.softirq",
+          "system.cpu.delta.steal"
+        ],
+        "output_fields": [
+          "system.cpu.user.pct",
+          "system.cpu.nice.pct",
+          "system.cpu.system.pct",
+          "system.cpu.idle.pct",
+          "system.cpu.iowait.pct",
+          "system.cpu.irq.pct",
+          "system.cpu.softirq.pct",
+          "system.cpu.steal.pct"
+        ],
+        "multiply_field": "system.cpu.cores"
       }
     }
   ]
+}
+```
+
+#### `generic_host_system_metrics`
+
+```json
+{
+  "name": "generic_host_system_metrics",
+  "description": "CPU load and storage usage from HOST-RESOURCES-MIB, supported on Linux, Windows, and most embedded devices. Disks go to system.filesystem (sizes in bytes) and RAM/virtual-memory/other storage to system.storage, so Kibana's Hosts page disk usage only sees real disks.",
+  "vendor": "Any",
+  "product": "Any",
+  "model": "Any",
+  "get": {
+    "host.num_users": "1.3.6.1.2.1.25.1.5.0",
+    "host.num_processes": "1.3.6.1.2.1.25.1.6.0",
+    "system.memory.physical.total.kb": "1.3.6.1.2.1.25.2.2.0"
+  },
+  "walk": {},
+  "table": {
+    "component.cpu": {
+      "columns": {
+        "load_pct": "1.3.6.1.2.1.25.3.3.1.2"
+      }
+    },
+    "system.filesystem": {
+      "columns": {
+        "index": "1.3.6.1.2.1.25.2.3.1.1",
+        "type": "1.3.6.1.2.1.25.2.3.1.2",
+        "mount_point": "1.3.6.1.2.1.25.2.3.1.3",
+        "allocation_units": "1.3.6.1.2.1.25.2.3.1.4",
+        "total": "1.3.6.1.2.1.25.2.3.1.5",
+        "used.bytes": "1.3.6.1.2.1.25.2.3.1.6"
+      },
+      "keep_when": {
+        "column": "type",
+        "equals": [
+          "1.3.6.1.2.1.25.2.1.4",
+          "1.3.6.1.2.1.25.2.1.10"
+        ],
+        "keep_column": true
+      }
+    },
+    "system.storage": {
+      "columns": {
+        "index": "1.3.6.1.2.1.25.2.3.1.1",
+        "type": "1.3.6.1.2.1.25.2.3.1.2",
+        "mount_point": "1.3.6.1.2.1.25.2.3.1.3",
+        "allocation_units": "1.3.6.1.2.1.25.2.3.1.4",
+        "total": "1.3.6.1.2.1.25.2.3.1.5",
+        "used.bytes": "1.3.6.1.2.1.25.2.3.1.6"
+      },
+      "keep_when": {
+        "column": "type",
+        "equals": [
+          "1.3.6.1.2.1.25.2.1.1",
+          "1.3.6.1.2.1.25.2.1.2",
+          "1.3.6.1.2.1.25.2.1.3",
+          "1.3.6.1.2.1.25.2.1.5",
+          "1.3.6.1.2.1.25.2.1.6",
+          "1.3.6.1.2.1.25.2.1.7",
+          "1.3.6.1.2.1.25.2.1.8",
+          "1.3.6.1.2.1.25.2.1.9"
+        ],
+        "keep_column": true
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.physical.total.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.total"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.physical.total.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.actual.total.bytes"
+      }
+    },
+    {
+      "operation": "average",
+      "target": {
+        "scope": "table",
+        "table": "component.cpu",
+        "field": "component.cpu.load_pct"
+      },
+      "params": {
+        "output_field": "system.cpu.total.norm.pct",
+        "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "component.cpu",
+        "field": "component.cpu.load_pct"
+      },
+      "params": {
+        "output_field": "system.cpu.cores",
+        "mode": "count"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "component.cpu",
+        "field": "component.cpu.load_pct"
+      },
+      "params": {
+        "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.filesystem",
+        "field": "system.filesystem.total"
+      },
+      "params": {
+        "multiply_field": "system.filesystem.allocation_units"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.filesystem",
+        "field": "system.filesystem.used.bytes"
+      },
+      "params": {
+        "multiply_field": "system.filesystem.allocation_units"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.storage",
+        "field": "system.storage.total"
+      },
+      "params": {
+        "multiply_field": "system.storage.allocation_units"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.storage",
+        "field": "system.storage.used.bytes"
+      },
+      "params": {
+        "multiply_field": "system.storage.allocation_units"
+      }
+    },
+    {
+      "operation": "ratio",
+      "target": {
+        "scope": "table",
+        "table": "system.filesystem"
+      },
+      "params": {
+        "value1_field": "system.filesystem.total",
+        "value2_field": "system.filesystem.used.bytes",
+        "divide_output_field": "system.filesystem.used.pct",
+        "difference_output_field": "system.filesystem.free"
+      }
+    },
+    {
+      "operation": "ratio",
+      "target": {
+        "scope": "table",
+        "table": "system.storage"
+      },
+      "params": {
+        "value1_field": "system.storage.total",
+        "value2_field": "system.storage.used.bytes",
+        "divide_output_field": "system.storage.used.pct"
+      }
+    }
+  ]
+}
+```
+
+#### `generic_lm_sensors`
+
+```json
+{
+  "name": "generic_lm_sensors",
+  "description": "Fan RPM and temperature sensor readings via the UCD-SNMP LM-SENSORS MIB (1.3.6.1.4.1.2021.13.16) for Linux and embedded devices running net-snmp with the lmSensors module enabled. Fan values are direct RPM integers. Temperature values from lmTempSensorsValue are in millidegrees Celsius and are normalized to degrees Celsius via multiply 0.001.",
+  "vendor": "Any",
+  "product": "Any",
+  "model": "Any",
+  "get": {},
+  "walk": {},
+  "table": {
+    "component.fan": {
+      "columns": {
+        "description": "1.3.6.1.4.1.2021.13.16.3.1.2",
+        "rpm": "1.3.6.1.4.1.2021.13.16.3.1.3"
+      }
+    },
+    "component.sensor": {
+      "columns": {
+        "description": "1.3.6.1.4.1.2021.13.16.2.1.2",
+        "temp.celsius": "1.3.6.1.4.1.2021.13.16.2.1.3"
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "component.sensor",
+        "field": "component.sensor.temp.celsius"
+      },
+      "params": {
+        "multiply_value": 0.001
+      }
+    }
+  ]
+}
+```
+
+### versa_flexvnf_appliance
+
+```json
+{
+  "name": "versa_flexvnf_appliance",
+  "description": "System identity, interfaces, CPU/memory/filesystem metrics, and Versa-specific firmware version and device UUID for Versa FlexVNF SD-WAN appliances.",
+  "vendor": "Versa Networks",
+  "product": "FlexVNF",
+  "model": "Any",
+  "matching_rules": [
+    "Versa Appliance",
+    "versa-flexvnf"
+  ]
+}
+```
+
+**Profiles included in `versa_flexvnf_appliance`:**
+
+#### `generic_system`
+
+```json
+{
+  "name": "generic_system",
+  "description": "Core system identity: hostname, description, uptime, object ID, location, and contact.",
+  "product": "Any",
+  "vendor": "Any",
+  "model": "Any",
+  "get": {
+    "observer.sys_descr": "1.3.6.1.2.1.1.1.0",
+    "observer.object_id": "1.3.6.1.2.1.1.2.0",
+    "host.sysname": "1.3.6.1.2.1.1.5.0",
+    "host.uptime": "1.3.6.1.2.1.1.3.0",
+    "host.contact": "1.3.6.1.2.1.1.4.0"
+  },
+  "walk": {},
+  "table": {}
+}
+```
+
+#### `generic_interfaces`
+
+```json
+{
+  "name": "generic_interfaces",
+  "description": "Interface admin/oper status, speed, MAC, MTU, and traffic/error counters for all SNMP-capable devices.",
+  "product": "Any",
+  "vendor": "Any",
+  "model": "Any",
+  "get": {},
+  "walk": {},
+  "table": {
+    "interface": {
+      "columns": {
+        "index": "1.3.6.1.2.1.2.2.1.1",
+        "name": "1.3.6.1.2.1.2.2.1.2",
+        "type": "1.3.6.1.2.1.2.2.1.3",
+        "admin_status": "1.3.6.1.2.1.2.2.1.7",
+        "oper_status": "1.3.6.1.2.1.2.2.1.8",
+        "alt_name": "1.3.6.1.2.1.31.1.1.1.1",
+        "alias": "1.3.6.1.2.1.31.1.1.1.18",
+        "speed": "1.3.6.1.2.1.2.2.1.5",
+        "speed_high_mbps": "1.3.6.1.2.1.31.1.1.1.15",
+        "mac": "1.3.6.1.2.1.2.2.1.6",
+        "mtu": "1.3.6.1.2.1.2.2.1.4",
+        "in_octets": "1.3.6.1.2.1.31.1.1.1.6",
+        "out_octets": "1.3.6.1.2.1.31.1.1.1.10",
+        "in_broadcast_pkts": "1.3.6.1.2.1.31.1.1.1.9",
+        "out_broadcast_pkts": "1.3.6.1.2.1.31.1.1.1.13",
+        "in_unicast_pkts": "1.3.6.1.2.1.31.1.1.1.7",
+        "out_unicast_pkts": "1.3.6.1.2.1.31.1.1.1.11",
+        "in_multicast_pkts": "1.3.6.1.2.1.31.1.1.1.8",
+        "out_multicast_pkts": "1.3.6.1.2.1.31.1.1.1.12",
+        "last_change": "1.3.6.1.2.1.2.2.1.9",
+        "vlan_id": "1.3.6.1.2.1.17.7.1.4.5.1.1",
+        "in_errors": "1.3.6.1.2.1.2.2.1.14",
+        "out_errors": "1.3.6.1.2.1.2.2.1.20",
+        "in_discards": "1.3.6.1.2.1.2.2.1.13",
+        "out_discards": "1.3.6.1.2.1.2.2.1.19"
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.in_octets"
+      },
+      "params": {
+        "output_field": "host.network.ingress.bytes",
+        "mode": "delta",
+        "exclude_column": "type",
+        "exclude_values": [
+          "24"
+        ]
+      }
+    },
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.out_octets"
+      },
+      "params": {
+        "output_field": "host.network.egress.bytes",
+        "mode": "delta",
+        "exclude_column": "type",
+        "exclude_values": [
+          "24"
+        ]
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.admin_status"
+      },
+      "params": {
+        "mapping": {
+          "1": "UP",
+          "2": "DOWN",
+          "3": "TESTING"
+        }
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.oper_status"
+      },
+      "params": {
+        "mapping": {
+          "1": "UP",
+          "2": "DOWN",
+          "3": "TESTING",
+          "4": "UNKNOWN",
+          "5": "DORMANT",
+          "6": "NOT_PRESENT",
+          "7": "LOWER_LAYER_DOWN"
+        }
+      }
+    }
+  ]
+}
+```
+
+#### `generic_host_system_metrics`
+
+```json
+{
+  "name": "generic_host_system_metrics",
+  "description": "CPU load and storage usage from HOST-RESOURCES-MIB, supported on Linux, Windows, and most embedded devices. Disks go to system.filesystem (sizes in bytes) and RAM/virtual-memory/other storage to system.storage, so Kibana's Hosts page disk usage only sees real disks.",
+  "vendor": "Any",
+  "product": "Any",
+  "model": "Any",
+  "get": {
+    "host.num_users": "1.3.6.1.2.1.25.1.5.0",
+    "host.num_processes": "1.3.6.1.2.1.25.1.6.0",
+    "system.memory.physical.total.kb": "1.3.6.1.2.1.25.2.2.0"
+  },
+  "walk": {},
+  "table": {
+    "component.cpu": {
+      "columns": {
+        "load_pct": "1.3.6.1.2.1.25.3.3.1.2"
+      }
+    },
+    "system.filesystem": {
+      "columns": {
+        "index": "1.3.6.1.2.1.25.2.3.1.1",
+        "type": "1.3.6.1.2.1.25.2.3.1.2",
+        "mount_point": "1.3.6.1.2.1.25.2.3.1.3",
+        "allocation_units": "1.3.6.1.2.1.25.2.3.1.4",
+        "total": "1.3.6.1.2.1.25.2.3.1.5",
+        "used.bytes": "1.3.6.1.2.1.25.2.3.1.6"
+      },
+      "keep_when": {
+        "column": "type",
+        "equals": [
+          "1.3.6.1.2.1.25.2.1.4",
+          "1.3.6.1.2.1.25.2.1.10"
+        ],
+        "keep_column": true
+      }
+    },
+    "system.storage": {
+      "columns": {
+        "index": "1.3.6.1.2.1.25.2.3.1.1",
+        "type": "1.3.6.1.2.1.25.2.3.1.2",
+        "mount_point": "1.3.6.1.2.1.25.2.3.1.3",
+        "allocation_units": "1.3.6.1.2.1.25.2.3.1.4",
+        "total": "1.3.6.1.2.1.25.2.3.1.5",
+        "used.bytes": "1.3.6.1.2.1.25.2.3.1.6"
+      },
+      "keep_when": {
+        "column": "type",
+        "equals": [
+          "1.3.6.1.2.1.25.2.1.1",
+          "1.3.6.1.2.1.25.2.1.2",
+          "1.3.6.1.2.1.25.2.1.3",
+          "1.3.6.1.2.1.25.2.1.5",
+          "1.3.6.1.2.1.25.2.1.6",
+          "1.3.6.1.2.1.25.2.1.7",
+          "1.3.6.1.2.1.25.2.1.8",
+          "1.3.6.1.2.1.25.2.1.9"
+        ],
+        "keep_column": true
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.physical.total.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.total"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.physical.total.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.actual.total.bytes"
+      }
+    },
+    {
+      "operation": "average",
+      "target": {
+        "scope": "table",
+        "table": "component.cpu",
+        "field": "component.cpu.load_pct"
+      },
+      "params": {
+        "output_field": "system.cpu.total.norm.pct",
+        "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "component.cpu",
+        "field": "component.cpu.load_pct"
+      },
+      "params": {
+        "output_field": "system.cpu.cores",
+        "mode": "count"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "component.cpu",
+        "field": "component.cpu.load_pct"
+      },
+      "params": {
+        "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.filesystem",
+        "field": "system.filesystem.total"
+      },
+      "params": {
+        "multiply_field": "system.filesystem.allocation_units"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.filesystem",
+        "field": "system.filesystem.used.bytes"
+      },
+      "params": {
+        "multiply_field": "system.filesystem.allocation_units"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.storage",
+        "field": "system.storage.total"
+      },
+      "params": {
+        "multiply_field": "system.storage.allocation_units"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.storage",
+        "field": "system.storage.used.bytes"
+      },
+      "params": {
+        "multiply_field": "system.storage.allocation_units"
+      }
+    },
+    {
+      "operation": "ratio",
+      "target": {
+        "scope": "table",
+        "table": "system.filesystem"
+      },
+      "params": {
+        "value1_field": "system.filesystem.total",
+        "value2_field": "system.filesystem.used.bytes",
+        "divide_output_field": "system.filesystem.used.pct",
+        "difference_output_field": "system.filesystem.free"
+      }
+    },
+    {
+      "operation": "ratio",
+      "target": {
+        "scope": "table",
+        "table": "system.storage"
+      },
+      "params": {
+        "value1_field": "system.storage.total",
+        "value2_field": "system.storage.used.bytes",
+        "divide_output_field": "system.storage.used.pct"
+      }
+    }
+  ]
+}
+```
+
+#### `versa_flexvnf`
+
+```json
+{
+  "name": "versa_flexvnf",
+  "description": "Versa FlexVNF/SD-WAN appliance: software version and device UUID from the Versa enterprise MIB (OID 1.3.6.1.4.1.42359). Complements generic_system, generic_interfaces, and generic_host_system_metrics.",
+  "vendor": "Versa Networks",
+  "product": "FlexVNF",
+  "model": "Any",
+  "get": {
+    "observer.firmware_version": "1.3.6.1.4.1.42359.2.2.1.1.6.6.0",
+    "observer.serial_number": "1.3.6.1.4.1.42359.2.2.1.1.7.3.0"
+  },
+  "walk": {},
+  "table": {}
 }
 ```
 
@@ -2596,6 +9644,208 @@ to collect and how to post-process the values (normalizers).
 > When generating a **new profile**, choose a `name` prefixed with the vendor
 > (or `generic_` for broadly applicable profiles), use ECS-aligned dot-notation
 > field names, and add `normalizers` where raw SNMP values need conversion.
+
+### `arista_eos`
+
+```json
+{
+  "name": "arista_eos",
+  "description": "Arista EOS switch/router identity: model, serial number, EOS software version, and hardware revision from the ENTITY-MIB chassis entry (index 1). Complements generic_system, generic_interfaces, generic_lldp, generic_entity_sensor, generic_entity_psu, and generic_host_system_metrics.",
+  "vendor": "Arista Networks",
+  "product": "Any",
+  "model": "Any",
+  "get": {
+    "observer.model": "1.3.6.1.2.1.47.1.1.1.1.13.1",
+    "observer.serial_number": "1.3.6.1.2.1.47.1.1.1.1.11.1",
+    "observer.firmware_version": "1.3.6.1.2.1.47.1.1.1.1.10.1",
+    "observer.hardware_version": "1.3.6.1.2.1.47.1.1.1.1.8.1"
+  },
+  "walk": {},
+  "table": {}
+}
+```
+
+### `aruba_wireless_controller`
+
+```json
+{
+  "name": "aruba_wireless_controller",
+  "description": "System identity, CPU utilization, memory, filesystem usage, total AP and client counts, per-AP name/IP/status, and per-radio band/channel for Aruba 7000/7200-series wireless LAN controllers running ArubaOS. Uses the Aruba enterprise MIB (1.3.6.1.4.1.14823.2.2.1).",
+  "vendor": "Aruba",
+  "product": "7000/7200 Series Wireless Controller",
+  "model": "Any",
+  "get": {
+    "observer.serial_number": "1.3.6.1.4.1.14823.2.2.1.2.1.11.0",
+    "observer.firmware_version": "1.3.6.1.4.1.14823.2.2.1.2.1.28.0",
+    "wireless.controller.ap_count": "1.3.6.1.4.1.14823.2.2.1.2.1.21.0",
+    "wireless.controller.client_count": "1.3.6.1.4.1.14823.2.2.1.2.1.23.0",
+    "system.memory.actual.total.kb": "1.3.6.1.4.1.14823.2.2.1.1.1.11.1.2.1",
+    "system.memory.actual.used.kb": "1.3.6.1.4.1.14823.2.2.1.1.1.11.1.3.1",
+    "system.memory.actual.available.kb": "1.3.6.1.4.1.14823.2.2.1.1.1.11.1.4.1"
+  },
+  "walk": {},
+  "table": {
+    "component.cpu": {
+      "columns": {
+        "name": "1.3.6.1.4.1.14823.2.2.1.1.1.9.1.2",
+        "load_pct": "1.3.6.1.4.1.14823.2.2.1.1.1.9.1.3"
+      }
+    },
+    "system.filesystem": {
+      "columns": {
+        "mount_point": "1.3.6.1.4.1.14823.2.2.1.1.1.10.1.5",
+        "total": "1.3.6.1.4.1.14823.2.2.1.1.1.10.1.3",
+        "used.bytes": "1.3.6.1.4.1.14823.2.2.1.1.1.10.1.4"
+      }
+    },
+    "wireless.ap": {
+      "columns": {
+        "ip": "1.3.6.1.4.1.14823.2.2.1.5.2.1.4.1.2",
+        "name": "1.3.6.1.4.1.14823.2.2.1.5.2.1.4.1.3",
+        "serial": "1.3.6.1.4.1.14823.2.2.1.5.2.1.4.1.6",
+        "status": "1.3.6.1.4.1.14823.2.2.1.5.2.1.4.1.19"
+      }
+    },
+    "wireless.ap.radio": {
+      "columns": {
+        "band": "1.3.6.1.4.1.14823.2.2.1.5.2.1.5.1.2",
+        "channel": "1.3.6.1.4.1.14823.2.2.1.5.2.1.5.1.3"
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "ratio",
+      "target": {
+        "scope": "get"
+      },
+      "params": {
+        "value1_field": "system.memory.actual.total.kb",
+        "value2_field": "system.memory.actual.available.kb",
+        "complement_ratio_output_field": "system.memory.actual.used.pct"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.actual.total.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.total"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.actual.used.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.actual.used.bytes"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.actual.available.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.actual.free"
+      }
+    },
+    {
+      "operation": "average",
+      "target": {
+        "scope": "table",
+        "table": "component.cpu",
+        "field": "component.cpu.load_pct"
+      },
+      "params": {
+        "output_field": "system.cpu.total.norm.pct",
+        "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "component.cpu",
+        "field": "component.cpu.load_pct"
+      },
+      "params": {
+        "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.filesystem",
+        "field": "system.filesystem.total"
+      },
+      "params": {
+        "multiply_value": 1048576
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.filesystem",
+        "field": "system.filesystem.used.bytes"
+      },
+      "params": {
+        "multiply_value": 1048576
+      }
+    },
+    {
+      "operation": "ratio",
+      "target": {
+        "scope": "table",
+        "table": "system.filesystem"
+      },
+      "params": {
+        "value1_field": "system.filesystem.total",
+        "value2_field": "system.filesystem.used.bytes",
+        "divide_output_field": "system.filesystem.used.pct"
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "table",
+        "table": "wireless.ap",
+        "field": "wireless.ap.status"
+      },
+      "params": {
+        "mapping": {
+          "1": "up",
+          "2": "down"
+        }
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "table",
+        "table": "wireless.ap.radio",
+        "field": "wireless.ap.radio.band"
+      },
+      "params": {
+        "mapping": {
+          "1": "2.4GHz",
+          "3": "5GHz"
+        }
+      }
+    }
+  ]
+}
+```
 
 ### `fibre_channel_ports`
 
@@ -2792,7 +10042,7 @@ to collect and how to post-process the values (normalizers).
   "get": {
     "system.cpu.total.norm.pct": "1.3.6.1.4.1.9.2.1.57.0",
     "system.memory.actual.used.bytes": "1.3.6.1.4.1.9.9.48.1.1.1.5.1",
-    "system.memory.actual.free.bytes": "1.3.6.1.4.1.9.9.48.1.1.1.6.1"
+    "system.memory.actual.free": "1.3.6.1.4.1.9.9.48.1.1.1.6.1"
   },
   "walk": {},
   "table": {},
@@ -2814,10 +10064,9 @@ to collect and how to post-process the values (normalizers).
       },
       "params": {
         "value1_field": "system.memory.actual.used.bytes",
-        "value2_field": "system.memory.actual.free.bytes",
-        "total_output_field": "system.memory.total.bytes",
-        "ratio1_output_field": "system.memory.actual.used.pct",
-        "ratio2_output_field": "system.memory.actual.free.pct"
+        "value2_field": "system.memory.actual.free",
+        "total_output_field": "system.memory.total",
+        "ratio1_output_field": "system.memory.actual.used.pct"
       }
     }
   ]
@@ -2958,12 +10207,73 @@ to collect and how to post-process the values (normalizers).
 }
 ```
 
-### `eaton_xups`
+### `dlink_dgs1210`
 
 ```json
 {
-  "name": "eaton_xups",
-  "description": "Battery capacity, runtime, per-phase input/output power, load, environment, and active alarms for Eaton UPS devices.",
+  "name": "dlink_dgs1210",
+  "description": "D-Link DGS-1210 series smart managed switch: firmware version, hardware revision, and serial number from the D-Link enterprise MIB (OID 1.3.6.1.4.1.171.10.76). Complements generic_system, generic_interfaces, and generic_lldp_mib.",
+  "vendor": "D-Link",
+  "product": "DGS-1210",
+  "model": "Any",
+  "get": {
+    "observer.firmware_version": "1.3.6.1.4.1.171.10.76.23.1.3.0",
+    "observer.hardware_version": "1.3.6.1.4.1.171.10.76.23.1.2.0",
+    "observer.serial_number": "1.3.6.1.4.1.171.10.76.23.1.18.0"
+  },
+  "walk": {},
+  "table": {}
+}
+```
+
+### `dlink_dgs1210_system_metrics`
+
+```json
+{
+  "name": "dlink_dgs1210_system_metrics",
+  "description": "CPU and memory utilisation from the D-Link DGS-1210 private MIB (swDevInfoCPUUtilization and swDevInfoDRAMUsage). Values are integers 0-100; normalizers convert to 0.0-1.0 fractions for system.cpu.total.norm.pct and system.memory.actual.used.pct.",
+  "vendor": "D-Link",
+  "product": "DGS-1210",
+  "model": "Any",
+  "get": {
+    "system.cpu.total.pct": "1.3.6.1.4.1.171.10.76.23.1.20.0",
+    "system.memory.actual.used.pct_raw": "1.3.6.1.4.1.171.10.76.23.1.19.0"
+  },
+  "walk": {},
+  "table": {},
+  "normalizers": [
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.total.pct"
+      },
+      "params": {
+        "multiply_value": 0.01,
+        "output_field": "system.cpu.total.norm.pct"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.actual.used.pct_raw"
+      },
+      "params": {
+        "multiply_value": 0.01,
+        "output_field": "system.memory.actual.used.pct"
+      }
+    }
+  ]
+}
+```
+
+### `eaton_ups`
+
+```json
+{
+  "name": "eaton_ups",
+  "description": "Eaton-specific enrichments on top of generic_ups_mib: identity fields, scalar output load, ambient and remote environment temperature/humidity from XUPS-MIB (1.3.6.1.4.1.534.1), and serial number from the Powerware legacy MIB (1.3.6.1.4.1.705.1). Compatible with Eaton 9PX, 9SX, 9E, 93E, 9130, 5PX, and similar models.",
   "vendor": "Eaton",
   "product": "Any",
   "model": "Any",
@@ -2971,42 +10281,88 @@ to collect and how to post-process the values (normalizers).
     "observer.model": "1.3.6.1.4.1.534.1.1.2.0",
     "observer.firmware_version": "1.3.6.1.4.1.534.1.1.3.0",
     "observer.serial_number": "1.3.6.1.4.1.705.1.1.7.0",
-    "ups.battery.time_remaining_seconds": "1.3.6.1.4.1.534.1.2.1.0",
-    "ups.battery.voltage": "1.3.6.1.4.1.534.1.2.2.0",
-    "ups.battery.current_amps": "1.3.6.1.4.1.534.1.2.3.0",
-    "ups.battery.capacity_pct": "1.3.6.1.4.1.534.1.2.4.0",
-    "ups.battery.status": "1.3.6.1.4.1.534.1.2.5.0",
-    "ups.input.frequency_01hz": "1.3.6.1.4.1.534.1.3.1.0",
-    "ups.input.line_bads": "1.3.6.1.4.1.534.1.3.2.0",
-    "ups.input.num_phases": "1.3.6.1.4.1.534.1.3.3.0",
     "ups.input.source": "1.3.6.1.4.1.534.1.3.5.0",
-    "ups.output.num_phases": "1.3.6.1.4.1.534.1.4.3.0",
-    "ups.output.source": "1.3.6.1.4.1.534.1.4.5.0",
-    "ups.output.load_pct": "1.3.6.1.4.1.534.1.4.6.0",
+    "ups.output.load_pct": "1.3.6.1.4.1.534.1.4.1.0",
     "ups.env.temperature_c": "1.3.6.1.4.1.534.1.6.1.0",
-    "ups.env.humidity_pct": "1.3.6.1.4.1.534.1.6.2.0",
-    "ups.alarms.present": "1.3.6.1.4.1.534.1.7.1.0"
+    "ups.env.remote_temperature_c": "1.3.6.1.4.1.534.1.6.3.0",
+    "ups.env.humidity_pct": "1.3.6.1.4.1.534.1.6.2.0"
+  },
+  "walk": {},
+  "table": {},
+  "normalizers": [
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "get",
+        "field": "ups.input.source"
+      },
+      "params": {
+        "mapping": {
+          "1": "other",
+          "2": "none",
+          "3": "normal",
+          "4": "bypass",
+          "5": "battery",
+          "6": "booster",
+          "7": "reducer"
+        }
+      }
+    }
+  ]
+}
+```
+
+### `geist_environment`
+
+```json
+{
+  "name": "geist_environment",
+  "description": "Geist WatchDog environmental monitor (sold under Vertiv): device identity, built-in temperature and humidity sensor as scalars, and external temperature probe readings as a sensor table. Temperature raw values are in tenths of a degree Celsius (multiply 0.1). Source: Geist enterprise MIB (1.3.6.1.4.1.21239.5.1).",
+  "vendor": "Vertiv",
+  "product": "WatchDog",
+  "model": "Any",
+  "get": {
+    "observer.model": "1.3.6.1.4.1.21239.5.1.1.1.0",
+    "observer.firmware_version": "1.3.6.1.4.1.21239.5.1.1.2.0",
+    "observer.serial_number": "1.3.6.1.4.1.21239.5.1.1.10.0",
+    "observer.mac_address": "1.3.6.1.4.1.21239.5.1.1.4.0",
+    "env.sensor_label": "1.3.6.1.4.1.21239.5.1.2.1.3.1",
+    "env.temperature_c": "1.3.6.1.4.1.21239.5.1.2.1.5.1",
+    "env.humidity_pct": "1.3.6.1.4.1.21239.5.1.2.1.6.1"
   },
   "walk": {},
   "table": {
-    "ups.input.phase": {
+    "component.sensor": {
       "columns": {
-        "index": "1.3.6.1.4.1.534.1.3.4.1.1",
-        "voltage": "1.3.6.1.4.1.534.1.3.4.1.2",
-        "current": "1.3.6.1.4.1.534.1.3.4.1.4",
-        "voltage_status": "1.3.6.1.4.1.534.1.3.4.1.5"
-      }
-    },
-    "ups.output.phase": {
-      "columns": {
-        "index": "1.3.6.1.4.1.534.1.4.4.1.1",
-        "voltage": "1.3.6.1.4.1.534.1.4.4.1.2",
-        "current": "1.3.6.1.4.1.534.1.4.4.1.3",
-        "load": "1.3.6.1.4.1.534.1.4.4.1.4",
-        "power": "1.3.6.1.4.1.534.1.4.4.1.5"
+        "description": "1.3.6.1.4.1.21239.5.1.4.1.3",
+        "online": "1.3.6.1.4.1.21239.5.1.4.1.4",
+        "temp.celsius": "1.3.6.1.4.1.21239.5.1.4.1.5"
       }
     }
-  }
+  },
+  "normalizers": [
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "env.temperature_c"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "component.sensor",
+        "field": "component.sensor.temp.celsius"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    }
+  ]
 }
 ```
 
@@ -3061,12 +10417,42 @@ to collect and how to post-process the values (normalizers).
 }
 ```
 
+### `generic_entity_psu`
+
+```json
+{
+  "name": "generic_entity_psu",
+  "description": "Power supply inventory from ENTITY-MIB for any device that exposes entPhysicalClass=6 (powerSupply) entries. Yields PSU name, description, and serial number. Operational status (health/state) is NOT available from this profile; it requires CISCO-ENVMON-MIB or CISCO-ENTITY-FRU-CONTROL-MIB which must be added separately when present.",
+  "vendor": "Any",
+  "product": "Any",
+  "model": "Any",
+  "get": {},
+  "walk": {},
+  "table": {
+    "component.power_supply": {
+      "columns": {
+        "type": "1.3.6.1.2.1.47.1.1.1.1.5",
+        "location": "1.3.6.1.2.1.47.1.1.1.1.7",
+        "description": "1.3.6.1.2.1.47.1.1.1.1.2",
+        "serial_no": "1.3.6.1.2.1.47.1.1.1.1.11"
+      },
+      "keep_when": {
+        "column": "type",
+        "equals": [
+          "6"
+        ]
+      }
+    }
+  }
+}
+```
+
 ### `generic_entity_sensor`
 
 ```json
 {
   "name": "generic_entity_sensor",
-  "description": "Physical sensor readings (temp, fan speed, power, current, voltage) from any ENTITY-SENSOR-MIB compliant device.",
+  "description": "Physical sensor readings (temp, fan speed, power, current, voltage) from any ENTITY-SENSOR-MIB compliant device. Description is joined from ENTITY-MIB entPhysicalDescr using the shared entity index.",
   "vendor": "Any",
   "product": "Any",
   "model": "Any",
@@ -3075,12 +10461,12 @@ to collect and how to post-process the values (normalizers).
   "table": {
     "component.sensor": {
       "columns": {
+        "description": "1.3.6.1.2.1.47.1.1.1.1.2",
         "type": "1.3.6.1.2.1.99.1.1.1.1",
         "scale": "1.3.6.1.2.1.99.1.1.1.2",
         "precision": "1.3.6.1.2.1.99.1.1.1.3",
         "value": "1.3.6.1.2.1.99.1.1.1.4",
-        "oper_status": "1.3.6.1.2.1.99.1.1.1.5",
-        "units_display": "1.3.6.1.2.1.99.1.1.1.6"
+        "oper_status": "1.3.6.1.2.1.99.1.1.1.5"
       }
     }
   }
@@ -3092,14 +10478,14 @@ to collect and how to post-process the values (normalizers).
 ```json
 {
   "name": "generic_host_system_metrics",
-  "description": "CPU load and filesystem usage per mount point from HOST-RESOURCES-MIB, supported on Linux, Windows, and most embedded devices.",
+  "description": "CPU load and storage usage from HOST-RESOURCES-MIB, supported on Linux, Windows, and most embedded devices. Disks go to system.filesystem (sizes in bytes) and RAM/virtual-memory/other storage to system.storage, so Kibana's Hosts page disk usage only sees real disks.",
   "vendor": "Any",
   "product": "Any",
   "model": "Any",
   "get": {
     "host.num_users": "1.3.6.1.2.1.25.1.5.0",
     "host.num_processes": "1.3.6.1.2.1.25.1.6.0",
-    "system.memory.total.kb": "1.3.6.1.2.1.25.2.2.0"
+    "system.memory.physical.total.kb": "1.3.6.1.2.1.25.2.2.0"
   },
   "walk": {},
   "table": {
@@ -3114,12 +10500,66 @@ to collect and how to post-process the values (normalizers).
         "type": "1.3.6.1.2.1.25.2.3.1.2",
         "mount_point": "1.3.6.1.2.1.25.2.3.1.3",
         "allocation_units": "1.3.6.1.2.1.25.2.3.1.4",
-        "total.bytes": "1.3.6.1.2.1.25.2.3.1.5",
+        "total": "1.3.6.1.2.1.25.2.3.1.5",
         "used.bytes": "1.3.6.1.2.1.25.2.3.1.6"
+      },
+      "keep_when": {
+        "column": "type",
+        "equals": [
+          "1.3.6.1.2.1.25.2.1.4",
+          "1.3.6.1.2.1.25.2.1.10"
+        ],
+        "keep_column": true
+      }
+    },
+    "system.storage": {
+      "columns": {
+        "index": "1.3.6.1.2.1.25.2.3.1.1",
+        "type": "1.3.6.1.2.1.25.2.3.1.2",
+        "mount_point": "1.3.6.1.2.1.25.2.3.1.3",
+        "allocation_units": "1.3.6.1.2.1.25.2.3.1.4",
+        "total": "1.3.6.1.2.1.25.2.3.1.5",
+        "used.bytes": "1.3.6.1.2.1.25.2.3.1.6"
+      },
+      "keep_when": {
+        "column": "type",
+        "equals": [
+          "1.3.6.1.2.1.25.2.1.1",
+          "1.3.6.1.2.1.25.2.1.2",
+          "1.3.6.1.2.1.25.2.1.3",
+          "1.3.6.1.2.1.25.2.1.5",
+          "1.3.6.1.2.1.25.2.1.6",
+          "1.3.6.1.2.1.25.2.1.7",
+          "1.3.6.1.2.1.25.2.1.8",
+          "1.3.6.1.2.1.25.2.1.9"
+        ],
+        "keep_column": true
       }
     }
   },
   "normalizers": [
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.physical.total.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.total"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.physical.total.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.actual.total.bytes"
+      }
+    },
     {
       "operation": "average",
       "target": {
@@ -3130,6 +10570,18 @@ to collect and how to post-process the values (normalizers).
       "params": {
         "output_field": "system.cpu.total.norm.pct",
         "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "component.cpu",
+        "field": "component.cpu.load_pct"
+      },
+      "params": {
+        "output_field": "system.cpu.cores",
+        "mode": "count"
       }
     },
     {
@@ -3144,15 +10596,72 @@ to collect and how to post-process the values (normalizers).
       }
     },
     {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.filesystem",
+        "field": "system.filesystem.total"
+      },
+      "params": {
+        "multiply_field": "system.filesystem.allocation_units"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.filesystem",
+        "field": "system.filesystem.used.bytes"
+      },
+      "params": {
+        "multiply_field": "system.filesystem.allocation_units"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.storage",
+        "field": "system.storage.total"
+      },
+      "params": {
+        "multiply_field": "system.storage.allocation_units"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.storage",
+        "field": "system.storage.used.bytes"
+      },
+      "params": {
+        "multiply_field": "system.storage.allocation_units"
+      }
+    },
+    {
       "operation": "ratio",
       "target": {
         "scope": "table",
         "table": "system.filesystem"
       },
       "params": {
-        "value1_field": "system.filesystem.total.bytes",
+        "value1_field": "system.filesystem.total",
         "value2_field": "system.filesystem.used.bytes",
-        "divide_output_field": "system.filesystem.used.pct"
+        "divide_output_field": "system.filesystem.used.pct",
+        "difference_output_field": "system.filesystem.free"
+      }
+    },
+    {
+      "operation": "ratio",
+      "target": {
+        "scope": "table",
+        "table": "system.storage"
+      },
+      "params": {
+        "value1_field": "system.storage.total",
+        "value2_field": "system.storage.used.bytes",
+        "divide_output_field": "system.storage.used.pct"
       }
     }
   ]
@@ -3202,6 +10711,38 @@ to collect and how to post-process the values (normalizers).
     }
   },
   "normalizers": [
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.in_octets"
+      },
+      "params": {
+        "output_field": "host.network.ingress.bytes",
+        "mode": "delta",
+        "exclude_column": "type",
+        "exclude_values": [
+          "24"
+        ]
+      }
+    },
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.out_octets"
+      },
+      "params": {
+        "output_field": "host.network.egress.bytes",
+        "mode": "delta",
+        "exclude_column": "type",
+        "exclude_values": [
+          "24"
+        ]
+      }
+    },
     {
       "operation": "translate",
       "target": {
@@ -3321,6 +10862,47 @@ to collect and how to post-process the values (normalizers).
 }
 ```
 
+### `generic_lm_sensors`
+
+```json
+{
+  "name": "generic_lm_sensors",
+  "description": "Fan RPM and temperature sensor readings via the UCD-SNMP LM-SENSORS MIB (1.3.6.1.4.1.2021.13.16) for Linux and embedded devices running net-snmp with the lmSensors module enabled. Fan values are direct RPM integers. Temperature values from lmTempSensorsValue are in millidegrees Celsius and are normalized to degrees Celsius via multiply 0.001.",
+  "vendor": "Any",
+  "product": "Any",
+  "model": "Any",
+  "get": {},
+  "walk": {},
+  "table": {
+    "component.fan": {
+      "columns": {
+        "description": "1.3.6.1.4.1.2021.13.16.3.1.2",
+        "rpm": "1.3.6.1.4.1.2021.13.16.3.1.3"
+      }
+    },
+    "component.sensor": {
+      "columns": {
+        "description": "1.3.6.1.4.1.2021.13.16.2.1.2",
+        "temp.celsius": "1.3.6.1.4.1.2021.13.16.2.1.3"
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "component.sensor",
+        "field": "component.sensor.temp.celsius"
+      },
+      "params": {
+        "multiply_value": 0.001
+      }
+    }
+  ]
+}
+```
+
 ### `generic_mac_table`
 
 ```json
@@ -3349,7 +10931,7 @@ to collect and how to post-process the values (normalizers).
 ```json
 {
   "name": "generic_ont",
-  "description": "System identity, memory utilization, and per-port link/speed for generic ONT devices.",
+  "description": "System identity, memory utilization, CPU utilization, and per-port link/speed for generic ONT devices.",
   "vendor": "Unknown",
   "product": "Any",
   "model": "Any",
@@ -3360,7 +10942,8 @@ to collect and how to post-process the values (normalizers).
     "observer.product_id": "1.3.6.1.4.1.52208.100.1.100.0",
     "observer.serial_number": "1.3.6.1.4.1.52208.100.1.101.0",
     "system.memory.actual.total.bytes": "1.3.6.1.4.1.52208.100.1.11.6.0",
-    "system.memory.actual.used.bytes": "1.3.6.1.4.1.52208.100.1.11.7.0"
+    "system.memory.actual.used.bytes": "1.3.6.1.4.1.52208.100.1.11.7.0",
+    "system.cpu.total.norm.pct": "1.3.6.1.4.1.52208.100.1.11.2.0"
   },
   "walk": {},
   "table": {
@@ -3376,6 +10959,16 @@ to collect and how to post-process the values (normalizers).
     }
   },
   "normalizers": [
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.total.norm.pct"
+      },
+      "params": {
+        "multiply_value": 0.01
+      }
+    },
     {
       "operation": "ratio",
       "target": {
@@ -3567,18 +11160,20 @@ to collect and how to post-process the values (normalizers).
 ```json
 {
   "name": "generic_ucd_system_metrics",
-  "description": "Memory, load averages, and per-state CPU counters via Net-SNMP for Linux and BSD devices.",
+  "description": "Memory, load averages, per-state CPU, and disk I/O counters via Net-SNMP for Linux and BSD devices. Field names follow the Elastic System integration so Kibana's Hosts page can read them.",
   "vendor": "Any",
   "product": "Any",
   "model": "Any",
   "get": {
     "system.memory.actual.total.kb": "1.3.6.1.4.1.2021.4.5.0",
     "system.memory.actual.available.kb": "1.3.6.1.4.1.2021.4.6.0",
-    "system.memory.actual.free.kb": "1.3.6.1.4.1.2021.4.11.0",
+    "system.memory.total_free.kb": "1.3.6.1.4.1.2021.4.11.0",
     "system.memory.actual.cached.kb": "1.3.6.1.4.1.2021.4.15.0",
-    "system.load.1": "1.3.6.1.4.1.2021.10.1.3.1",
-    "system.load.5": "1.3.6.1.4.1.2021.10.1.3.2",
-    "system.load.15": "1.3.6.1.4.1.2021.10.1.3.3",
+    "system.load.1": "1.3.6.1.4.1.2021.10.1.5.1",
+    "system.load.5": "1.3.6.1.4.1.2021.10.1.5.2",
+    "system.load.15": "1.3.6.1.4.1.2021.10.1.5.3",
+    "system.cpu.pct.user": "1.3.6.1.4.1.2021.11.9.0",
+    "system.cpu.pct.system": "1.3.6.1.4.1.2021.11.10.0",
     "system.cpu.raw.user": "1.3.6.1.4.1.2021.11.50.0",
     "system.cpu.raw.nice": "1.3.6.1.4.1.2021.11.51.0",
     "system.cpu.raw.system": "1.3.6.1.4.1.2021.11.52.0",
@@ -3586,11 +11181,133 @@ to collect and how to post-process the values (normalizers).
     "system.cpu.raw.wait": "1.3.6.1.4.1.2021.11.54.0",
     "system.cpu.raw.kernel": "1.3.6.1.4.1.2021.11.55.0",
     "system.cpu.raw.interrupt": "1.3.6.1.4.1.2021.11.56.0",
-    "system.cpu.num_cpus": "1.3.6.1.4.1.2021.11.67.0"
+    "system.cpu.raw.softirq": "1.3.6.1.4.1.2021.11.61.0",
+    "system.cpu.raw.steal": "1.3.6.1.4.1.2021.11.64.0",
+    "system.cpu.cores": "1.3.6.1.4.1.2021.11.67.0"
   },
   "walk": {},
-  "table": {},
+  "table": {
+    "system.diskio": {
+      "columns": {
+        "index": "1.3.6.1.4.1.2021.13.15.1.1.1",
+        "name": "1.3.6.1.4.1.2021.13.15.1.1.2",
+        "read.count": "1.3.6.1.4.1.2021.13.15.1.1.5",
+        "write.count": "1.3.6.1.4.1.2021.13.15.1.1.6",
+        "read.bytes": "1.3.6.1.4.1.2021.13.15.1.1.12",
+        "write.bytes": "1.3.6.1.4.1.2021.13.15.1.1.13"
+      }
+    }
+  },
   "normalizers": [
+    {
+      "operation": "sum",
+      "target": {
+        "scope": "get"
+      },
+      "params": {
+        "input_fields": [
+          "system.cpu.pct.user",
+          "system.cpu.pct.system"
+        ],
+        "output_field": "system.cpu.active.pct"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.active.pct"
+      },
+      "params": {
+        "multiply_value": 0.01,
+        "output_field": "system.cpu.total.norm.pct"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.load.1"
+      },
+      "params": {
+        "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.load.5"
+      },
+      "params": {
+        "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.load.15"
+      },
+      "params": {
+        "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.actual.total.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.total"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.actual.total.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.actual.total.bytes"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.actual.available.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.free"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.actual.available.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.actual.free"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.cores"
+      },
+      "params": {
+        "multiply_value": 1,
+        "output_field": "system.load.cores"
+      }
+    },
     {
       "operation": "ratio",
       "target": {
@@ -3599,7 +11316,310 @@ to collect and how to post-process the values (normalizers).
       "params": {
         "value1_field": "system.memory.actual.total.kb",
         "value2_field": "system.memory.actual.available.kb",
-        "complement_ratio_output_field": "system.memory.actual.used.pct"
+        "complement_ratio_output_field": "system.memory.actual.used.pct",
+        "difference_output_field": "system.memory.actual.used.kb"
+      }
+    },
+    {
+      "operation": "sum",
+      "target": {
+        "scope": "get"
+      },
+      "params": {
+        "input_fields": [
+          "system.memory.actual.used.kb",
+          "system.memory.actual.cached.kb"
+        ],
+        "output_field": "system.memory.used.kb"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.actual.used.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.actual.used.bytes"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.used.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.used.bytes"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.user"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.user"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.nice"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.nice"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.kernel"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.system"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.idle"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.idle"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.wait"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.iowait"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.interrupt"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.irq"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.softirq"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.softirq"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.steal"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.steal"
+      }
+    },
+    {
+      "operation": "share",
+      "target": {
+        "scope": "get"
+      },
+      "params": {
+        "input_fields": [
+          "system.cpu.delta.user",
+          "system.cpu.delta.nice",
+          "system.cpu.delta.system",
+          "system.cpu.delta.idle",
+          "system.cpu.delta.iowait",
+          "system.cpu.delta.irq",
+          "system.cpu.delta.softirq",
+          "system.cpu.delta.steal"
+        ],
+        "output_fields": [
+          "system.cpu.user.pct",
+          "system.cpu.nice.pct",
+          "system.cpu.system.pct",
+          "system.cpu.idle.pct",
+          "system.cpu.iowait.pct",
+          "system.cpu.irq.pct",
+          "system.cpu.softirq.pct",
+          "system.cpu.steal.pct"
+        ],
+        "multiply_field": "system.cpu.cores"
+      }
+    }
+  ]
+}
+```
+
+### `generic_ups_mib`
+
+```json
+{
+  "name": "generic_ups_mib",
+  "description": "Device identity (manufacturer, model, and firmware), battery health, runtime, per-phase input/output power, and active alarms via the standard RFC 1628 UPS-MIB (1.3.6.1.2.1.33). Supported by virtually all UPS brands (APC, Eaton, Vertiv, CyberPower, etc.). Battery voltage and current are reported in 0.1V/0.1A units by the MIB and normalised to V/A by multiply normalizers. Output and input phase frequencies are similarly normalised from 0.1 Hz.",
+  "vendor": "Any",
+  "product": "Any",
+  "model": "Any",
+  "get": {
+    "observer.vendor": "1.3.6.1.2.1.33.1.1.1.0",
+    "observer.model": "1.3.6.1.2.1.33.1.1.2.0",
+    "observer.firmware_version": "1.3.6.1.2.1.33.1.1.3.0",
+    "ups.battery.status": "1.3.6.1.2.1.33.1.2.1.0",
+    "ups.battery.seconds_on_battery": "1.3.6.1.2.1.33.1.2.2.0",
+    "ups.battery.time_remaining_minutes": "1.3.6.1.2.1.33.1.2.3.0",
+    "ups.battery.capacity_pct": "1.3.6.1.2.1.33.1.2.4.0",
+    "ups.battery.voltage": "1.3.6.1.2.1.33.1.2.5.0",
+    "ups.battery.current_amps": "1.3.6.1.2.1.33.1.2.6.0",
+    "ups.battery.temperature_c": "1.3.6.1.2.1.33.1.2.7.0",
+    "ups.input.line_bads": "1.3.6.1.2.1.33.1.3.1.0",
+    "ups.input.num_phases": "1.3.6.1.2.1.33.1.3.2.0",
+    "ups.output.source": "1.3.6.1.2.1.33.1.4.1.0",
+    "ups.output.frequency_hz": "1.3.6.1.2.1.33.1.4.2.0",
+    "ups.output.num_phases": "1.3.6.1.2.1.33.1.4.3.0",
+    "ups.alarms.present": "1.3.6.1.2.1.33.1.6.1.0"
+  },
+  "walk": {},
+  "table": {
+    "ups.input.phase": {
+      "columns": {
+        "frequency_hz": "1.3.6.1.2.1.33.1.3.3.1.2",
+        "voltage": "1.3.6.1.2.1.33.1.3.3.1.3",
+        "current_amps": "1.3.6.1.2.1.33.1.3.3.1.4",
+        "power_w": "1.3.6.1.2.1.33.1.3.3.1.5"
+      }
+    },
+    "ups.output.phase": {
+      "columns": {
+        "voltage": "1.3.6.1.2.1.33.1.4.4.1.2",
+        "current_amps": "1.3.6.1.2.1.33.1.4.4.1.3",
+        "power_w": "1.3.6.1.2.1.33.1.4.4.1.4",
+        "load_pct": "1.3.6.1.2.1.33.1.4.4.1.5"
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "get",
+        "field": "ups.battery.status"
+      },
+      "params": {
+        "mapping": {
+          "1": "unknown",
+          "2": "normal",
+          "3": "low_battery",
+          "4": "depleted"
+        }
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "get",
+        "field": "ups.output.source"
+      },
+      "params": {
+        "mapping": {
+          "1": "other",
+          "2": "none",
+          "3": "normal",
+          "4": "bypass",
+          "5": "battery",
+          "6": "booster",
+          "7": "reducer"
+        }
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "ups.battery.voltage"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "ups.battery.current_amps"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "ups.output.frequency_hz"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "ups.input.phase",
+        "field": "ups.input.phase.frequency_hz"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "ups.input.phase",
+        "field": "ups.input.phase.current_amps"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "ups.output.phase",
+        "field": "ups.output.phase.current_amps"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "average",
+      "target": {
+        "scope": "table",
+        "table": "ups.output.phase",
+        "field": "ups.output.phase.load_pct"
+      },
+      "params": {
+        "output_field": "ups.output.load_pct"
       }
     }
   ]
@@ -3664,6 +11684,597 @@ to collect and how to post-process the values (normalizers).
 }
 ```
 
+### `huawei_ups`
+
+```json
+{
+  "name": "huawei_ups",
+  "description": "Complete normalized polling profile for Huawei UPS devices. Uses standard UPS-MIB OIDs where supported and Huawei OIDs for battery capacity and runtime, which return -1 through UPS-MIB on the UPS5000. Compatible with Huawei UPS5000-E and similar models.",
+  "vendor": "Huawei",
+  "product": "Any",
+  "model": "Any",
+  "get": {
+    "observer.vendor": "1.3.6.1.2.1.33.1.1.1.0",
+    "observer.model": "1.3.6.1.2.1.33.1.1.2.0",
+    "observer.firmware_version": "1.3.6.1.2.1.33.1.1.3.0",
+    "observer.serial_number": "1.3.6.1.4.1.2011.6.174.1.2.100.1.5.1",
+    "ups.battery.status": "1.3.6.1.2.1.33.1.2.1.0",
+    "ups.battery.seconds_on_battery": "1.3.6.1.2.1.33.1.2.2.0",
+    "ups.battery.time_remaining_minutes": "1.3.6.1.4.1.2011.6.174.1.12.1.0",
+    "ups.battery.capacity_pct": "1.3.6.1.4.1.2011.6.174.1.6.100.1.3.1",
+    "ups.battery.voltage": "1.3.6.1.2.1.33.1.2.5.0",
+    "ups.battery.current_amps": "1.3.6.1.2.1.33.1.2.6.0",
+    "ups.input.num_phases": "1.3.6.1.2.1.33.1.3.2.0",
+    "ups.output.source": "1.3.6.1.2.1.33.1.4.1.0",
+    "ups.output.frequency_hz": "1.3.6.1.2.1.33.1.4.2.0",
+    "ups.output.num_phases": "1.3.6.1.2.1.33.1.4.3.0",
+    "ups.alarms.present": "1.3.6.1.2.1.33.1.6.1.0"
+  },
+  "walk": {},
+  "table": {
+    "ups.input.phase": {
+      "columns": {
+        "frequency_hz": "1.3.6.1.2.1.33.1.3.3.1.2",
+        "voltage": "1.3.6.1.2.1.33.1.3.3.1.3",
+        "current_amps": "1.3.6.1.2.1.33.1.3.3.1.4"
+      }
+    },
+    "ups.output.phase": {
+      "columns": {
+        "voltage": "1.3.6.1.2.1.33.1.4.4.1.2",
+        "current_amps": "1.3.6.1.2.1.33.1.4.4.1.3",
+        "power_w": "1.3.6.1.2.1.33.1.4.4.1.4",
+        "load_pct": "1.3.6.1.2.1.33.1.4.4.1.5"
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "get",
+        "field": "ups.battery.status"
+      },
+      "params": {
+        "mapping": {
+          "1": "unknown",
+          "2": "normal",
+          "3": "low_battery",
+          "4": "depleted"
+        }
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "get",
+        "field": "ups.output.source"
+      },
+      "params": {
+        "mapping": {
+          "1": "other",
+          "2": "none",
+          "3": "normal",
+          "4": "bypass",
+          "5": "battery",
+          "6": "booster",
+          "7": "reducer"
+        }
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "ups.battery.voltage"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "ups.battery.current_amps"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "ups.output.frequency_hz"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "ups.input.phase",
+        "field": "ups.input.phase.frequency_hz"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "ups.input.phase",
+        "field": "ups.input.phase.current_amps"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "ups.output.phase",
+        "field": "ups.output.phase.current_amps"
+      },
+      "params": {
+        "multiply_value": 0.1
+      }
+    },
+    {
+      "operation": "average",
+      "target": {
+        "scope": "table",
+        "table": "ups.output.phase",
+        "field": "ups.output.phase.load_pct"
+      },
+      "params": {
+        "output_field": "ups.output.load_pct"
+      }
+    }
+  ]
+}
+```
+
+### `isilon_performance`
+
+```json
+{
+  "name": "isilon_performance",
+  "description": "Cluster-wide and polled-node /ifs throughput, external network bit rates, CPU usage by state, the per-CPU table, and per-drive performance for Dell EMC Isilon OneFS. CPU values are converted from per mil to fractions (0-1). Uses ISILON-MIB (1.3.6.1.4.1.12124).",
+  "vendor": "Dell EMC",
+  "product": "Isilon OneFS",
+  "model": "Any",
+  "get": {
+    "observer.cluster.ifs.in.bytes": "1.3.6.1.4.1.12124.1.2.1.1.0",
+    "observer.cluster.ifs.in.bps": "1.3.6.1.4.1.12124.1.2.1.2.0",
+    "observer.cluster.ifs.out.bytes": "1.3.6.1.4.1.12124.1.2.1.3.0",
+    "observer.cluster.ifs.out.bps": "1.3.6.1.4.1.12124.1.2.1.4.0",
+    "observer.cluster.network.in.bps": "1.3.6.1.4.1.12124.1.2.2.2.0",
+    "observer.cluster.network.out.bps": "1.3.6.1.4.1.12124.1.2.2.4.0",
+    "observer.cluster.cpu.user.pct": "1.3.6.1.4.1.12124.1.2.3.1.0",
+    "observer.cluster.cpu.nice.pct": "1.3.6.1.4.1.12124.1.2.3.2.0",
+    "observer.cluster.cpu.system.pct": "1.3.6.1.4.1.12124.1.2.3.3.0",
+    "observer.cluster.cpu.interrupt.pct": "1.3.6.1.4.1.12124.1.2.3.4.0",
+    "observer.cluster.cpu.idle.pct": "1.3.6.1.4.1.12124.1.2.3.5.0",
+    "observer.node.ifs.in.bytes": "1.3.6.1.4.1.12124.2.2.1.1.0",
+    "observer.node.ifs.in.bps": "1.3.6.1.4.1.12124.2.2.1.2.0",
+    "observer.node.ifs.out.bytes": "1.3.6.1.4.1.12124.2.2.1.3.0",
+    "observer.node.ifs.out.bps": "1.3.6.1.4.1.12124.2.2.1.4.0",
+    "observer.node.network.in.bps": "1.3.6.1.4.1.12124.2.2.2.2.0",
+    "observer.node.network.out.bps": "1.3.6.1.4.1.12124.2.2.2.4.0",
+    "observer.node.cpu.user.pct": "1.3.6.1.4.1.12124.2.2.3.1.0",
+    "observer.node.cpu.nice.pct": "1.3.6.1.4.1.12124.2.2.3.2.0",
+    "observer.node.cpu.system.pct": "1.3.6.1.4.1.12124.2.2.3.3.0",
+    "observer.node.cpu.interrupt.pct": "1.3.6.1.4.1.12124.2.2.3.4.0",
+    "observer.node.cpu.idle.pct": "1.3.6.1.4.1.12124.2.2.3.5.0"
+  },
+  "walk": {},
+  "table": {
+    "component.node.cpu": {
+      "columns": {
+        "user.pct": "1.3.6.1.4.1.12124.2.2.3.10.1.1",
+        "nice.pct": "1.3.6.1.4.1.12124.2.2.3.10.1.2",
+        "system.pct": "1.3.6.1.4.1.12124.2.2.3.10.1.3",
+        "interrupt.pct": "1.3.6.1.4.1.12124.2.2.3.10.1.4",
+        "idle.pct": "1.3.6.1.4.1.12124.2.2.3.10.1.5"
+      }
+    },
+    "component.drive_perf": {
+      "columns": {
+        "index": "1.3.6.1.4.1.12124.2.2.52.1.1",
+        "device_name": "1.3.6.1.4.1.12124.2.2.52.1.2",
+        "ops_per_sec": "1.3.6.1.4.1.12124.2.2.52.1.3",
+        "in.bps": "1.3.6.1.4.1.12124.2.2.52.1.4",
+        "out.bps": "1.3.6.1.4.1.12124.2.2.52.1.5"
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "observer.cluster.cpu.user.pct"
+      },
+      "params": {
+        "multiply_value": 0.001
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "observer.cluster.cpu.nice.pct"
+      },
+      "params": {
+        "multiply_value": 0.001
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "observer.cluster.cpu.system.pct"
+      },
+      "params": {
+        "multiply_value": 0.001
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "observer.cluster.cpu.interrupt.pct"
+      },
+      "params": {
+        "multiply_value": 0.001
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "observer.cluster.cpu.idle.pct"
+      },
+      "params": {
+        "multiply_value": 0.001
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "observer.node.cpu.user.pct"
+      },
+      "params": {
+        "multiply_value": 0.001
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "observer.node.cpu.nice.pct"
+      },
+      "params": {
+        "multiply_value": 0.001
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "observer.node.cpu.system.pct"
+      },
+      "params": {
+        "multiply_value": 0.001
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "observer.node.cpu.interrupt.pct"
+      },
+      "params": {
+        "multiply_value": 0.001
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "observer.node.cpu.idle.pct"
+      },
+      "params": {
+        "multiply_value": 0.001
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "component.node.cpu",
+        "field": "component.node.cpu.user.pct"
+      },
+      "params": {
+        "multiply_value": 0.001
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "component.node.cpu",
+        "field": "component.node.cpu.nice.pct"
+      },
+      "params": {
+        "multiply_value": 0.001
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "component.node.cpu",
+        "field": "component.node.cpu.system.pct"
+      },
+      "params": {
+        "multiply_value": 0.001
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "component.node.cpu",
+        "field": "component.node.cpu.interrupt.pct"
+      },
+      "params": {
+        "multiply_value": 0.001
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "component.node.cpu",
+        "field": "component.node.cpu.idle.pct"
+      },
+      "params": {
+        "multiply_value": 0.001
+      }
+    }
+  ]
+}
+```
+
+### `isilon_protocols`
+
+```json
+{
+  "name": "isilon_protocols",
+  "description": "Per-protocol performance on the polled node for Dell EMC Isilon OneFS (SMB1, SMB2, NFS3, NFS4, NLM, FTP, HTTP, iSCSI, SyncIQ): operation counts and rates, request/response sizes, bit rates, and latency in microseconds. Uses ISILON-MIB nodeProtocolPerfTable (1.3.6.1.4.1.12124.2.2.10).",
+  "vendor": "Dell EMC",
+  "product": "Isilon OneFS",
+  "model": "Any",
+  "get": {},
+  "walk": {},
+  "table": {
+    "storage.protocol": {
+      "columns": {
+        "name": "1.3.6.1.4.1.12124.2.2.10.1.1",
+        "op_count": "1.3.6.1.4.1.12124.2.2.10.1.2",
+        "ops_per_sec": "1.3.6.1.4.1.12124.2.2.10.1.3",
+        "in.min_bytes": "1.3.6.1.4.1.12124.2.2.10.1.4",
+        "in.max_bytes": "1.3.6.1.4.1.12124.2.2.10.1.5",
+        "in.avg_bytes": "1.3.6.1.4.1.12124.2.2.10.1.6",
+        "in.stddev_bytes": "1.3.6.1.4.1.12124.2.2.10.1.7",
+        "in.bps": "1.3.6.1.4.1.12124.2.2.10.1.8",
+        "out.min_bytes": "1.3.6.1.4.1.12124.2.2.10.1.9",
+        "out.max_bytes": "1.3.6.1.4.1.12124.2.2.10.1.10",
+        "out.avg_bytes": "1.3.6.1.4.1.12124.2.2.10.1.11",
+        "out.stddev_bytes": "1.3.6.1.4.1.12124.2.2.10.1.12",
+        "out.bps": "1.3.6.1.4.1.12124.2.2.10.1.13",
+        "latency.min_us": "1.3.6.1.4.1.12124.2.2.10.1.14",
+        "latency.max_us": "1.3.6.1.4.1.12124.2.2.10.1.15",
+        "latency.avg_us": "1.3.6.1.4.1.12124.2.2.10.1.16",
+        "latency.stddev_us": "1.3.6.1.4.1.12124.2.2.10.1.17"
+      }
+    }
+  },
+  "normalizers": []
+}
+```
+
+### `isilon_system`
+
+```json
+{
+  "name": "isilon_system",
+  "description": "Cluster identity and health, /ifs capacity from 64-bit counters, polled-node status, and hardware inventory (chassis, drives, fans, temperature and power sensors) plus the license table for Dell EMC Isilon OneFS. Uses ISILON-MIB (1.3.6.1.4.1.12124).",
+  "vendor": "Dell EMC",
+  "product": "Isilon OneFS",
+  "model": "Any",
+  "get": {
+    "observer.cluster.name": "1.3.6.1.4.1.12124.1.1.1.0",
+    "observer.cluster.health": "1.3.6.1.4.1.12124.1.1.2.0",
+    "observer.cluster.guid": "1.3.6.1.4.1.12124.1.1.3.0",
+    "observer.cluster.node_count": "1.3.6.1.4.1.12124.1.1.4.0",
+    "observer.cluster.nodes_configured": "1.3.6.1.4.1.12124.1.1.5.0",
+    "observer.cluster.nodes_online": "1.3.6.1.4.1.12124.1.1.6.0",
+    "observer.cluster.nodes_offline": "1.3.6.1.4.1.12124.1.1.7.0",
+    "storage.disk.total.bytes": "1.3.6.1.4.1.12124.1.3.1.0",
+    "storage.disk.used.bytes": "1.3.6.1.4.1.12124.1.3.2.0",
+    "storage.disk.avail.bytes": "1.3.6.1.4.1.12124.1.3.3.0",
+    "storage.disk.free.bytes": "1.3.6.1.4.1.12124.1.3.4.0",
+    "observer.node.name": "1.3.6.1.4.1.12124.2.1.1.0",
+    "observer.node.health": "1.3.6.1.4.1.12124.2.1.2.0",
+    "observer.node.type": "1.3.6.1.4.1.12124.2.1.3.0",
+    "observer.node.read_only": "1.3.6.1.4.1.12124.2.1.4.0"
+  },
+  "walk": {},
+  "table": {
+    "component.chassis": {
+      "columns": {
+        "index": "1.3.6.1.4.1.12124.2.51.1.1",
+        "config_number": "1.3.6.1.4.1.12124.2.51.1.2",
+        "serial_no": "1.3.6.1.4.1.12124.2.51.1.3",
+        "model": "1.3.6.1.4.1.12124.2.51.1.4",
+        "unit_id_led": "1.3.6.1.4.1.12124.2.51.1.5"
+      }
+    },
+    "component.drive": {
+      "columns": {
+        "index": "1.3.6.1.4.1.12124.2.52.1.1",
+        "logical_number": "1.3.6.1.4.1.12124.2.52.1.2",
+        "chassis": "1.3.6.1.4.1.12124.2.52.1.3",
+        "device_name": "1.3.6.1.4.1.12124.2.52.1.4",
+        "status": "1.3.6.1.4.1.12124.2.52.1.5",
+        "model": "1.3.6.1.4.1.12124.2.52.1.6",
+        "serial_no": "1.3.6.1.4.1.12124.2.52.1.7",
+        "firmware_version": "1.3.6.1.4.1.12124.2.52.1.8",
+        "size.bytes": "1.3.6.1.4.1.12124.2.52.1.9"
+      }
+    },
+    "component.fan": {
+      "columns": {
+        "index": "1.3.6.1.4.1.12124.2.53.1.1",
+        "description": "1.3.6.1.4.1.12124.2.53.1.3",
+        "rpm": "1.3.6.1.4.1.12124.2.53.1.4"
+      }
+    },
+    "component.sensor": {
+      "columns": {
+        "index": "1.3.6.1.4.1.12124.2.54.1.1",
+        "description": "1.3.6.1.4.1.12124.2.54.1.3",
+        "temp.celsius": "1.3.6.1.4.1.12124.2.54.1.4"
+      }
+    },
+    "component.power_sensor": {
+      "columns": {
+        "index": "1.3.6.1.4.1.12124.2.55.1.1",
+        "name": "1.3.6.1.4.1.12124.2.55.1.2",
+        "description": "1.3.6.1.4.1.12124.2.55.1.3",
+        "value": "1.3.6.1.4.1.12124.2.55.1.4"
+      }
+    },
+    "observer.cluster.license": {
+      "columns": {
+        "name": "1.3.6.1.4.1.12124.1.5.1.1.2",
+        "status": "1.3.6.1.4.1.12124.1.5.1.1.3",
+        "expiration": "1.3.6.1.4.1.12124.1.5.1.1.5"
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "get",
+        "field": "observer.cluster.health"
+      },
+      "params": {
+        "mapping": {
+          "0": "ok",
+          "1": "attn",
+          "2": "down",
+          "3": "invalid"
+        }
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "get",
+        "field": "observer.node.health"
+      },
+      "params": {
+        "mapping": {
+          "0": "ok",
+          "1": "attn",
+          "2": "down",
+          "3": "invalid"
+        }
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "get",
+        "field": "observer.node.type"
+      },
+      "params": {
+        "mapping": {
+          "0": "storage",
+          "1": "accelerator"
+        }
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "get",
+        "field": "observer.node.read_only"
+      },
+      "params": {
+        "mapping": {
+          "0": "no",
+          "1": "yes"
+        }
+      }
+    },
+    {
+      "operation": "ratio",
+      "target": {
+        "scope": "get"
+      },
+      "params": {
+        "value1_field": "storage.disk.total.bytes",
+        "value2_field": "storage.disk.used.bytes",
+        "divide_output_field": "storage.disk.used.pct"
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "table",
+        "table": "component.chassis",
+        "field": "component.chassis.unit_id_led"
+      },
+      "params": {
+        "mapping": {
+          "-1": "na",
+          "0": "no",
+          "1": "yes"
+        }
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "table",
+        "table": "observer.cluster.license",
+        "field": "observer.cluster.license.status"
+      },
+      "params": {
+        "mapping": {
+          "0": "activated",
+          "1": "evaluation",
+          "-1": "expired",
+          "-2": "inactive"
+        }
+      }
+    }
+  ]
+}
+```
+
 ### `mellanox_mlnx_os`
 
 ```json
@@ -3680,6 +12291,503 @@ to collect and how to post-process the values (normalizers).
   },
   "walk": {},
   "table": {}
+}
+```
+
+### `netapp_7mode_data_protection`
+
+```json
+{
+  "name": "netapp_7mode_data_protection",
+  "description": "SnapMirror relationship state and lag, SnapVault destination status, and SIS (dedup/compression) efficiency statistics for NetApp ONTAP 7-Mode filers. Uses NETAPP-MIB (1.3.6.1.4.1.789).",
+  "vendor": "NetApp",
+  "product": "ONTAP 7-Mode",
+  "model": "Any",
+  "get": {
+    "data_protection.snapmirror.enabled": "1.3.6.1.4.1.789.1.9.1.0",
+    "data_protection.snapmirror.relation_count": "1.3.6.1.4.1.789.1.9.2.0",
+    "data_protection.snapvault.enabled": "1.3.6.1.4.1.789.1.16.1.0",
+    "data_protection.sis.enabled": "1.3.6.1.4.1.789.1.18.1.1.0",
+    "data_protection.sis.compression_enabled": "1.3.6.1.4.1.789.1.18.1.2.0"
+  },
+  "walk": {},
+  "table": {
+    "data_protection.snapmirror.relation": {
+      "columns": {
+        "index": "1.3.6.1.4.1.789.1.9.3.1.1",
+        "source_path": "1.3.6.1.4.1.789.1.9.3.1.2",
+        "destination_path": "1.3.6.1.4.1.789.1.9.3.1.3",
+        "state": "1.3.6.1.4.1.789.1.9.3.1.4",
+        "lag_secs": "1.3.6.1.4.1.789.1.9.3.1.5",
+        "last_transfer_secs": "1.3.6.1.4.1.789.1.9.3.1.6",
+        "status": "1.3.6.1.4.1.789.1.9.3.1.7",
+        "in_progress": "1.3.6.1.4.1.789.1.9.3.1.8"
+      }
+    },
+    "data_protection.snapvault.destination": {
+      "columns": {
+        "index": "1.3.6.1.4.1.789.1.16.4.1.1",
+        "vfiler_name": "1.3.6.1.4.1.789.1.16.3.1.2",
+        "status": "1.3.6.1.4.1.789.1.16.3.1.7",
+        "state": "1.3.6.1.4.1.789.1.16.3.1.9"
+      }
+    },
+    "data_protection.sis.volume": {
+      "columns": {
+        "index": "1.3.6.1.4.1.789.1.18.2.1.0",
+        "savings_pct": "1.3.6.1.4.1.789.1.18.2.5.0",
+        "last_op_size_kb": "1.3.6.1.4.1.789.1.18.2.9.0",
+        "last_op_status": "1.3.6.1.4.1.789.1.18.2.16.0"
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "get",
+        "field": "data_protection.snapmirror.enabled"
+      },
+      "params": {
+        "mapping": {
+          "1": "ENABLED",
+          "2": "DISABLED"
+        }
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "get",
+        "field": "data_protection.snapvault.enabled"
+      },
+      "params": {
+        "mapping": {
+          "1": "ENABLED",
+          "2": "DISABLED"
+        }
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "table",
+        "table": "data_protection.snapmirror.relation",
+        "field": "data_protection.snapmirror.relation.state"
+      },
+      "params": {
+        "mapping": {
+          "1": "UNINITIALIZED",
+          "2": "SNAPMIRRORED",
+          "3": "BROKEN_OFF",
+          "4": "QUIESCED",
+          "5": "SOURCE",
+          "6": "UNKNOWN"
+        }
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "table",
+        "table": "data_protection.snapmirror.relation",
+        "field": "data_protection.snapmirror.relation.in_progress"
+      },
+      "params": {
+        "mapping": {
+          "1": "TRUE",
+          "2": "FALSE"
+        }
+      }
+    }
+  ]
+}
+```
+
+### `netapp_7mode_disks`
+
+```json
+{
+  "name": "netapp_7mode_disks",
+  "description": "Per-physical-disk inventory for NetApp ONTAP 7-Mode filers: slot address (e.g. 'data disk 0b.20.13'), operational state, and used/total capacity in KB. Uses the disk detail table at NETAPP-MIB 1.3.6.1.4.1.789.1.6.1.1.*. Provides the data foundation for a disk grid view.",
+  "vendor": "NetApp",
+  "product": "ONTAP 7-Mode",
+  "model": "Any",
+  "get": {},
+  "walk": {},
+  "table": {
+    "component.disk": {
+      "columns": {
+        "index": "1.3.6.1.4.1.789.1.6.1.1.1",
+        "description": "1.3.6.1.4.1.789.1.6.1.1.2",
+        "state": "1.3.6.1.4.1.789.1.6.1.1.3",
+        "used.kb": "1.3.6.1.4.1.789.1.6.1.1.6",
+        "total.kb": "1.3.6.1.4.1.789.1.6.1.1.7"
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "table",
+        "table": "component.disk",
+        "field": "component.disk.state"
+      },
+      "params": {
+        "mapping": {
+          "1": "ACTIVE",
+          "2": "RECONSTRUCTING",
+          "3": "FAILED",
+          "4": "SPARE"
+        }
+      }
+    },
+    {
+      "operation": "ratio",
+      "target": {
+        "scope": "table",
+        "table": "component.disk"
+      },
+      "params": {
+        "value1_field": "component.disk.used.kb",
+        "value2_field": "component.disk.total.kb",
+        "ratio1_output_field": "component.disk.used.pct"
+      }
+    }
+  ]
+}
+```
+
+### `netapp_7mode_protocols`
+
+```json
+{
+  "name": "netapp_7mode_protocols",
+  "description": "Cumulative protocol operation counters (NFS, CIFS, HTTP), per-client NFS statistics table, per-share CIFS statistics table, iSCSI connection table, and FCP throughput for NetApp ONTAP 7-Mode filers. Uses NETAPP-MIB (1.3.6.1.4.1.789).",
+  "vendor": "NetApp",
+  "product": "ONTAP 7-Mode",
+  "model": "Any",
+  "get": {
+    "network.protocol.nfs.ops": "1.3.6.1.4.1.789.1.2.1.1.0",
+    "network.protocol.cifs.ops": "1.3.6.1.4.1.789.1.2.1.2.0",
+    "network.protocol.http.ops": "1.3.6.1.4.1.789.1.2.1.3.0",
+    "network.bytes.received.kb": "1.3.6.1.4.1.789.1.2.1.4.0",
+    "network.bytes.sent.kb": "1.3.6.1.4.1.789.1.2.1.5.0",
+    "storage.disk.read.ops": "1.3.6.1.4.1.789.1.2.1.6.0",
+    "storage.disk.write.ops": "1.3.6.1.4.1.789.1.2.1.7.0",
+    "network.protocol.nfs.version": "1.3.6.1.4.1.789.1.24.1.0",
+    "network.protocol.cifs.connections": "1.3.6.1.4.1.789.1.23.1.0"
+  },
+  "walk": {},
+  "table": {
+    "network.protocol.nfs.client": {
+      "columns": {
+        "index": "1.3.6.1.4.1.789.1.24.2.1.1",
+        "host_addr": "1.3.6.1.4.1.789.1.24.2.1.2",
+        "nfs_ops": "1.3.6.1.4.1.789.1.24.2.1.3",
+        "read_ops": "1.3.6.1.4.1.789.1.24.2.1.4",
+        "write_ops": "1.3.6.1.4.1.789.1.24.2.1.5",
+        "bytes_read": "1.3.6.1.4.1.789.1.24.2.1.6",
+        "bytes_written": "1.3.6.1.4.1.789.1.24.2.1.7"
+      }
+    },
+    "network.protocol.cifs.share": {
+      "columns": {
+        "index": "1.3.6.1.4.1.789.1.23.2.1.1",
+        "name": "1.3.6.1.4.1.789.1.23.2.1.2",
+        "type": "1.3.6.1.4.1.789.1.23.2.1.3",
+        "mounted": "1.3.6.1.4.1.789.1.23.2.1.4"
+      }
+    },
+    "network.protocol.iscsi.lun": {
+      "columns": {
+        "index": "1.3.6.1.4.1.789.1.25.4.1.1",
+        "lun_id": "1.3.6.1.4.1.789.1.25.4.1.2",
+        "filer_name": "1.3.6.1.4.1.789.1.25.4.1.3",
+        "license_name": "1.3.6.1.4.1.789.1.25.4.1.4"
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "get",
+        "field": "network.protocol.nfs.version"
+      },
+      "params": {
+        "mapping": {
+          "1": "DISABLED",
+          "2": "NFSv3",
+          "3": "NFSv4",
+          "4": "NFSv3_NFSv4"
+        }
+      }
+    }
+  ]
+}
+```
+
+### `netapp_7mode_system`
+
+```json
+{
+  "name": "netapp_7mode_system",
+  "description": "System identity, global health status, CPU utilization, and disk inventory summary for NetApp FAS/ONTAP 7-Mode filers. Uses NETAPP-MIB (1.3.6.1.4.1.789).",
+  "vendor": "NetApp",
+  "product": "ONTAP 7-Mode",
+  "model": "Any",
+  "get": {
+    "observer.product.model": "1.3.6.1.4.1.789.1.1.5.0",
+    "observer.product.version": "1.3.6.1.4.1.789.1.1.2.0",
+    "observer.product.chassis_serial": "1.3.6.1.4.1.789.1.1.9.0",
+    "observer.product.num_disks": "1.3.6.1.4.1.789.1.1.11.0",
+    "system.status": "1.3.6.1.4.1.789.1.2.1.10.0",
+    "system.cpu.busy_ticks": "1.3.6.1.4.1.789.1.2.1.12.0",
+    "system.cpu.elapsed_ticks": "1.3.6.1.4.1.789.1.2.1.13.0",
+    "storage.disk.total": "1.3.6.1.4.1.789.1.3.1.1.2.0",
+    "storage.disk.active": "1.3.6.1.4.1.789.1.3.1.1.2.0",
+    "storage.disk.reconstructing": "1.3.6.1.4.1.789.1.3.1.1.3.0",
+    "storage.disk.failed": "1.3.6.1.4.1.789.1.3.1.1.4.0",
+    "storage.disk.spare": "1.3.6.1.4.1.789.1.3.1.1.5.0",
+    "component.fan.ok": "1.3.6.1.4.1.789.1.2.4.1.0",
+    "component.fan.message": "1.3.6.1.4.1.789.1.2.4.3.0",
+    "component.power_supply.ok": "1.3.6.1.4.1.789.1.2.4.4.0",
+    "component.power_supply.message": "1.3.6.1.4.1.789.1.2.4.5.0"
+  },
+  "walk": {},
+  "table": {},
+  "normalizers": [
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "get",
+        "field": "system.status"
+      },
+      "params": {
+        "mapping": {
+          "1": "NORMAL",
+          "2": "OK",
+          "3": "OK_WITH_SUPPRESSED",
+          "4": "DEGRADED",
+          "5": "REBOOTING",
+          "6": "HALTED",
+          "7": "WAITING_FOR_GIVEBACK",
+          "8": "WAITING_FOR_TAKEOVER"
+        }
+      }
+    },
+    {
+      "operation": "ratio",
+      "target": {
+        "scope": "get"
+      },
+      "params": {
+        "value1_field": "system.cpu.busy_ticks",
+        "value2_field": "system.cpu.elapsed_ticks",
+        "ratio1_output_field": "system.cpu.total.norm.pct"
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "get",
+        "field": "component.fan.ok"
+      },
+      "params": {
+        "mapping": {
+          "1": "OK",
+          "0": "FAILED"
+        },
+        "output_field": "component.fan.status"
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "get",
+        "field": "component.power_supply.ok"
+      },
+      "params": {
+        "mapping": {
+          "1": "OK",
+          "0": "FAILED"
+        },
+        "output_field": "component.power_supply.status"
+      }
+    }
+  ]
+}
+```
+
+### `netapp_7mode_volumes`
+
+```json
+{
+  "name": "netapp_7mode_volumes",
+  "description": "Per-filesystem (dfTable) capacity, inode usage, and mount status; per-aggregate total/used/available bytes; and flexible volume state for NetApp ONTAP 7-Mode filers. Uses NETAPP-MIB (1.3.6.1.4.1.789).",
+  "vendor": "NetApp",
+  "product": "ONTAP 7-Mode",
+  "model": "Any",
+  "get": {
+    "storage.volume.total_count": "1.3.6.1.4.1.789.1.5.1.0",
+    "storage.aggregate.total_count": "1.3.6.1.4.1.789.1.17.1.0"
+  },
+  "walk": {},
+  "table": {
+    "storage.filesystem": {
+      "columns": {
+        "index": "1.3.6.1.4.1.789.1.5.4.1.1",
+        "name": "1.3.6.1.4.1.789.1.5.4.1.2",
+        "total.kb": "1.3.6.1.4.1.789.1.5.4.1.29",
+        "used.kb": "1.3.6.1.4.1.789.1.5.4.1.30",
+        "avail.kb": "1.3.6.1.4.1.789.1.5.4.1.31",
+        "used.pct": "1.3.6.1.4.1.789.1.5.4.1.6",
+        "inodes.used.count": "1.3.6.1.4.1.789.1.5.4.1.7",
+        "inodes.free": "1.3.6.1.4.1.789.1.5.4.1.8",
+        "inodes.used.pct": "1.3.6.1.4.1.789.1.5.4.1.9",
+        "mounted": "1.3.6.1.4.1.789.1.5.4.1.10"
+      }
+    },
+    "storage.aggregate": {
+      "columns": {
+        "index": "1.3.6.1.4.1.789.1.17.15.2.1.1",
+        "name": "1.3.6.1.4.1.789.1.17.15.2.1.2",
+        "state": "1.3.6.1.4.1.789.1.17.15.2.1.3",
+        "status": "1.3.6.1.4.1.789.1.17.15.2.1.4",
+        "total.kb": "1.3.6.1.4.1.789.1.17.15.2.1.14",
+        "used.kb": "1.3.6.1.4.1.789.1.17.15.2.1.15",
+        "avail.kb": "1.3.6.1.4.1.789.1.17.15.2.1.16",
+        "used.pct": "1.3.6.1.4.1.789.1.17.15.2.1.8"
+      }
+    },
+    "storage.volume": {
+      "columns": {
+        "index": "1.3.6.1.4.1.789.1.21.1.2.1.1",
+        "state": "1.3.6.1.4.1.789.1.21.1.2.1.2",
+        "type": "1.3.6.1.4.1.789.1.21.1.2.1.3",
+        "name": "1.3.6.1.4.1.789.1.21.1.2.1.4",
+        "aggregate": "1.3.6.1.4.1.789.1.21.1.2.1.5",
+        "total.kb": "1.3.6.1.4.1.789.1.21.1.2.1.6",
+        "used.kb": "1.3.6.1.4.1.789.1.21.1.2.1.7",
+        "avail.kb": "1.3.6.1.4.1.789.1.21.1.2.1.8"
+      }
+    },
+    "storage.lun": {
+      "columns": {
+        "index": "1.3.6.1.4.1.789.1.22.1.2.1.1",
+        "path": "1.3.6.1.4.1.789.1.22.1.2.1.2",
+        "size.bytes": "1.3.6.1.4.1.789.1.22.1.2.1.3",
+        "mapped": "1.3.6.1.4.1.789.1.22.1.2.1.5",
+        "state": "1.3.6.1.4.1.789.1.22.1.2.1.6",
+        "backend_serial": "1.3.6.1.4.1.789.1.22.1.2.1.8"
+      }
+    },
+    "storage.raid_volume": {
+      "columns": {
+        "index": "1.3.6.1.4.1.789.1.4.4.1.1",
+        "name": "1.3.6.1.4.1.789.1.4.4.1.2",
+        "plex_num": "1.3.6.1.4.1.789.1.4.4.1.3",
+        "rg_index": "1.3.6.1.4.1.789.1.4.4.1.4",
+        "disk_name": "1.3.6.1.4.1.789.1.4.4.1.5"
+      }
+    }
+  },
+  "normalizers": [
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "table",
+        "table": "storage.filesystem",
+        "field": "storage.filesystem.mounted"
+      },
+      "params": {
+        "mapping": {
+          "1": "MOUNTED",
+          "2": "UNMOUNTED",
+          "3": "FROZEN",
+          "4": "DESTROYING",
+          "5": "CREATING",
+          "6": "MOUNTING",
+          "7": "UNMOUNTING",
+          "8": "NOFSINFO",
+          "9": "REPLAYING",
+          "10": "REPLAYED"
+        }
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "table",
+        "table": "storage.aggregate",
+        "field": "storage.aggregate.state"
+      },
+      "params": {
+        "mapping": {
+          "1": "ONLINE",
+          "2": "RESTRICTED",
+          "3": "OFFLINE",
+          "4": "CREATING",
+          "5": "DESTROYING",
+          "6": "FAILED",
+          "7": "INCONSISTENT",
+          "8": "IRON_RESTRICTED",
+          "9": "UNKNOWN"
+        }
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "table",
+        "table": "storage.volume",
+        "field": "storage.volume.state"
+      },
+      "params": {
+        "mapping": {
+          "1": "ONLINE",
+          "2": "RESTRICTED",
+          "3": "OFFLINE",
+          "4": "ERROR"
+        }
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "storage.filesystem",
+        "field": "storage.filesystem.used.pct"
+      },
+      "params": {
+        "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "storage.filesystem",
+        "field": "storage.filesystem.inodes.used.pct"
+      },
+      "params": {
+        "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "storage.aggregate",
+        "field": "storage.aggregate.used.pct"
+      },
+      "params": {
+        "multiply_value": 0.01
+      }
+    }
+  ]
 }
 ```
 
@@ -3788,6 +12896,24 @@ to collect and how to post-process the values (normalizers).
 }
 ```
 
+### `ubiquiti_unifi_switch_system`
+
+```json
+{
+  "name": "ubiquiti_unifi_switch_system",
+  "description": "CPU raw tick counters for Ubiquiti UniFi switches running the Edgecore platform (sysObjectID 1.3.6.1.4.1.4413). Collects idle ticks and total ticks as snapshot gauges. CPU utilization percentage must be derived externally as (total - idle) / total because the existing normalizer operations do not support complement-ratio computation. Memory is not exposed by this platform via SNMP.",
+  "vendor": "Ubiquiti",
+  "product": "UniFi Switch",
+  "model": "Any",
+  "get": {
+    "system.cpu.raw.idle": "1.3.6.1.4.1.4413.1.1.1.1.4.1.0",
+    "system.cpu.raw.total": "1.3.6.1.4.1.4413.1.1.1.1.4.2.0"
+  },
+  "walk": {},
+  "table": {}
+}
+```
+
 ### `ubiquiti_unifi_wireless`
 
 ```json
@@ -3852,6 +12978,24 @@ to collect and how to post-process the values (normalizers).
 }
 ```
 
+### `versa_flexvnf`
+
+```json
+{
+  "name": "versa_flexvnf",
+  "description": "Versa FlexVNF/SD-WAN appliance: software version and device UUID from the Versa enterprise MIB (OID 1.3.6.1.4.1.42359). Complements generic_system, generic_interfaces, and generic_host_system_metrics.",
+  "vendor": "Versa Networks",
+  "product": "FlexVNF",
+  "model": "Any",
+  "get": {
+    "observer.firmware_version": "1.3.6.1.4.1.42359.2.2.1.1.6.6.0",
+    "observer.serial_number": "1.3.6.1.4.1.42359.2.2.1.1.7.3.0"
+  },
+  "walk": {},
+  "table": {}
+}
+```
+
 ---
 
 ## Section 3 — Normalizer Reference
@@ -3883,6 +13027,14 @@ Multiplies a numeric SNMP value by a configured number. Useful for converting ra
       "type": "float",
       "default": 1.0,
       "description": "The value to multiply the SNMP value by."
+    },
+    "multiply_field": {
+      "type": "field_selector",
+      "description": "Optional field to also multiply by (e.g. system.filesystem.allocation_units). Nothing is written when this field is missing."
+    },
+    "output_field": {
+      "type": "string",
+      "description": "Field to write the result to (e.g. 'system.cpu.total.norm.pct'). Leave empty to overwrite the source field."
     }
   }
 }
@@ -3937,6 +13089,33 @@ Computes the average of a numeric table column across all rows and writes the sc
 }
 ```
 
+### `sum` — Sum fields
+
+Sums multiple numeric GET fields into a single output field. Useful for combining per-state values before further normalisation (e.g. user + system CPU before scaling to 0.0–1.0).
+
+```json
+{
+  "label": "Sum fields",
+  "description": "Sums multiple numeric GET fields into a single output field. Useful for combining per-state values before further normalisation (e.g. user + system CPU before scaling to 0.0\u20131.0).",
+  "applies_to": [
+    "get"
+  ],
+  "has_target_field": false,
+  "inputs": {
+    "input_fields": {
+      "type": "field_list",
+      "required": true,
+      "description": "Fields to add together (e.g. system.cpu.pct.user, system.cpu.pct.system)."
+    },
+    "output_field": {
+      "type": "string",
+      "required": true,
+      "description": "Field to write the result to (e.g. system.cpu.active.pct)."
+    }
+  }
+}
+```
+
 ### `ratio` — Calculate ratio
 
 Derives ratios from two input fields. Any two of {used, free, total} are sufficient to compute all percentages.
@@ -3957,7 +13136,7 @@ Derives ratios from two input fields. Any two of {used, free, total} are suffici
     },
     "value2_field": {
       "type": "field_selector",
-      "description": "Second field (e.g., system.memory.actual.free.bytes)"
+      "description": "Second field (e.g., system.memory.actual.free)"
     },
     "total_output_field": {
       "type": "string",
@@ -3978,6 +13157,108 @@ Derives ratios from two input fields. Any two of {used, free, total} are suffici
     "divide_output_field": {
       "type": "string",
       "description": "Field to store value2 / value1. Leave empty to skip."
+    },
+    "difference_output_field": {
+      "type": "string",
+      "description": "Field to store value1 - value2 (e.g. total - used = free). Leave empty to skip."
+    }
+  }
+}
+```
+
+### `sum_column` — Sum column
+
+Sums (or counts) a numeric table column across all rows and writes the scalar result to the metrics document. In delta mode each row contributes the change in its counter since the previous poll, so cumulative interface octets become bytes per poll.
+
+```json
+{
+  "label": "Sum column",
+  "description": "Sums (or counts) a numeric table column across all rows and writes the scalar result to the metrics document. In delta mode each row contributes the change in its counter since the previous poll, so cumulative interface octets become bytes per poll.",
+  "applies_to": [
+    "table"
+  ],
+  "has_target_field": true,
+  "inputs": {
+    "output_field": {
+      "type": "string",
+      "required": true,
+      "description": "Metrics-doc field to write the sum to (e.g. 'host.network.ingress.bytes')."
+    },
+    "mode": {
+      "type": "string",
+      "description": "'value' (default) sums the raw column; 'delta' sums each row's change since the previous poll and skips the poll when any row has no previous sample or reset; 'count' counts rows with a numeric value."
+    },
+    "exclude_column": {
+      "type": "string",
+      "description": "Optional row column to filter on (e.g. 'type')."
+    },
+    "exclude_values": {
+      "type": "field_list",
+      "description": "Rows whose exclude_column equals one of these values are left out (e.g. 24 for loopback interfaces)."
+    },
+    "multiply_value": {
+      "type": "float",
+      "default": 1.0,
+      "description": "Optional multiplier applied to the sum before writing."
+    }
+  }
+}
+```
+
+### `counter_delta` — Counter delta
+
+Writes the change in a cumulative counter since the previous poll of the same device (and table row). Nothing is written on the first poll or when the counter goes backwards (reset or wrap). State is kept in Logstash memory: it survives pipeline reloads and resets when Logstash restarts.
+
+```json
+{
+  "label": "Counter delta",
+  "description": "Writes the change in a cumulative counter since the previous poll of the same device (and table row). Nothing is written on the first poll or when the counter goes backwards (reset or wrap). State is kept in Logstash memory: it survives pipeline reloads and resets when Logstash restarts.",
+  "applies_to": [
+    "get",
+    "table"
+  ],
+  "has_target_field": true,
+  "inputs": {
+    "output_field": {
+      "type": "string",
+      "required": true,
+      "description": "Field to write the delta to (e.g. 'system.cpu.delta.user')."
+    }
+  }
+}
+```
+
+### `share` — Share of total
+
+Divides each input field by the sum of all inputs and writes the fractions to the matching output fields, optionally scaled. Nothing is written unless every input is present and the total is positive. Turns per-state CPU tick deltas into Elastic's system.cpu.<state>.pct.
+
+```json
+{
+  "label": "Share of total",
+  "description": "Divides each input field by the sum of all inputs and writes the fractions to the matching output fields, optionally scaled. Nothing is written unless every input is present and the total is positive. Turns per-state CPU tick deltas into Elastic's system.cpu.<state>.pct.",
+  "applies_to": [
+    "get"
+  ],
+  "has_target_field": false,
+  "inputs": {
+    "input_fields": {
+      "type": "field_list",
+      "required": true,
+      "description": "Fields that together make up the total (e.g. system.cpu.delta.user, system.cpu.delta.idle)."
+    },
+    "output_fields": {
+      "type": "field_list",
+      "required": true,
+      "description": "One output per input, in the same order (e.g. system.cpu.user.pct, system.cpu.idle.pct)."
+    },
+    "multiply_value": {
+      "type": "float",
+      "default": 1.0,
+      "description": "Optional constant multiplier."
+    },
+    "multiply_field": {
+      "type": "field_selector",
+      "description": "Optional field to multiply by (e.g. system.cpu.cores to sum across cores, as Elastic does)."
     }
   }
 }

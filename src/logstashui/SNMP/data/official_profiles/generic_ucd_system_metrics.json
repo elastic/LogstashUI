@@ -1,18 +1,18 @@
 {
   "official_key": "generic_ucd_system_metrics",
   "name": "generic_ucd_system_metrics",
-  "description": "Memory, load averages, and per-state CPU counters via Net-SNMP for Linux and BSD devices.",
+  "description": "Memory, load averages, per-state CPU, and disk I/O counters via Net-SNMP for Linux and BSD devices. Field names follow the Elastic System integration so Kibana's Hosts page can read them.",
   "vendor": "Any",
   "product": "Any",
   "model": "Any",
   "get": {
     "system.memory.actual.total.kb": "1.3.6.1.4.1.2021.4.5.0",
     "system.memory.actual.available.kb": "1.3.6.1.4.1.2021.4.6.0",
-    "system.memory.actual.free.kb": "1.3.6.1.4.1.2021.4.11.0",
+    "system.memory.total_free.kb": "1.3.6.1.4.1.2021.4.11.0",
     "system.memory.actual.cached.kb": "1.3.6.1.4.1.2021.4.15.0",
-    "system.load.1": "1.3.6.1.4.1.2021.10.1.3.1",
-    "system.load.5": "1.3.6.1.4.1.2021.10.1.3.2",
-    "system.load.15": "1.3.6.1.4.1.2021.10.1.3.3",
+    "system.load.1": "1.3.6.1.4.1.2021.10.1.5.1",
+    "system.load.5": "1.3.6.1.4.1.2021.10.1.5.2",
+    "system.load.15": "1.3.6.1.4.1.2021.10.1.5.3",
     "system.cpu.pct.user": "1.3.6.1.4.1.2021.11.9.0",
     "system.cpu.pct.system": "1.3.6.1.4.1.2021.11.10.0",
     "system.cpu.raw.user": "1.3.6.1.4.1.2021.11.50.0",
@@ -22,22 +22,24 @@
     "system.cpu.raw.wait": "1.3.6.1.4.1.2021.11.54.0",
     "system.cpu.raw.kernel": "1.3.6.1.4.1.2021.11.55.0",
     "system.cpu.raw.interrupt": "1.3.6.1.4.1.2021.11.56.0",
-    "system.cpu.num_cpus": "1.3.6.1.4.1.2021.11.67.0"
+    "system.cpu.raw.softirq": "1.3.6.1.4.1.2021.11.61.0",
+    "system.cpu.raw.steal": "1.3.6.1.4.1.2021.11.64.0",
+    "system.cpu.cores": "1.3.6.1.4.1.2021.11.67.0"
   },
   "walk": {},
-  "table": {},
-  "normalizers": [
-    {
-      "operation": "ratio",
-      "target": {
-        "scope": "get"
-      },
-      "params": {
-        "value1_field": "system.memory.actual.total.kb",
-        "value2_field": "system.memory.actual.available.kb",
-        "complement_ratio_output_field": "system.memory.actual.used.pct"
+  "table": {
+    "system.diskio": {
+      "columns": {
+        "index": "1.3.6.1.4.1.2021.13.15.1.1.1",
+        "name": "1.3.6.1.4.1.2021.13.15.1.1.2",
+        "read.count": "1.3.6.1.4.1.2021.13.15.1.1.5",
+        "write.count": "1.3.6.1.4.1.2021.13.15.1.1.6",
+        "read.bytes": "1.3.6.1.4.1.2021.13.15.1.1.12",
+        "write.bytes": "1.3.6.1.4.1.2021.13.15.1.1.13"
       }
-    },
+    }
+  },
+  "normalizers": [
     {
       "operation": "sum",
       "target": {
@@ -57,6 +59,244 @@
       "params": {
         "multiply_value": 0.01,
         "output_field": "system.cpu.total.norm.pct"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.load.1"
+      },
+      "params": {
+        "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.load.5"
+      },
+      "params": {
+        "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.load.15"
+      },
+      "params": {
+        "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.actual.total.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.total"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.actual.total.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.actual.total.bytes"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.actual.available.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.free"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.actual.available.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.actual.free"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.cores"
+      },
+      "params": {
+        "multiply_value": 1,
+        "output_field": "system.load.cores"
+      }
+    },
+    {
+      "operation": "ratio",
+      "target": {
+        "scope": "get"
+      },
+      "params": {
+        "value1_field": "system.memory.actual.total.kb",
+        "value2_field": "system.memory.actual.available.kb",
+        "complement_ratio_output_field": "system.memory.actual.used.pct",
+        "difference_output_field": "system.memory.actual.used.kb"
+      }
+    },
+    {
+      "operation": "sum",
+      "target": {
+        "scope": "get"
+      },
+      "params": {
+        "input_fields": ["system.memory.actual.used.kb", "system.memory.actual.cached.kb"],
+        "output_field": "system.memory.used.kb"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.actual.used.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.actual.used.bytes"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.used.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.used.bytes"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.user"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.user"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.nice"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.nice"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.kernel"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.system"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.idle"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.idle"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.wait"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.iowait"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.interrupt"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.irq"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.softirq"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.softirq"
+      }
+    },
+    {
+      "operation": "counter_delta",
+      "target": {
+        "scope": "get",
+        "field": "system.cpu.raw.steal"
+      },
+      "params": {
+        "output_field": "system.cpu.delta.steal"
+      }
+    },
+    {
+      "operation": "share",
+      "target": {
+        "scope": "get"
+      },
+      "params": {
+        "input_fields": [
+          "system.cpu.delta.user",
+          "system.cpu.delta.nice",
+          "system.cpu.delta.system",
+          "system.cpu.delta.idle",
+          "system.cpu.delta.iowait",
+          "system.cpu.delta.irq",
+          "system.cpu.delta.softirq",
+          "system.cpu.delta.steal"
+        ],
+        "output_fields": [
+          "system.cpu.user.pct",
+          "system.cpu.nice.pct",
+          "system.cpu.system.pct",
+          "system.cpu.idle.pct",
+          "system.cpu.iowait.pct",
+          "system.cpu.irq.pct",
+          "system.cpu.softirq.pct",
+          "system.cpu.steal.pct"
+        ],
+        "multiply_field": "system.cpu.cores"
       }
     }
   ]

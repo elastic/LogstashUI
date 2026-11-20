@@ -1,14 +1,14 @@
 {
   "official_key": "generic_host_system_metrics",
   "name": "generic_host_system_metrics",
-  "description": "CPU load and filesystem usage per mount point from HOST-RESOURCES-MIB, supported on Linux, Windows, and most embedded devices.",
+  "description": "CPU load and storage usage from HOST-RESOURCES-MIB, supported on Linux, Windows, and most embedded devices. Disks go to system.filesystem (sizes in bytes) and RAM/virtual-memory/other storage to system.storage, so Kibana's Hosts page disk usage only sees real disks.",
   "vendor": "Any",
   "product": "Any",
   "model": "Any",
   "get": {
     "host.num_users": "1.3.6.1.2.1.25.1.5.0",
     "host.num_processes": "1.3.6.1.2.1.25.1.6.0",
-    "system.memory.total.kb": "1.3.6.1.2.1.25.2.2.0"
+    "system.memory.physical.total.kb": "1.3.6.1.2.1.25.2.2.0"
   },
   "walk": {},
   "table": {
@@ -23,12 +23,66 @@
         "type": "1.3.6.1.2.1.25.2.3.1.2",
         "mount_point": "1.3.6.1.2.1.25.2.3.1.3",
         "allocation_units": "1.3.6.1.2.1.25.2.3.1.4",
-        "total.bytes": "1.3.6.1.2.1.25.2.3.1.5",
+        "total": "1.3.6.1.2.1.25.2.3.1.5",
         "used.bytes": "1.3.6.1.2.1.25.2.3.1.6"
+      },
+      "keep_when": {
+        "column": "type",
+        "equals": [
+          "1.3.6.1.2.1.25.2.1.4",
+          "1.3.6.1.2.1.25.2.1.10"
+        ],
+        "keep_column": true
+      }
+    },
+    "system.storage": {
+      "columns": {
+        "index": "1.3.6.1.2.1.25.2.3.1.1",
+        "type": "1.3.6.1.2.1.25.2.3.1.2",
+        "mount_point": "1.3.6.1.2.1.25.2.3.1.3",
+        "allocation_units": "1.3.6.1.2.1.25.2.3.1.4",
+        "total": "1.3.6.1.2.1.25.2.3.1.5",
+        "used.bytes": "1.3.6.1.2.1.25.2.3.1.6"
+      },
+      "keep_when": {
+        "column": "type",
+        "equals": [
+          "1.3.6.1.2.1.25.2.1.1",
+          "1.3.6.1.2.1.25.2.1.2",
+          "1.3.6.1.2.1.25.2.1.3",
+          "1.3.6.1.2.1.25.2.1.5",
+          "1.3.6.1.2.1.25.2.1.6",
+          "1.3.6.1.2.1.25.2.1.7",
+          "1.3.6.1.2.1.25.2.1.8",
+          "1.3.6.1.2.1.25.2.1.9"
+        ],
+        "keep_column": true
       }
     }
   },
   "normalizers": [
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.physical.total.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.total"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.physical.total.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.actual.total.bytes"
+      }
+    },
     {
       "operation": "average",
       "target": {
@@ -39,6 +93,18 @@
       "params": {
         "output_field": "system.cpu.total.norm.pct",
         "multiply_value": 0.01
+      }
+    },
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "component.cpu",
+        "field": "component.cpu.load_pct"
+      },
+      "params": {
+        "output_field": "system.cpu.cores",
+        "mode": "count"
       }
     },
     {
@@ -53,15 +119,72 @@
       }
     },
     {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.filesystem",
+        "field": "system.filesystem.total"
+      },
+      "params": {
+        "multiply_field": "system.filesystem.allocation_units"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.filesystem",
+        "field": "system.filesystem.used.bytes"
+      },
+      "params": {
+        "multiply_field": "system.filesystem.allocation_units"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.storage",
+        "field": "system.storage.total"
+      },
+      "params": {
+        "multiply_field": "system.storage.allocation_units"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "table",
+        "table": "system.storage",
+        "field": "system.storage.used.bytes"
+      },
+      "params": {
+        "multiply_field": "system.storage.allocation_units"
+      }
+    },
+    {
       "operation": "ratio",
       "target": {
         "scope": "table",
         "table": "system.filesystem"
       },
       "params": {
-        "value1_field": "system.filesystem.total.bytes",
+        "value1_field": "system.filesystem.total",
         "value2_field": "system.filesystem.used.bytes",
-        "divide_output_field": "system.filesystem.used.pct"
+        "divide_output_field": "system.filesystem.used.pct",
+        "difference_output_field": "system.filesystem.free"
+      }
+    },
+    {
+      "operation": "ratio",
+      "target": {
+        "scope": "table",
+        "table": "system.storage"
+      },
+      "params": {
+        "value1_field": "system.storage.total",
+        "value2_field": "system.storage.used.bytes",
+        "divide_output_field": "system.storage.used.pct"
       }
     }
   ]

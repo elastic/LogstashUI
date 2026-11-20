@@ -1,0 +1,624 @@
+{
+  "_source": "GET .ds-metrics-system.*-2026.10.24-000013/_mapping/field/system.*,host.*,metricset.* (Elastic Agent system integration). system.process.* and system.socket.* omitted.",
+  "fields": {
+    "host.architecture": {
+      "type": "keyword",
+      "ignore_above": 1024
+    },
+    "host.containerized": {
+      "type": "boolean"
+    },
+    "host.cpu.pct": {
+      "type": "scaled_float",
+      "scaling_factor": 1000,
+      "meta": {
+        "unit": "percent"
+      },
+      "time_series_metric": "gauge"
+    },
+    "host.cpu.usage": {
+      "type": "scaled_float",
+      "scaling_factor": 1000
+    },
+    "host.disk.read.bytes": {
+      "type": "long",
+      "meta": {
+        "unit": "byte"
+      },
+      "time_series_metric": "gauge"
+    },
+    "host.disk.write.bytes": {
+      "type": "long",
+      "meta": {
+        "unit": "byte"
+      },
+      "time_series_metric": "gauge"
+    },
+    "host.hostname": {
+      "type": "keyword",
+      "ignore_above": 1024
+    },
+    "host.id": {
+      "type": "keyword",
+      "ignore_above": 1024
+    },
+    "host.ip": {
+      "type": "ip"
+    },
+    "host.mac": {
+      "type": "keyword",
+      "ignore_above": 1024
+    },
+    "host.name": {
+      "type": "keyword",
+      "time_series_dimension": true
+    },
+    "host.network.egress.bytes": {
+      "type": "long"
+    },
+    "host.network.egress.packets": {
+      "type": "long"
+    },
+    "host.network.in.bytes": {
+      "type": "long",
+      "meta": {
+        "unit": "byte"
+      },
+      "time_series_metric": "counter"
+    },
+    "host.network.in.packets": {
+      "type": "long",
+      "time_series_metric": "counter"
+    },
+    "host.network.ingress.bytes": {
+      "type": "long"
+    },
+    "host.network.ingress.packets": {
+      "type": "long"
+    },
+    "host.network.out.bytes": {
+      "type": "long",
+      "meta": {
+        "unit": "byte"
+      },
+      "time_series_metric": "counter"
+    },
+    "host.network.out.packets": {
+      "type": "long",
+      "time_series_metric": "counter"
+    },
+    "host.os.build": {
+      "type": "keyword",
+      "ignore_above": 1024
+    },
+    "host.os.codename": {
+      "type": "keyword",
+      "ignore_above": 1024
+    },
+    "host.os.family": {
+      "type": "keyword",
+      "ignore_above": 1024
+    },
+    "host.os.kernel": {
+      "type": "keyword",
+      "ignore_above": 1024
+    },
+    "host.os.name": {
+      "type": "keyword",
+      "fields": {
+        "text": {
+          "type": "match_only_text"
+        }
+      }
+    },
+    "host.os.platform": {
+      "type": "keyword",
+      "ignore_above": 1024
+    },
+    "host.os.type": {
+      "type": "keyword",
+      "ignore_above": 1024
+    },
+    "host.os.version": {
+      "type": "keyword",
+      "ignore_above": 1024
+    },
+    "metricset.name": {
+      "type": "keyword",
+      "fields": {
+        "text": {
+          "type": "match_only_text"
+        }
+      }
+    },
+    "metricset.period": {
+      "type": "long"
+    },
+    "system.cpu.cores": {
+      "type": "long",
+      "time_series_metric": "gauge"
+    },
+    "system.cpu.idle.norm.pct": {
+      "type": "scaled_float",
+      "scaling_factor": 1000,
+      "meta": {
+        "unit": "percent"
+      },
+      "time_series_metric": "gauge"
+    },
+    "system.cpu.idle.pct": {
+      "type": "scaled_float",
+      "scaling_factor": 1000,
+      "meta": {
+        "unit": "percent"
+      },
+      "time_series_metric": "gauge"
+    },
+    "system.cpu.idle.ticks": {
+      "type": "long",
+      "time_series_metric": "counter"
+    },
+    "system.cpu.iowait.norm.pct": {
+      "type": "scaled_float",
+      "scaling_factor": 1000,
+      "meta": {
+        "unit": "percent"
+      },
+      "time_series_metric": "gauge"
+    },
+    "system.cpu.iowait.pct": {
+      "type": "scaled_float",
+      "scaling_factor": 1000,
+      "meta": {
+        "unit": "percent"
+      },
+      "time_series_metric": "gauge"
+    },
+    "system.cpu.iowait.ticks": {
+      "type": "long",
+      "time_series_metric": "counter"
+    },
+    "system.cpu.irq.norm.pct": {
+      "type": "scaled_float",
+      "scaling_factor": 1000,
+      "meta": {
+        "unit": "percent"
+      },
+      "time_series_metric": "gauge"
+    },
+    "system.cpu.irq.pct": {
+      "type": "scaled_float",
+      "scaling_factor": 1000,
+      "meta": {
+        "unit": "percent"
+      },
+      "time_series_metric": "gauge"
+    },
+    "system.cpu.irq.ticks": {
+      "type": "long",
+      "time_series_metric": "counter"
+    },
+    "system.cpu.nice.norm.pct": {
+      "type": "scaled_float",
+      "scaling_factor": 1000,
+      "meta": {
+        "unit": "percent"
+      },
+      "time_series_metric": "gauge"
+    },
+    "system.cpu.nice.pct": {
+      "type": "scaled_float",
+      "scaling_factor": 1000,
+      "meta": {
+        "unit": "percent"
+      },
+      "time_series_metric": "gauge"
+    },
+    "system.cpu.nice.ticks": {
+      "type": "long",
+      "time_series_metric": "counter"
+    },
+    "system.cpu.softirq.norm.pct": {
+      "type": "scaled_float",
+      "scaling_factor": 1000,
+      "meta": {
+        "unit": "percent"
+      },
+      "time_series_metric": "gauge"
+    },
+    "system.cpu.softirq.pct": {
+      "type": "scaled_float",
+      "scaling_factor": 1000,
+      "meta": {
+        "unit": "percent"
+      },
+      "time_series_metric": "gauge"
+    },
+    "system.cpu.softirq.ticks": {
+      "type": "long",
+      "time_series_metric": "counter"
+    },
+    "system.cpu.steal.norm.pct": {
+      "type": "scaled_float",
+      "scaling_factor": 1000,
+      "meta": {
+        "unit": "percent"
+      },
+      "time_series_metric": "gauge"
+    },
+    "system.cpu.steal.pct": {
+      "type": "scaled_float",
+      "scaling_factor": 1000,
+      "meta": {
+        "unit": "percent"
+      },
+      "time_series_metric": "gauge"
+    },
+    "system.cpu.steal.ticks": {
+      "type": "long",
+      "time_series_metric": "counter"
+    },
+    "system.cpu.system.norm.pct": {
+      "type": "scaled_float",
+      "scaling_factor": 1000,
+      "meta": {
+        "unit": "percent"
+      },
+      "time_series_metric": "gauge"
+    },
+    "system.cpu.system.pct": {
+      "type": "scaled_float",
+      "scaling_factor": 1000,
+      "meta": {
+        "unit": "percent"
+      },
+      "time_series_metric": "gauge"
+    },
+    "system.cpu.system.ticks": {
+      "type": "long",
+      "time_series_metric": "counter"
+    },
+    "system.cpu.total.norm.pct": {
+      "type": "scaled_float",
+      "scaling_factor": 1000,
+      "meta": {
+        "unit": "percent"
+      },
+      "time_series_metric": "gauge"
+    },
+    "system.cpu.total.pct": {
+      "type": "scaled_float",
+      "scaling_factor": 1000,
+      "meta": {
+        "unit": "percent"
+      },
+      "time_series_metric": "gauge"
+    },
+    "system.cpu.user.norm.pct": {
+      "type": "scaled_float",
+      "scaling_factor": 1000,
+      "meta": {
+        "unit": "percent"
+      },
+      "time_series_metric": "gauge"
+    },
+    "system.cpu.user.pct": {
+      "type": "scaled_float",
+      "scaling_factor": 1000,
+      "meta": {
+        "unit": "percent"
+      },
+      "time_series_metric": "gauge"
+    },
+    "system.cpu.user.ticks": {
+      "type": "long",
+      "time_series_metric": "counter"
+    },
+    "system.diskio.io.ops": {
+      "type": "long"
+    },
+    "system.diskio.io.time": {
+      "type": "long",
+      "time_series_metric": "counter"
+    },
+    "system.diskio.name": {
+      "type": "keyword",
+      "time_series_dimension": true
+    },
+    "system.diskio.read.bytes": {
+      "type": "long",
+      "meta": {
+        "unit": "byte"
+      },
+      "time_series_metric": "counter"
+    },
+    "system.diskio.read.count": {
+      "type": "long",
+      "time_series_metric": "counter"
+    },
+    "system.diskio.read.time": {
+      "type": "long",
+      "time_series_metric": "counter"
+    },
+    "system.diskio.serial_number": {
+      "type": "keyword",
+      "ignore_above": 1024
+    },
+    "system.diskio.write.bytes": {
+      "type": "long",
+      "meta": {
+        "unit": "byte"
+      },
+      "time_series_metric": "counter"
+    },
+    "system.diskio.write.count": {
+      "type": "long",
+      "time_series_metric": "counter"
+    },
+    "system.diskio.write.time": {
+      "type": "long",
+      "time_series_metric": "counter"
+    },
+    "system.filesystem.available": {
+      "type": "long",
+      "meta": {
+        "unit": "byte"
+      },
+      "time_series_metric": "gauge"
+    },
+    "system.filesystem.device_name": {
+      "type": "keyword",
+      "time_series_dimension": true
+    },
+    "system.filesystem.files": {
+      "type": "long",
+      "time_series_metric": "gauge"
+    },
+    "system.filesystem.free": {
+      "type": "long",
+      "meta": {
+        "unit": "byte"
+      },
+      "time_series_metric": "gauge"
+    },
+    "system.filesystem.free_files": {
+      "type": "long",
+      "time_series_metric": "gauge"
+    },
+    "system.filesystem.mount_point": {
+      "type": "keyword",
+      "time_series_dimension": true
+    },
+    "system.filesystem.options": {
+      "type": "keyword",
+      "ignore_above": 1024
+    },
+    "system.filesystem.total": {
+      "type": "long",
+      "meta": {
+        "unit": "byte"
+      },
+      "time_series_metric": "gauge"
+    },
+    "system.filesystem.type": {
+      "type": "keyword",
+      "ignore_above": 1024
+    },
+    "system.filesystem.used.bytes": {
+      "type": "long",
+      "meta": {
+        "unit": "byte"
+      },
+      "time_series_metric": "gauge"
+    },
+    "system.filesystem.used.pct": {
+      "type": "scaled_float",
+      "scaling_factor": 1000,
+      "meta": {
+        "unit": "percent"
+      },
+      "time_series_metric": "gauge"
+    },
+    "system.fsstat.count": {
+      "type": "long",
+      "time_series_metric": "gauge"
+    },
+    "system.fsstat.total_files": {
+      "type": "long",
+      "time_series_metric": "gauge"
+    },
+    "system.fsstat.total_size.free": {
+      "type": "long",
+      "meta": {
+        "unit": "byte"
+      },
+      "time_series_metric": "gauge"
+    },
+    "system.fsstat.total_size.total": {
+      "type": "long",
+      "meta": {
+        "unit": "byte"
+      },
+      "time_series_metric": "gauge"
+    },
+    "system.fsstat.total_size.used": {
+      "type": "long",
+      "meta": {
+        "unit": "byte"
+      },
+      "time_series_metric": "gauge"
+    },
+    "system.load.1": {
+      "type": "scaled_float",
+      "scaling_factor": 1000,
+      "time_series_metric": "gauge"
+    },
+    "system.load.15": {
+      "type": "scaled_float",
+      "scaling_factor": 1000,
+      "time_series_metric": "gauge"
+    },
+    "system.load.5": {
+      "type": "scaled_float",
+      "scaling_factor": 1000,
+      "time_series_metric": "gauge"
+    },
+    "system.load.cores": {
+      "type": "long",
+      "time_series_metric": "gauge"
+    },
+    "system.load.norm.1": {
+      "type": "scaled_float",
+      "scaling_factor": 1000,
+      "time_series_metric": "gauge"
+    },
+    "system.load.norm.15": {
+      "type": "scaled_float",
+      "scaling_factor": 1000,
+      "time_series_metric": "gauge"
+    },
+    "system.load.norm.5": {
+      "type": "scaled_float",
+      "scaling_factor": 1000,
+      "time_series_metric": "gauge"
+    },
+    "system.memory.actual.free": {
+      "type": "long",
+      "meta": {
+        "unit": "byte"
+      },
+      "time_series_metric": "gauge"
+    },
+    "system.memory.actual.used.bytes": {
+      "type": "long",
+      "meta": {
+        "unit": "byte"
+      },
+      "time_series_metric": "gauge"
+    },
+    "system.memory.actual.used.pct": {
+      "type": "scaled_float",
+      "scaling_factor": 1000,
+      "meta": {
+        "unit": "percent"
+      },
+      "time_series_metric": "gauge"
+    },
+    "system.memory.cached": {
+      "type": "long"
+    },
+    "system.memory.free": {
+      "type": "long",
+      "meta": {
+        "unit": "byte"
+      },
+      "time_series_metric": "gauge"
+    },
+    "system.memory.swap.free": {
+      "type": "long",
+      "meta": {
+        "unit": "byte"
+      },
+      "time_series_metric": "gauge"
+    },
+    "system.memory.swap.total": {
+      "type": "long",
+      "meta": {
+        "unit": "byte"
+      },
+      "time_series_metric": "gauge"
+    },
+    "system.memory.swap.used.bytes": {
+      "type": "long",
+      "meta": {
+        "unit": "byte"
+      },
+      "time_series_metric": "gauge"
+    },
+    "system.memory.swap.used.pct": {
+      "type": "scaled_float",
+      "scaling_factor": 1000,
+      "meta": {
+        "unit": "percent"
+      },
+      "time_series_metric": "gauge"
+    },
+    "system.memory.total": {
+      "type": "long",
+      "meta": {
+        "unit": "byte"
+      },
+      "time_series_metric": "gauge"
+    },
+    "system.memory.used.bytes": {
+      "type": "long",
+      "meta": {
+        "unit": "byte"
+      },
+      "time_series_metric": "gauge"
+    },
+    "system.memory.used.pct": {
+      "type": "scaled_float",
+      "scaling_factor": 1000,
+      "meta": {
+        "unit": "percent"
+      },
+      "time_series_metric": "gauge"
+    },
+    "system.memory.zswap.compressed": {
+      "type": "long"
+    },
+    "system.memory.zswap.uncompressed": {
+      "type": "long"
+    },
+    "system.network.in.bytes": {
+      "type": "long",
+      "meta": {
+        "unit": "byte"
+      },
+      "time_series_metric": "counter"
+    },
+    "system.network.in.dropped": {
+      "type": "long",
+      "time_series_metric": "counter"
+    },
+    "system.network.in.errors": {
+      "type": "long",
+      "time_series_metric": "counter"
+    },
+    "system.network.in.packets": {
+      "type": "long",
+      "time_series_metric": "counter"
+    },
+    "system.network.name": {
+      "type": "keyword",
+      "time_series_dimension": true
+    },
+    "system.network.out.bytes": {
+      "type": "long",
+      "meta": {
+        "unit": "byte"
+      },
+      "time_series_metric": "counter"
+    },
+    "system.network.out.dropped": {
+      "type": "long",
+      "time_series_metric": "counter"
+    },
+    "system.network.out.errors": {
+      "type": "long",
+      "time_series_metric": "counter"
+    },
+    "system.network.out.packets": {
+      "type": "long",
+      "time_series_metric": "counter"
+    },
+    "system.uptime.duration.ms": {
+      "type": "long",
+      "meta": {
+        "unit": "ms"
+      },
+      "time_series_metric": "counter"
+    }
+  }
+}

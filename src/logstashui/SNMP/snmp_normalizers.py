@@ -2,11 +2,43 @@
 #or more contributor license agreements. Licensed under the Elastic License;
 #you may not use this file except in compliance with the Elastic License.
 
-"""Logstash filter fragments for SNMP profile normalizers (multiply, ratio, translate)."""
+"""Logstash filter fragments for SNMP profile normalizers.
+
+Normalizers run in the order a profile lists them; consecutive entries with the
+same operation and scope share one filter.
+"""
 
 import functools
 import json
 import os
+import re
+
+# Ruby `init` that defines `lsui_counter_delta(key, value)`. State lives in a
+# global so every pipeline worker sees the previous sample for a key.
+COUNTER_DELTA_RUBY_INIT = (
+    "$lsui_snmp_counters ||= {}\n"
+    "$lsui_snmp_counters_lock ||= Mutex.new\n"
+    "def lsui_counter_delta(key, value)\n"
+    "  $lsui_snmp_counters_lock.synchronize do\n"
+    "    prev = $lsui_snmp_counters[key]\n"
+    "    $lsui_snmp_counters[key] = value\n"
+    "    return nil if prev.nil? || value < prev\n"
+    "    value - prev\n"
+    "  end\n"
+    "end"
+)
+
+_SAFE_FIELD_RE = re.compile(r'^[A-Za-z0-9_@-]+(\.[A-Za-z0-9_@-]+)*$')
+
+
+def _field_path(field):
+    """Return Logstash bracket notation for a dotted field name.
+
+    Examples:
+        >>> _field_path('system.cpu.user.pct')
+        '[system][cpu][user][pct]'
+    """
+    return ''.join(f'[{part}]' for part in field.split('.'))
 
 _INPUT_TYPES = {
     'float': ((int, float), 'a number'),
@@ -156,8 +188,11 @@ def _next_id(base, counter):
 def _apply_normalizers(normalizers, id_counter=None):
     """Build Logstash filter components from profile normalizer configs.
 
-    Groups by operation and scope. Pass the same `id_counter` for every profile in
-    a pipeline so plugin IDs stay unique (Logstash rejects duplicate IDs).
+    Runs in listed order so chained normalizers (e.g. KB→bytes, then a
+    difference of the bytes) see their inputs. Consecutive entries with the same
+    operation and scope share one filter. Pass the same `id_counter` for every
+    profile in a pipeline so plugin IDs stay unique (Logstash rejects duplicate
+    IDs). `average` and `sum_column` are handled by the table splitter, not here.
 
     Args:
         normalizers: Normalizer dicts from a profile.
@@ -171,61 +206,34 @@ def _apply_normalizers(normalizers, id_counter=None):
 
     if id_counter is None:
         id_counter = {}
-    
-    filters = []
-    
-    # Group normalizers by operation, then by scope
-    grouped = {}
+
+    generators = {
+        'multiply': lambda group, scope: _generate_multiply_get_filter(group, scope, id_counter),
+        'ratio': lambda group, scope: _generate_ratio_get_filter(group, scope, id_counter),
+        'sum': lambda group, scope: _generate_sum_get_filter(group, scope, id_counter),
+        'translate': lambda group, scope: _generate_translate_filter(group, id_counter),
+        'counter_delta': lambda group, scope: _generate_counter_delta_filter(group, scope, id_counter),
+        'share': lambda group, scope: _generate_share_filter(group, scope, id_counter),
+    }
+
+    runs = []
     for normalizer in normalizers:
         operation = normalizer.get('operation')
         scope = normalizer.get('target', {}).get('scope')
-        
-        if not operation or not scope:
+        if operation not in generators or scope not in ('get', 'table'):
             continue
-            
-        if operation not in grouped:
-            grouped[operation] = {}
-        if scope not in grouped[operation]:
-            grouped[operation][scope] = []
-            
-        grouped[operation][scope].append(normalizer)
-    
-    # Generate filters for each operation+scope group
-    for operation, scopes in grouped.items():
-        for scope, normalizer_list in scopes.items():
-            if operation == 'multiply':
-                if scope in ('get', 'table'):
-                    filter_components = _generate_multiply_get_filter(normalizer_list, scope, id_counter)
-                    if filter_components:
-                        if isinstance(filter_components, list):
-                            filters.extend(filter_components)
-                        else:
-                            filters.append(filter_components)
-            elif operation == 'ratio':
-                if scope in ('get', 'table'):
-                    filter_components = _generate_ratio_get_filter(normalizer_list, scope, id_counter)
-                    if filter_components:
-                        if isinstance(filter_components, list):
-                            filters.extend(filter_components)
-                        else:
-                            filters.append(filter_components)
-            elif operation == 'sum':
-                if scope in ('get', 'table'):
-                    filter_components = _generate_sum_get_filter(normalizer_list, scope, id_counter)
-                    if filter_components:
-                        if isinstance(filter_components, list):
-                            filters.extend(filter_components)
-                        else:
-                            filters.append(filter_components)
-            elif operation == 'translate':
-                if scope in ('get', 'table'):
-                    filter_components = _generate_translate_filter(normalizer_list, id_counter)
-                    if filter_components:
-                        if isinstance(filter_components, list):
-                            filters.extend(filter_components)
-                        else:
-                            filters.append(filter_components)
-    
+        if runs and runs[-1][0] == (operation, scope):
+            runs[-1][1].append(normalizer)
+        else:
+            runs.append(((operation, scope), [normalizer]))
+
+    filters = []
+    for (operation, scope), group in runs:
+        components = generators[operation](group, scope)
+        if isinstance(components, list):
+            filters.extend(components)
+        elif components:
+            filters.append(components)
     return filters
 
 
@@ -246,49 +254,53 @@ def _generate_multiply_get_filter(normalizers, scope='get', id_counter=None):
         return None
     
     ruby_lines = []
-    
+    field_list = []
+
     for normalizer in normalizers:
         field = normalizer.get('target', {}).get('field')
-        multiply_value = normalizer.get('params', {}).get('multiply_value')
-        
-        if not field or multiply_value is None:
+        params = normalizer.get('params', {})
+        multiply_value = params.get('multiply_value')
+        multiply_field = str(params.get('multiply_field', '') or '').strip()
+        if multiply_field and not _SAFE_FIELD_RE.match(multiply_field):
+            multiply_field = ''
+
+        if not field or (multiply_value is None and not multiply_field):
             continue
-        
+        if multiply_value is None:
+            multiply_value = 1.0
+
         # Convert dot-separated field to Logstash field path
         # e.g., "system.cpu.total.norm.pct" -> "[system][cpu][total][norm][pct]"
-        field_parts = field.split('.')
-        field_path = ''.join(f'[{part}]' for part in field_parts)
+        field_path = _field_path(field)
 
         # Use output_field if specified, otherwise overwrite the source field in-place
-        output_field = normalizer.get('params', {}).get('output_field', '').strip()
-        if output_field:
-            output_parts = output_field.split('.')
-            output_path = ''.join(f'[{part}]' for part in output_parts)
-        else:
-            output_path = field_path
+        output_field = params.get('output_field', '').strip()
+        output_path = _field_path(output_field) if output_field else field_path
 
-        # Generate Ruby code for this field
-        ruby_lines.append(
-            f'v = event.get("{field_path}")\n'
-            f'if v\n'
-            f'  event.set("{output_path}", v.to_f * {multiply_value})\n'
-            f'end'
-        )
-    
+        if multiply_field:
+            ruby_lines.append(
+                f'v = event.get("{field_path}")\n'
+                f'm = event.get("{_field_path(multiply_field)}")\n'
+                f'if v && m\n'
+                f'  event.set("{output_path}", v.to_f * {multiply_value} * m.to_f)\n'
+                f'end'
+            )
+        else:
+            ruby_lines.append(
+                f'v = event.get("{field_path}")\n'
+                f'if v\n'
+                f'  event.set("{output_path}", v.to_f * {multiply_value})\n'
+                f'end'
+            )
+
+        factor = f"{multiply_value} × {multiply_field}" if multiply_field else f"{multiply_value}"
+        dest = f" → {output_field}" if output_field and output_field != field else ""
+        field_list.append(f"  - {field} × {factor}{dest}")
+
     if not ruby_lines:
         return None
-    
+
     ruby_code = '\n'.join(ruby_lines)
-    
-    # Build description of fields being multiplied
-    field_list = []
-    for normalizer in normalizers:
-        field = normalizer.get('target', {}).get('field')
-        multiply_value = normalizer.get('params', {}).get('multiply_value')
-        if field and multiply_value is not None:
-            output_field = normalizer.get('params', {}).get('output_field', '').strip()
-            dest = f" → {output_field}" if output_field and output_field != field else ""
-            field_list.append(f"  - {field} × {multiply_value}{dest}")
     
     comment_text = "Normalizer: Multiply\n"
     comment_text += "Multiplies field values by configured factors:\n"
@@ -342,6 +354,7 @@ def _generate_ratio_get_filter(normalizers, scope='get', id_counter=None):
         ratio2_output = params.get('ratio2_output_field', '').strip()
         complement_output = params.get('complement_ratio_output_field', '').strip()
         divide_output = params.get('divide_output_field', '').strip()
+        difference_output = params.get('difference_output_field', '').strip()
 
         if not value1_field or not value2_field:
             continue
@@ -388,6 +401,10 @@ def _generate_ratio_get_filter(normalizers, scope='get', id_counter=None):
             divide_output_path = ''.join(f'[{part}]' for part in divide_output.split('.'))
             ruby_code_block += f'    event.set("{divide_output_path}", value2_f{var_suffix} / value1_f{var_suffix}) if value1_f{var_suffix} > 0\n'
 
+        # Add difference output if specified: value1 - value2 (e.g. total - used = free)
+        if difference_output:
+            ruby_code_block += f'    event.set("{_field_path(difference_output)}", value1_f{var_suffix} - value2_f{var_suffix})\n'
+
         ruby_code_block += '  end\n'
         ruby_code_block += 'end'
         
@@ -409,6 +426,7 @@ def _generate_ratio_get_filter(normalizers, scope='get', id_counter=None):
         ratio2_output = params.get('ratio2_output_field', '').strip()
         complement_output = params.get('complement_ratio_output_field', '').strip()
         divide_output = params.get('divide_output_field', '').strip()
+        difference_output = params.get('difference_output_field', '').strip()
 
         if value1_field and value2_field:
             calc_list.append(f"  Inputs: {value1_field}, {value2_field}")
@@ -422,6 +440,8 @@ def _generate_ratio_get_filter(normalizers, scope='get', id_counter=None):
                 calc_list.append(f"    → {complement_output} = (value1 - value2) / value1")
             if divide_output:
                 calc_list.append(f"    → {divide_output} = value2 / value1")
+            if difference_output:
+                calc_list.append(f"    → {difference_output} = value1 - value2")
     
     comment_text = "Normalizer: Ratio\n"
     comment_text += "Calculates ratios and derived fields from two input values:\n"
@@ -592,3 +612,162 @@ def _generate_translate_filter(normalizers, id_counter=None):
         })
 
     return components if components else None
+
+
+def _generate_counter_delta_filter(normalizers, scope='get', id_counter=None):
+    """Emit one Ruby filter that writes each counter's change since the last poll.
+
+    State is keyed by network, polled address, ``tsds.category``, ``tsds.index``
+    and field, so GET scalars and individual table rows are tracked separately.
+    The first sample for a key and any sample lower than the previous one
+    (counter reset or wrap) write nothing.
+
+    Args:
+        normalizers: ``counter_delta`` normalizers for ``scope``.
+        scope: ``get`` or ``table``; included in plugin IDs.
+        id_counter: Shared mutable ID map.
+
+    Returns:
+        List of Logstash filter component dicts, or ``None`` when there is
+        nothing to emit.
+
+    Examples:
+        >>> n = [{'operation': 'counter_delta',
+        ...       'target': {'scope': 'get', 'field': 'system.cpu.raw.user'},
+        ...       'params': {'output_field': 'system.cpu.delta.user'}}]
+        >>> result = _generate_counter_delta_filter(n)
+        >>> 'lsui_counter_delta' in result[1]['config']['code']
+        True
+    """
+    if id_counter is None:
+        id_counter = {}
+
+    ruby_lines = []
+    desc_lines = []
+    for normalizer in normalizers or []:
+        field = normalizer.get('target', {}).get('field', '')
+        output_field = normalizer.get('params', {}).get('output_field', '').strip()
+        if not _SAFE_FIELD_RE.match(field) or not _SAFE_FIELD_RE.match(output_field):
+            continue
+        ruby_lines.append(
+            f'v = event.get("{_field_path(field)}")\n'
+            f'if v\n'
+            f'  begin\n'
+            f'    d = lsui_counter_delta("#{{_cd_key}}|{field}", Float(v))\n'
+            f'    event.set("{_field_path(output_field)}", d) unless d.nil?\n'
+            f'  rescue ArgumentError, TypeError\n'
+            f'  end\n'
+            f'end'
+        )
+        desc_lines.append(f'  - {field} → {output_field}')
+
+    if not ruby_lines:
+        return None
+
+    ruby_code = (
+        '_cd_key = [event.get("[network][name]"), event.get("[host][polled_address]"), '
+        'event.get("[tsds][category]"), event.get("[tsds][index]")].join("|")\n'
+        + '\n'.join(ruby_lines)
+    )
+    comment_text = 'Normalizer: Counter delta\nChange since the previous poll:\n' + '\n'.join(desc_lines)
+
+    base = f'normalizer_counter_delta_{scope}'
+    return [
+        {
+            'id': _next_id(f'{base}_comment', id_counter),
+            'type': 'filter',
+            'plugin': 'comment',
+            'config': {'text': comment_text},
+        },
+        {
+            'id': _next_id(base, id_counter),
+            'type': 'filter',
+            'plugin': 'ruby',
+            'config': {'init': COUNTER_DELTA_RUBY_INIT, 'code': ruby_code},
+        },
+    ]
+
+
+def _generate_share_filter(normalizers, scope='get', id_counter=None):
+    """Emit one Ruby filter that writes each input's share of the inputs' total.
+
+    ``output_fields[i] = input_fields[i] / sum(input_fields) * multiply_value
+    [* multiply_field]``. Nothing is written unless every input (and
+    ``multiply_field``, when set) is present and the total is positive. Used to
+    turn per-state CPU tick deltas into Elastic's ``system.cpu.<state>.pct``,
+    which is summed across cores.
+
+    Args:
+        normalizers: ``share`` normalizers for ``scope``.
+        scope: ``get`` or ``table``; included in plugin IDs.
+        id_counter: Shared mutable ID map.
+
+    Returns:
+        List of Logstash filter component dicts, or ``None`` when there is
+        nothing to emit.
+
+    Examples:
+        >>> n = [{'operation': 'share', 'target': {'scope': 'get'},
+        ...       'params': {'input_fields': ['a.user', 'a.idle'],
+        ...                  'output_fields': ['b.user.pct', 'b.idle.pct'],
+        ...                  'multiply_field': 'system.cpu.cores'}}]
+        >>> result = _generate_share_filter(n)
+        >>> result[1]['plugin']
+        'ruby'
+    """
+    if id_counter is None:
+        id_counter = {}
+
+    ruby_lines = []
+    desc_lines = []
+    for normalizer in normalizers or []:
+        params = normalizer.get('params', {})
+        inputs = split_field_list(params.get('input_fields', []))
+        outputs = split_field_list(params.get('output_fields', []))
+        multiply_value = params.get('multiply_value')
+        multiply_value = 1.0 if multiply_value is None else float(multiply_value)
+        multiply_field = str(params.get('multiply_field', '') or '').strip()
+        fields = inputs + outputs + ([multiply_field] if multiply_field else [])
+        if not inputs or len(inputs) != len(outputs) or not all(_SAFE_FIELD_RE.match(f) for f in fields):
+            continue
+
+        values = ', '.join(f'event.get("{_field_path(f)}")' for f in inputs)
+        factor = f'{multiply_value}'
+        lines = [f'_sh = [{values}]']
+        if multiply_field:
+            lines.append(f'_shm = event.get("{_field_path(multiply_field)}")')
+            lines.append('if _sh.all? && _shm')
+            factor = f'{multiply_value} * _shm.to_f'
+        else:
+            lines.append('if _sh.all?')
+        lines.append('  _sh = _sh.map(&:to_f)')
+        lines.append('  _sht = _sh.sum')
+        lines.append('  if _sht > 0')
+        for i, output in enumerate(outputs):
+            lines.append(f'    event.set("{_field_path(output)}", _sh[{i}] / _sht * {factor})')
+        lines.append('  end')
+        lines.append('end')
+        ruby_lines.append('\n'.join(lines))
+
+        scale = f' × {multiply_field}' if multiply_field else ''
+        desc_lines.append(f'  - {", ".join(inputs)} → {", ".join(outputs)}{scale}')
+
+    if not ruby_lines:
+        return None
+
+    comment_text = 'Normalizer: Share\nEach input divided by the inputs\' total:\n' + '\n'.join(desc_lines)
+    base = f'normalizer_share_{scope}'
+    return [
+        {
+            'id': _next_id(f'{base}_comment', id_counter),
+            'type': 'filter',
+            'plugin': 'comment',
+            'config': {'text': comment_text},
+        },
+        {
+            'id': _next_id(base, id_counter),
+            'type': 'filter',
+            'plugin': 'ruby',
+            'config': {'code': '\n'.join(ruby_lines)},
+        },
+    ]

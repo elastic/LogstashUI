@@ -12,9 +12,12 @@ import json
 from pathlib import Path
 
 from SNMP.snmp_normalizers import (
+    COUNTER_DELTA_RUBY_INIT,
     _apply_normalizers,
+    _generate_counter_delta_filter,
     _generate_multiply_get_filter,
     _generate_ratio_get_filter,
+    _generate_share_filter,
     _generate_sum_get_filter,
     _generate_translate_filter,
     coerce_field_lists,
@@ -796,3 +799,177 @@ class TestValidateNormalizers:
     def test_official_profiles_pass(self, path):
         errors = validate_normalizers(json.loads(path.read_text()).get('normalizers'))
         assert errors == KNOWN_OFFICIAL_ISSUES.get(path.name, [])
+
+
+# ===========================================================================
+# multiply_field / difference_output_field
+# ===========================================================================
+
+class TestMultiplyField:
+
+    def test_multiplies_by_another_field(self):
+        result = _generate_multiply_get_filter([{
+            'operation': 'multiply',
+            'target': {'scope': 'table', 'field': 'system.filesystem.total.bytes'},
+            'params': {'multiply_field': 'system.filesystem.allocation_units'},
+        }], scope='table')
+        code = result[1]['config']['code']
+        assert 'm = event.get("[system][filesystem][allocation_units]")' in code
+        assert 'if v && m' in code
+        assert 'v.to_f * 1.0 * m.to_f' in code
+
+    def test_unsafe_multiply_field_falls_back_to_value_only(self):
+        result = _generate_multiply_get_filter([{
+            'operation': 'multiply',
+            'target': {'scope': 'get', 'field': 'a.b'},
+            'params': {'multiply_value': 2, 'multiply_field': 'x"); system("rm'},
+        }])
+        code = result[1]['config']['code']
+        assert 'system(' not in code
+        assert 'v.to_f * 2' in code
+
+    def test_missing_value_and_field_is_skipped(self):
+        assert _generate_multiply_get_filter([{
+            'operation': 'multiply',
+            'target': {'scope': 'get', 'field': 'a.b'},
+            'params': {},
+        }]) is None
+
+
+class TestRatioDifference:
+
+    def test_difference_output(self):
+        result = _generate_ratio_get_filter([{
+            'operation': 'ratio',
+            'target': {'scope': 'table'},
+            'params': {
+                'value1_field': 'system.filesystem.total.bytes',
+                'value2_field': 'system.filesystem.used.bytes',
+                'difference_output_field': 'system.filesystem.free',
+            },
+        }], scope='table')
+        code = result[1]['config']['code']
+        assert 'event.set("[system][filesystem][free]", value1_f - value2_f)' in code
+        assert 'system.filesystem.free = value1 - value2' in result[0]['config']['text']
+
+
+# ===========================================================================
+# counter_delta / share
+# ===========================================================================
+
+def _delta(field, output):
+    return {
+        'operation': 'counter_delta',
+        'target': {'scope': 'get', 'field': field},
+        'params': {'output_field': output},
+    }
+
+
+class TestCounterDelta:
+
+    def test_ruby_filter_carries_shared_state_init(self):
+        result = _generate_counter_delta_filter([_delta('system.cpu.raw.user', 'system.cpu.delta.user')])
+        comment, ruby = result
+        assert comment['plugin'] == 'comment'
+        assert ruby['config']['init'] == COUNTER_DELTA_RUBY_INIT
+        assert ruby['id'].startswith('normalizer_counter_delta_get')
+
+    def test_state_is_global_and_skips_first_sample_and_resets(self):
+        assert '$lsui_snmp_counters' in COUNTER_DELTA_RUBY_INIT
+        assert 'Mutex' in COUNTER_DELTA_RUBY_INIT
+        assert 'return nil if prev.nil? || value < prev' in COUNTER_DELTA_RUBY_INIT
+
+    def test_key_includes_device_row_and_field(self):
+        code = _generate_counter_delta_filter([
+            _delta('system.cpu.raw.user', 'system.cpu.delta.user'),
+        ])[1]['config']['code']
+        for part in ('[network][name]', '[host][polled_address]', '[tsds][category]', '[tsds][index]'):
+            assert part in code
+        assert '|system.cpu.raw.user"' in code
+        assert 'event.set("[system][cpu][delta][user]", d) unless d.nil?' in code
+
+    def test_unsafe_fields_are_dropped(self):
+        assert _generate_counter_delta_filter([_delta('a.b', 'x"; exit')]) is None
+
+    def test_dispatched_with_scope_in_id(self):
+        result = _apply_normalizers([
+            dict(_delta('a.raw', 'a.delta'), target={'scope': 'table', 'field': 'a.raw'}),
+        ])
+        assert result[1]['id'].startswith('normalizer_counter_delta_table')
+
+
+class TestShare:
+
+    def _share(self, **params):
+        base = {
+            'input_fields': ['d.user', 'd.idle'],
+            'output_fields': ['system.cpu.user.pct', 'system.cpu.idle.pct'],
+        }
+        base.update(params)
+        return {'operation': 'share', 'target': {'scope': 'get'}, 'params': base}
+
+    def test_writes_each_share_scaled_by_field(self):
+        code = _generate_share_filter([self._share(multiply_field='system.cpu.num_cpus')])[1]['config']['code']
+        assert '_sh = [event.get("[d][user]"), event.get("[d][idle]")]' in code
+        assert 'if _sh.all? && _shm' in code
+        assert 'event.set("[system][cpu][user][pct]", _sh[0] / _sht * 1.0 * _shm.to_f)' in code
+        assert 'event.set("[system][cpu][idle][pct]", _sh[1] / _sht * 1.0 * _shm.to_f)' in code
+
+    def test_without_multiply_field(self):
+        code = _generate_share_filter([self._share(multiply_value=100)])[1]['config']['code']
+        assert 'if _sh.all?\n' in code
+        assert '_sh[0] / _sht * 100.0' in code
+
+    def test_mismatched_lengths_are_skipped(self):
+        assert _generate_share_filter([self._share(output_fields=['only.one'])]) is None
+
+
+class TestListedOrder:
+
+    def test_runs_follow_listed_order_not_operation_grouping(self):
+        normalizers = [
+            {'operation': 'multiply', 'target': {'scope': 'get', 'field': 'a.kb'},
+             'params': {'multiply_value': 1024, 'output_field': 'a.bytes'}},
+            {'operation': 'ratio', 'target': {'scope': 'get'},
+             'params': {'value1_field': 'a.bytes', 'value2_field': 'b.bytes',
+                        'difference_output_field': 'c.bytes'}},
+            {'operation': 'multiply', 'target': {'scope': 'get', 'field': 'c.bytes'},
+             'params': {'multiply_value': 2}},
+        ]
+        ids = [c['id'] for c in _apply_normalizers(normalizers) if c['plugin'] == 'ruby']
+        assert ids == ['normalizer_multiply_get_1', 'normalizer_ratio_get_1', 'normalizer_multiply_get_2']
+
+    def test_consecutive_same_operation_share_one_filter(self):
+        normalizers = [
+            {'operation': 'multiply', 'target': {'scope': 'get', 'field': f'f{i}'},
+             'params': {'multiply_value': 2}}
+            for i in range(3)
+        ]
+        rubies = [c for c in _apply_normalizers(normalizers) if c['plugin'] == 'ruby']
+        assert len(rubies) == 1
+
+
+class TestNewOperationsValidate:
+
+    @pytest.mark.parametrize('normalizer', [
+        _delta('system.cpu.raw.user', 'system.cpu.delta.user'),
+        {'operation': 'share', 'target': {'scope': 'get'},
+         'params': {'input_fields': ['a', 'b'], 'output_fields': ['c', 'd'],
+                    'multiply_field': 'system.cpu.num_cpus'}},
+        {'operation': 'sum_column', 'target': {'scope': 'table', 'field': 'interface.in_octets'},
+         'params': {'output_field': 'host.network.ingress.bytes', 'mode': 'delta',
+                    'exclude_column': 'type', 'exclude_values': ['24']}},
+        {'operation': 'multiply', 'target': {'scope': 'table', 'field': 'x.total.bytes'},
+         'params': {'multiply_field': 'x.allocation_units'}},
+        {'operation': 'ratio', 'target': {'scope': 'get'},
+         'params': {'value1_field': 'a', 'value2_field': 'b', 'difference_output_field': 'c'}},
+    ], ids=['counter_delta', 'share', 'sum_column', 'multiply_field', 'difference'])
+    def test_valid(self, normalizer):
+        assert validate_normalizers([normalizer]) == []
+
+    def test_sum_column_requires_target_field(self):
+        errors = validate_normalizers([{
+            'operation': 'sum_column', 'target': {'scope': 'table'},
+            'params': {'output_field': 'x'},
+        }])
+        assert any('target.field' in e for e in errors)

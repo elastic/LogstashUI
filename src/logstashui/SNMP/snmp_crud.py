@@ -3437,8 +3437,28 @@ def GetAllProfiles(request):
 
 
 # hrStorageRam — the HOST-RESOURCES-MIB storage type identifying a physical
-# memory row, as carried in system.filesystem.type.
+# memory row, as carried in system.storage.type (system.filesystem.type in data
+# polled before disks and memory rows were split).
 HR_STORAGE_RAM_OID = "1.3.6.1.2.1.25.2.1.2"
+
+# hrStorageTable rows: disks in system.filesystem, RAM/virtual memory/other in
+# system.storage.
+_STORAGE_CATEGORIES = ("system.filesystem", "system.storage")
+
+
+def _storage_row(source):
+    """Return the hrStorageTable row from a document, whichever table it is in.
+
+    Examples:
+        >>> _storage_row({'system': {'storage': {'index': 1}}})
+        {'index': 1}
+        >>> _storage_row({'system': {'filesystem': {'index': 31}}})
+        {'index': 31}
+        >>> _storage_row({})
+        {}
+    """
+    system = source.get('system') or {}
+    return system.get('storage') or system.get('filesystem') or {}
 
 
 def _device_host_filter(device):
@@ -3972,8 +3992,8 @@ def _get_device_metrics(device, es_connection):
                         },
                         _device_host_filter(device),
                         {
-                            "term": {
-                                "event.category": "system.filesystem"
+                            "terms": {
+                                "event.category": list(_STORAGE_CATEGORIES)
                             }
                         },
                         # Select RAM rows by hrStorageType, not by the free-text
@@ -3984,8 +4004,9 @@ def _get_device_metrics(device, es_connection):
                         {
                             "bool": {
                                 "should": [
-                                    {"term": {"system.filesystem.type": HR_STORAGE_RAM_OID}},
-                                    {"term": {"system.filesystem.type.keyword": HR_STORAGE_RAM_OID}}
+                                    {"term": {f"{category}.type{suffix}": HR_STORAGE_RAM_OID}}
+                                    for category in _STORAGE_CATEGORIES
+                                    for suffix in ("", ".keyword")
                                 ],
                                 "minimum_should_match": 1
                             }
@@ -4004,10 +4025,10 @@ def _get_device_metrics(device, es_connection):
                         "physical": {
                             "top_hits": {
                                 "size": 10,
-                                "_source": [
-                                    "@timestamp",
-                                    "system.filesystem.index",
-                                    "system.filesystem.used.pct"
+                                "_source": ["@timestamp"] + [
+                                    f"{category}.{field}"
+                                    for category in _STORAGE_CATEGORIES
+                                    for field in ("index", "used.pct")
                                 ]
                             }
                         }
@@ -4018,23 +4039,17 @@ def _get_device_metrics(device, es_connection):
 
         buckets = memory_results.get('aggregations', {}).get('by_poll', {}).get('buckets', [])
         for bucket in buckets:
-            hits = bucket['physical']['hits']['hits']
-            # Sort by system.filesystem.index in Python if the field is present,
-            # so we consistently pick the lowest-indexed RAM row (physical memory).
-            # Avoids sorting on a field that may not be mapped in every ES index.
-            if any(
-                'index' in h.get('_source', {}).get('system', {}).get('filesystem', {})
-                for h in hits
-            ):
-                hits = sorted(
-                    hits,
-                    key=lambda h: h['_source']['system']['filesystem'].get('index', 0)
-                )
+            # Pick the lowest-indexed RAM row (physical memory). Sorted in Python
+            # to avoid sorting on a field that may not be mapped in every ES index.
+            hits = sorted(
+                bucket['physical']['hits']['hits'],
+                key=lambda h: _storage_row(h.get('_source', {})).get('index', 0)
+            )
             if not hits:
                 continue
             doc = hits[0]
             try:
-                pct = doc['_source']['system']['filesystem']['used']['pct']
+                pct = _storage_row(doc['_source'])['used']['pct']
             except (KeyError, TypeError):
                 continue
             visualization_data['Memory'].append(pct)
@@ -4741,17 +4756,17 @@ def _get_device_filesystems(device, es_connection):
                     },
                     _device_host_filter(device),
                     {
-                        "term": {
-                            "event.category": "system.filesystem"
+                        "terms": {
+                            "event.category": list(_STORAGE_CATEGORIES)
                         }
                     }
                 ]
             }
         },
         aggregations={
-            "filesystems": {
+            category: {
                 "terms": {
-                    "field": "system.filesystem.index",
+                    "field": f"{category}.index",
                     "size": 1000
                 },
                 "aggregations": {
@@ -4759,38 +4774,47 @@ def _get_device_filesystems(device, es_connection):
                         "top_hits": {
                             "size": 1,
                             "sort": [{"@timestamp": {"order": "desc"}}],
-                            "_source": [
-                                "system.filesystem.index",
-                                "system.filesystem.mount_point",
-                                "system.filesystem.type",
-                                "system.filesystem.used.pct",
-                                "system.filesystem.used.bytes",
-                                "system.filesystem.total.bytes",
-                                "system.filesystem.allocation_units"
+                            "_source": ["@timestamp"] + [
+                                f"{category}.{field}"
+                                for field in ("index", "mount_point", "type", "used.pct",
+                                              "used.bytes", "total", "allocation_units")
                             ]
                         }
                     }
                 }
             }
+            for category in _STORAGE_CATEGORIES
         }
     )
 
-    visualization_data = {
-        "filesystems": []
-    }
+    # Rows polled before the disk/memory split carry RAM rows in
+    # system.filesystem; keep the newest row per hrStorageIndex.
+    latest = {}
+    for category in _STORAGE_CATEGORIES:
+        for bucket in results.get('aggregations', {}).get(category, {}).get('buckets', []):
+            for doc in bucket['latest_doc']['hits']['hits']:
+                fs = _storage_row(doc['_source'])
+                index = fs.get('index', bucket['key'])
+                timestamp = doc['_source'].get('@timestamp', '')
+                if index in latest and latest[index][0] >= timestamp:
+                    continue
+                total = fs.get('total', 0)
+                # Rows written before the Elastic-aligned schema used total.bytes.
+                if isinstance(total, dict):
+                    total = total.get('bytes', 0)
+                latest[index] = (timestamp, {
+                    "index": index,
+                    "mount_point": fs.get('mount_point', ''),
+                    "type": fs.get('type', ''),
+                    "used_pct": fs.get('used', {}).get('pct', 0),
+                    "used_bytes": fs.get('used', {}).get('bytes', 0),
+                    "total_bytes": total,
+                    "allocation_units": fs.get('allocation_units', 0)
+                })
 
-    for bucket in results['aggregations']['filesystems']['buckets']:
-        for doc in bucket['latest_doc']['hits']['hits']:
-            fs = doc['_source'].get('system', {}).get('filesystem', {})
-            visualization_data['filesystems'].append({
-                "index": fs.get('index', bucket['key']),
-                "mount_point": fs.get('mount_point', ''),
-                "type": fs.get('type', ''),
-                "used_pct": fs.get('used', {}).get('pct', 0),
-                "used_bytes": fs.get('used', {}).get('bytes', 0),
-                "total_bytes": fs.get('total', {}).get('bytes', 0),
-                "allocation_units": fs.get('allocation_units', 0)
-            })
+    visualization_data = {
+        "filesystems": [row for _, row in latest.values()]
+    }
 
     visualization_data['filesystems'].sort(key=lambda f: f.get('used_pct') or 0, reverse=True)
 
@@ -5380,7 +5404,7 @@ def generate_visualizations(visualizations, device, es_connection):
         visualization_data['wireless_radios'] = _get_device_wireless_radios(device, es_connection)
     if "wireless.ap" in visualizations:
         visualization_data['wireless_aps'] = _get_device_wireless_aps(device, es_connection)
-    if "system.filesystem" in visualizations:
+    if "system.filesystem" in visualizations or "system.storage" in visualizations:
         visualization_data['filesystems'] = _get_device_filesystems(device, es_connection)
     # NetApp vendor-specific capacity events — merge into the same filesystems list
     if "storage.filesystem" in visualizations or "storage.aggregate" in visualizations:
@@ -5553,7 +5577,7 @@ def decide_visualizations(device, es):
                 "data_kinds": {
                     "terms": {
                         "field": "event.category",
-                        "size": 20
+                        "size": 50
                     }
                 }
             }

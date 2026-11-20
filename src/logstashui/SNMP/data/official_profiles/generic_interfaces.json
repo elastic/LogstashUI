@@ -49,6 +49,34 @@
   },
   "normalizers": [
     {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.in_octets"
+      },
+      "params": {
+        "output_field": "host.network.ingress.bytes",
+        "mode": "delta",
+        "exclude_column": "type",
+        "exclude_values": ["24"]
+      }
+    },
+    {
+      "operation": "sum_column",
+      "target": {
+        "scope": "table",
+        "table": "interface",
+        "field": "interface.out_octets"
+      },
+      "params": {
+        "output_field": "host.network.egress.bytes",
+        "mode": "delta",
+        "exclude_column": "type",
+        "exclude_values": ["24"]
+      }
+    },
+    {
       "operation": "translate",
       "target": {
         "scope": "table",

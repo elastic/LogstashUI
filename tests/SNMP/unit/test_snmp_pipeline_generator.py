@@ -1082,3 +1082,468 @@ class TestGenerateSnmpErrorCleanupFilter:
         result = _generate_snmp_error_cleanup_filter()
         code = result['config']['code']
         assert 'error' in code.lower()
+
+
+# ===========================================================================
+# Kibana Hosts page compatibility
+# ===========================================================================
+
+def _official_profile(name):
+    import json
+    path = Path(settings.BASE_DIR) / 'SNMP' / 'data' / 'official_profiles' / f'{name}.json'
+    return json.loads(path.read_text(encoding='utf-8'))
+
+
+def _snmp_template():
+    import json
+    path = Path(settings.BASE_DIR) / 'SNMP' / 'data' / 'snmp_template.json'
+    return json.loads(path.read_text(encoding='utf-8'))
+
+
+def _mapping_at(properties, dotted):
+    node = {'properties': properties}
+    for part in dotted.split('.'):
+        node = node.get('properties', {}).get(part)
+        if node is None:
+            return None
+    return node
+
+
+def _elastic_system_mappings():
+    import json
+    path = Path(__file__).parent / 'data' / 'elastic_system_mappings.json'
+    return json.loads(path.read_text(encoding='utf-8'))['fields']
+
+
+def _template_leaves(properties, prefix=''):
+    """Yield dotted paths of mapped leaf fields.
+
+    Example:
+        >>> list(_template_leaves({'a': {'properties': {'b': {'type': 'long'}}}}))
+        ['a.b']
+    """
+    for name, child in properties.items():
+        if 'properties' in child:
+            yield from _template_leaves(child['properties'], f'{prefix}{name}.')
+        else:
+            yield f'{prefix}{name}'
+
+
+_PROFILE_OUTPUT_PARAMS = (
+    'output_field', 'total_output_field', 'ratio1_output_field', 'ratio2_output_field',
+    'complement_ratio_output_field', 'divide_output_field', 'difference_output_field',
+)
+
+
+def _fields_written_by_official_profiles():
+    """Return every field an official profile or the generator writes."""
+    import json
+    fields = {'host.name', 'host.hostname', 'host.ip', 'metricset.period'}
+    base = Path(settings.BASE_DIR) / 'SNMP' / 'data' / 'official_profiles'
+    for path in base.glob('*.json'):
+        profile = json.loads(path.read_text(encoding='utf-8'))
+        for section in ('get', 'walk'):
+            fields.update(profile.get(section) or {})
+        for table, table_data in (profile.get('table') or {}).items():
+            fields.update(f'{table}.{col}' for col in (table_data.get('columns') or {}))
+        for normalizer in profile.get('normalizers') or []:
+            params = normalizer.get('params') or {}
+            fields.update(params[k] for k in _PROFILE_OUTPUT_PARAMS if params.get(k))
+            fields.update(params.get('output_fields') or [])
+    return fields
+
+
+class TestGenerateFiltersHostFields:
+
+    def _add_fields(self, network):
+        from SNMP.snmp_pipeline_generator import _generate_filters
+        filters = _generate_filters({'get': {}, 'walk': {}, 'table': {}}, network)
+        return next(f['config']['add_field'] for f in filters if f['id'] == 'filter_mutate_2')
+
+    def test_metricset_period_is_interval_in_ms(self):
+        network = MagicMock(interval=60)
+        network.__str__.return_value = 'net'
+        fields = self._add_fields(network)
+        assert fields['[metricset][period]'] == '60000'
+        assert fields['[metricset][module]'] == 'snmp'
+
+    def test_metricset_period_defaults_to_30s(self):
+        network = MagicMock(interval=None)
+        network.__str__.return_value = 'net'
+        assert self._add_fields(network)['[metricset][period]'] == '30000'
+
+
+class TestHostsPageModule:
+
+    def _filters(self):
+        from SNMP.snmp_pipeline_generator import _generate_filters
+        network = MagicMock(interval=60)
+        network.__str__.return_value = 'net'
+        normalizers = [
+            {'operation': 'multiply', 'target': {'scope': 'get', 'field': 'system.cpu.active.pct'},
+             'params': {'multiply_value': 0.01, 'output_field': 'system.cpu.total.norm.pct'}},
+            {'operation': 'ratio', 'target': {'scope': 'table', 'table': 'interface'},
+             'params': {'value1_field': 'interface.a', 'value2_field': 'interface.b',
+                        'ratio1_output_field': 'interface.r'}},
+        ]
+        oids = {'get': {}, 'walk': {}, 'table': {'interface': {'columns': {'a': '1.2', 'b': '1.3'}}}}
+        return _generate_filters(oids, network, normalizers)
+
+    def test_checks_every_hosts_page_field_on_metrics_doc_only(self):
+        from SNMP.snmp_pipeline_generator import HOSTS_PAGE_FIELDS, _format_field_name
+        config = next(f for f in self._filters() if f['id'] == 'filter_hosts_page_module')['config']
+        condition = config['condition']
+        assert condition.startswith('[tsds][category] == "metrics" and (')
+        for field in HOSTS_PAGE_FIELDS:
+            assert _format_field_name(field) in condition
+        assert config['plugins'][0]['config'] == {'replace': {'[metricset][module]': 'system'}}
+
+    def test_runs_after_normalizers_and_table_splits(self):
+        ids = [f['id'] for f in self._filters()]
+        position = ids.index('filter_hosts_page_module')
+        later = ids[position + 1:]
+        assert not any(i.startswith(('normalizer_', 'comp_table_split_')) for i in later)
+
+    def test_network_traffic_does_not_qualify(self):
+        from SNMP.snmp_pipeline_generator import HOSTS_PAGE_FIELDS
+        assert not any(f.startswith('host.network') for f in HOSTS_PAGE_FIELDS)
+
+
+class TestGenerateInputNormalizerDedup:
+
+    def test_groups_sharing_a_filter_chain_emit_each_normalizer_once(self, monkeypatch):
+        """Two credentials make two inputs; the shared filters must not run normalizers twice."""
+        import SNMP.snmp_pipeline_generator as gen
+
+        count_cpus = {
+            'operation': 'sum_column',
+            'target': {'scope': 'table', 'table': 'component.cpu', 'field': 'component.cpu.load_pct'},
+            'params': {'output_field': 'system.cpu.num_cpus', 'mode': 'count'},
+        }
+        monkeypatch.setattr(gen, '_get_device_profiles', lambda device, cache=None: (
+            [1], {'get': {}, 'walk': {}, 'table': {}}, [dict(count_cpus)]))
+
+        def device(cred_id):
+            credential = MagicMock(id=cred_id, version='2c')
+            template = MagicMock(id=7, type='server', vendor='net-snmp', product='Linux', model='Any')
+            template.name = 'Generic Linux'
+            return MagicMock(device_template=template, credential=credential,
+                             hostname='h', port=161, timeout=1000, retries=2)
+
+        network = MagicMock(id=1, interval=30, deployment_mode='AGENT')
+        inputs, _, normalizers = gen._generate_input({
+            'network': network,
+            'devices': {'v1_v2c': {'a': device(1), 'b': device(2)}, 'v3': {}},
+        })
+        assert len(inputs) == 2
+        assert normalizers == [count_cpus]
+
+
+class TestRowMetricsetModule:
+
+    def _code(self, table_name):
+        filters = _generate_table_split_filters(
+            {'table': {table_name: {'columns': {'index': '1.2.3'}}}})
+        return filters[0]['config']['code']
+
+    def test_system_tables_get_system_module(self):
+        for table in ('system.filesystem', 'system.storage', 'system.diskio'):
+            assert '"metricset" => { "module" => "system" }' in self._code(table)
+
+    def test_other_tables_keep_snmp_module(self):
+        for table in ('interface', 'component.cpu', 'systemish'):
+            assert '"metricset" => { "module" => "snmp" }' in self._code(table)
+
+    def test_rows_carry_host_ip(self):
+        code = self._code('interface')
+        assert 'host_ip = event.get("[host][ip]")' in code
+        assert 'new_event.set("[host][ip]", host_ip) if host_ip' in code
+
+
+class TestKeepWhenKeepColumn:
+
+    def test_keep_column_reads_without_deleting(self):
+        result = _ruby_keep_when_statements({
+            'keep_when': {'column': 'type', 'equals': ['1.3.6.1.2.1.25.2.1.4'], 'keep_column': True},
+        })
+        assert '_keep_v = row["type"]' in result
+        assert 'row.delete' not in result
+
+
+class TestSumColumn:
+
+    def _sum(self, **params):
+        base = {'output_field': 'host.network.ingress.bytes'}
+        base.update(params)
+        return {
+            'operation': 'sum_column',
+            'target': {'scope': 'table', 'table': 'interface', 'field': 'interface.in_octets'},
+            'params': base,
+        }
+
+    def _filter(self, normalizer):
+        oid_mappings = {'table': {'interface': {'columns': {
+            'index': '1.3.6.1.2.1.2.2.1.1',
+            'type': '1.3.6.1.2.1.2.2.1.3',
+            'in_octets': '1.3.6.1.2.1.31.1.1.1.6',
+        }}}}
+        return _generate_table_split_filters(oid_mappings, [normalizer])[0]
+
+    def test_value_mode_sums_onto_metrics_doc(self):
+        filt = self._filter(self._sum())
+        code = filt['config']['code']
+        assert 'sum_host_network_ingress_bytes_sum += _sum_f' in code
+        assert ('event.set("[host][network][ingress][bytes]", sum_host_network_ingress_bytes_sum) '
+                'if sum_host_network_ingress_bytes_count > 0 && !sum_host_network_ingress_bytes_incomplete') in code
+        assert 'init' not in filt['config']
+        assert code.index('sum_host_network_ingress_bytes_sum += _sum_f') < code.index('LogStash::Event.new')
+        assert code.index('event.remove("[interface]")') < code.index('event.set("[host][network]')
+
+    def test_delta_mode_uses_counter_state_keyed_per_row(self):
+        from SNMP.snmp_normalizers import COUNTER_DELTA_RUBY_INIT
+        filt = self._filter(self._sum(mode='delta'))
+        code = filt['config']['code']
+        assert filt['config']['init'] == COUNTER_DELTA_RUBY_INIT
+        assert '_sum_f = lsui_counter_delta(_sum_key, _sum_f)' in code
+        assert '#{row["index"] || _row_counter}|interface.in_octets' in code
+        assert 'sum_host_network_ingress_bytes_incomplete = true' in code
+
+    def test_exclude_values_guard_every_accumulation(self):
+        code = self._filter(self._sum(mode='delta', exclude_column='type', exclude_values=['24']))['config']['code']
+        guard = 'unless ["24"].include?(row["type"].to_s)'
+        assert code.count(guard) == 3
+
+    def test_unsafe_exclude_is_ignored(self):
+        code = self._filter(self._sum(exclude_column='type"; exit', exclude_values=['24']))['config']['code']
+        assert 'exit' not in code
+        assert 'include?(row[' not in code
+
+    def test_count_mode_adds_one_per_row(self):
+        code = self._filter(self._sum(mode='count'))['config']['code']
+        assert '_sum_f = 1.0' in code
+
+    def test_unsafe_output_field_is_dropped(self):
+        code = self._filter(self._sum(output_field='x"; exit'))['config']['code']
+        assert 'exit' not in code
+
+    def test_generate_filters_excludes_sum_column_from_standalone_normalizers(self):
+        from SNMP.snmp_pipeline_generator import _generate_filters
+        network = MagicMock(interval=30)
+        network.__str__.return_value = 'net'
+        oid_mappings = {'get': {}, 'walk': {}, 'table': {'interface': {'columns': {
+            'in_octets': '1.3.6.1.2.1.31.1.1.1.6'}}}}
+        filters = _generate_filters(oid_mappings, network, [self._sum(mode='delta')])
+        assert not any('sum_column' in f['id'] for f in filters)
+        split = next(f for f in filters if f['id'] == 'comp_table_split_interface')
+        assert 'lsui_counter_delta' in split['config']['code']
+
+
+class TestKibanaHostProfiles:
+
+    def test_ucd_load_uses_numeric_la_load_int(self):
+        profile = _official_profile('generic_ucd_system_metrics')
+        for minutes, suffix in (('1', '1'), ('5', '2'), ('15', '3')):
+            assert profile['get'][f'system.load.{minutes}'] == f'1.3.6.1.4.1.2021.10.1.5.{suffix}'
+            assert any(
+                n['operation'] == 'multiply' and n['target'].get('field') == f'system.load.{minutes}'
+                and n['params']['multiply_value'] == 0.01
+                for n in profile['normalizers']
+            )
+
+    def test_ucd_cpu_states_use_kernel_ticks_not_system(self):
+        profile = _official_profile('generic_ucd_system_metrics')
+        deltas = {n['target']['field']: n['params']['output_field']
+                  for n in profile['normalizers'] if n['operation'] == 'counter_delta'}
+        assert deltas['system.cpu.raw.kernel'] == 'system.cpu.delta.system'
+        assert 'system.cpu.raw.system' not in deltas
+        share = next(n for n in profile['normalizers'] if n['operation'] == 'share')
+        assert share['params']['input_fields'] == list(deltas.values())
+        assert share['params']['multiply_field'] == 'system.cpu.cores'
+
+    def test_ucd_memory_chain_is_ordered(self):
+        ops = [(n['operation'], n['params'].get('output_field') or n['params'].get('difference_output_field'))
+               for n in _official_profile('generic_ucd_system_metrics')['normalizers']]
+        used_kb = ops.index(('ratio', 'system.memory.actual.used.kb'))
+        assert used_kb < ops.index(('sum', 'system.memory.used.kb'))
+        assert used_kb < ops.index(('multiply', 'system.memory.actual.used.bytes'))
+        assert ops.index(('sum', 'system.memory.used.kb')) < ops.index(('multiply', 'system.memory.used.bytes'))
+
+    def test_host_resources_splits_disks_from_memory(self):
+        tables = _official_profile('generic_host_system_metrics')['table']
+        disk = set(tables['system.filesystem']['keep_when']['equals'])
+        other = set(tables['system.storage']['keep_when']['equals'])
+        assert disk == {'1.3.6.1.2.1.25.2.1.4', '1.3.6.1.2.1.25.2.1.10'}
+        assert '1.3.6.1.2.1.25.2.1.2' in other
+        assert not disk & other
+        assert tables['system.filesystem']['keep_when']['keep_column'] is True
+
+    def test_host_resources_scales_blocks_to_bytes(self):
+        normalizers = _official_profile('generic_host_system_metrics')['normalizers']
+        for table in ('system.filesystem', 'system.storage'):
+            for col in ('total', 'used.bytes'):
+                assert any(
+                    n['operation'] == 'multiply' and n['target']['field'] == f'{table}.{col}'
+                    and n['params']['multiply_field'] == f'{table}.allocation_units'
+                    for n in normalizers
+                ), (table, col)
+
+    def test_interfaces_write_host_network_deltas(self):
+        sums = {n['params']['output_field']: n for n in _official_profile('generic_interfaces')['normalizers']
+                if n['operation'] == 'sum_column'}
+        for output, column in (('host.network.ingress.bytes', 'interface.in_octets'),
+                               ('host.network.egress.bytes', 'interface.out_octets')):
+            assert sums[output]['target']['field'] == column
+            assert sums[output]['params']['mode'] == 'delta'
+            assert sums[output]['params']['exclude_values'] == ['24']
+
+    def test_templates_do_not_map_one_key_to_two_oids(self):
+        """A collision makes the generator rename the key to ``<key>.<profile>``."""
+        import json
+        data = Path(settings.BASE_DIR) / 'SNMP' / 'data'
+        known = {('eaton_ups', 'observer.model'), ('eaton_ups', 'observer.firmware_version')}
+        collisions = []
+        for path in sorted((data / 'official_device_templates').glob('*.json')):
+            oids = {}
+            for name in json.loads(path.read_text(encoding='utf-8')).get('profiles', []):
+                profile_path = data / 'official_profiles' / f'{name}.json'
+                if not profile_path.exists():
+                    continue
+                profile = json.loads(profile_path.read_text(encoding='utf-8'))
+                for section in ('get', 'walk'):
+                    for key, oid in (profile.get(section) or {}).items():
+                        oids.setdefault(key, set()).add(oid)
+            collisions += [(path.stem, k) for k, v in oids.items() if len(v) > 1]
+        assert set(collisions) == known
+
+    def test_no_official_profile_writes_memory_total_object(self):
+        import json
+        base = Path(settings.BASE_DIR) / 'SNMP' / 'data' / 'official_profiles'
+        for path in base.glob('*.json'):
+            text = path.read_text(encoding='utf-8')
+            assert 'system.memory.total.' not in text, path.name
+
+
+class TestIsilonProfiles:
+    """OIDs follow ISILON-MIB (1.3.6.1.4.1.12124)."""
+
+    def test_ifs_capacity_counters_follow_mib_order(self):
+        get = _official_profile('isilon_system')['get']
+        base = '1.3.6.1.4.1.12124.1.3'
+        assert get['storage.disk.total.bytes'] == f'{base}.1.0'
+        assert get['storage.disk.used.bytes'] == f'{base}.2.0'
+        assert get['storage.disk.avail.bytes'] == f'{base}.3.0'
+        assert get['storage.disk.free.bytes'] == f'{base}.4.0'
+
+    def test_used_pct_is_used_over_total(self):
+        ratio = next(n for n in _official_profile('isilon_system')['normalizers'] if n['operation'] == 'ratio')
+        assert ratio['params']['value1_field'] == 'storage.disk.total.bytes'
+        assert ratio['params']['value2_field'] == 'storage.disk.used.bytes'
+        assert ratio['params']['divide_output_field'] == 'storage.disk.used.pct'
+
+    def test_node_status_oids_are_not_read_as_metrics(self):
+        profiles = [_official_profile(n) for n in ('isilon_system', 'isilon_performance', 'isilon_protocols')]
+        status = {f'1.3.6.1.4.1.12124.2.1.{i}.0' for i in range(1, 5)}
+        for profile in profiles:
+            for key, oid in profile['get'].items():
+                if oid in status:
+                    assert key.startswith('observer.node.'), key
+        assert profiles[0]['get']['observer.node.name'] == '1.3.6.1.4.1.12124.2.1.1.0'
+
+    def test_cpu_scalars_and_table_are_per_mil(self):
+        profile = _official_profile('isilon_performance')
+        scaled = {n['target']['field'] for n in profile['normalizers']
+                  if n['operation'] == 'multiply' and n['params'].get('multiply_value') == 0.001}
+        cpu_fields = {k for k in profile['get'] if '.cpu.' in k}
+        cpu_fields |= {f'component.node.cpu.{c}' for c in profile['table']['component.node.cpu']['columns']}
+        assert cpu_fields and cpu_fields <= scaled
+
+    def test_does_not_override_host_cpu_usage(self):
+        import json
+        for name in ('isilon_system', 'isilon_performance', 'isilon_protocols'):
+            text = json.dumps(_official_profile(name))
+            assert 'system.cpu.total.norm.pct' not in text, name
+
+    def test_protocol_table_reads_node_protocol_perf_table(self):
+        columns = _official_profile('isilon_protocols')['table']['storage.protocol']['columns']
+        assert columns['name'] == '1.3.6.1.4.1.12124.2.2.10.1.1'
+        assert all(oid.startswith('1.3.6.1.4.1.12124.2.2.10.1.') for oid in columns.values())
+
+
+class TestSnmpTemplateHostMappings:
+
+    def test_version_stays_1_8(self):
+        assert _snmp_template()['_meta']['version'] == '1.8'
+
+    @pytest.mark.parametrize('field, expected', [
+        ('system.load.1', 'scaled_float'),
+        ('system.cpu.cores', 'long'),
+        ('system.load.cores', 'long'),
+        ('system.memory.total', 'long'),
+        ('system.memory.actual.free', 'long'),
+        ('system.filesystem.total', 'long'),
+        ('host.network.ingress.bytes', 'long'),
+        ('metricset.period', 'long'),
+    ])
+    def test_field_types(self, field, expected):
+        node = _mapping_at(_snmp_template()['template']['mappings']['properties'], field)
+        assert node is not None, field
+        assert node['type'] == expected
+
+    def test_shared_fields_match_elastic_exactly(self):
+        """Kibana flags a field when indices disagree on type, scaling, metric type, or unit."""
+        elastic = _elastic_system_mappings()
+        props = _snmp_template()['template']['mappings']['properties']
+        shared = (set(_template_leaves(props)) | _fields_written_by_official_profiles()) & set(elastic)
+        mismatches = {f: (_mapping_at(props, f), elastic[f]) for f in sorted(shared)
+                      if _mapping_at(props, f) != elastic[f]}
+        assert mismatches == {}
+
+    def test_no_object_where_elastic_has_a_value(self):
+        elastic = _elastic_system_mappings()
+        ours = set(_template_leaves(_snmp_template()['template']['mappings']['properties']))
+        ours |= _fields_written_by_official_profiles()
+        clashes = sorted(
+            (field, other)
+            for field in ours for other in elastic
+            if field.startswith(other + '.') or other.startswith(field + '.')
+        )
+        assert clashes == []
+
+    def test_ai_authoring_material_writes_nothing_under_a_mapped_value(self):
+        """AI-generated profiles copy these names; a sub-key under a mapped value rejects the document."""
+        import json
+        import re
+        data = Path(settings.BASE_DIR) / 'SNMP' / 'data'
+        leaves = set(_template_leaves(_snmp_template()['template']['mappings']['properties']))
+        names = set()
+        for path in (data / 'mib_reference').glob('*.json'):
+            ref = json.loads(path.read_text(encoding='utf-8'))
+            names.update(ref.get('get') or {})
+            for table, spec in (ref.get('table') or {}).items():
+                names.update(f'{table}.{col}' for col in (spec.get('columns') or {}))
+        instructions = (data / 'authoring_instructions.md').read_text(encoding='utf-8')
+        for line in instructions.splitlines():
+            if 'Never write' not in line:
+                names.update(re.findall(r'[`"]([a-z0-9_]+(?:\.[a-z0-9_]+)+)[`"]', line))
+        clashes = sorted((name, leaf) for name in names for leaf in leaves if name.startswith(leaf + '.'))
+        assert clashes == []
+
+    def test_memory_total_is_a_leaf(self):
+        node = _mapping_at(_snmp_template()['template']['mappings']['properties'], 'system.memory.total')
+        assert 'properties' not in node
+
+    def test_aliases_point_at_mapped_fields(self):
+        props = _snmp_template()['template']['mappings']['properties']
+        aliases = []
+
+        def walk(node, prefix):
+            for name, child in node.get('properties', {}).items():
+                path = f'{prefix}{name}'
+                if child.get('type') == 'alias':
+                    aliases.append((path, child['path']))
+                walk(child, path + '.')
+
+        walk({'properties': props}, '')
+        for alias, target in aliases:
+            node = _mapping_at(props, target)
+            assert node is not None and node.get('type') not in (None, 'alias'), alias

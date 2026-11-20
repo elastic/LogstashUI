@@ -10,9 +10,9 @@
     "observer.firmware_version": "1.3.6.1.4.1.14823.2.2.1.2.1.28.0",
     "wireless.controller.ap_count": "1.3.6.1.4.1.14823.2.2.1.2.1.21.0",
     "wireless.controller.client_count": "1.3.6.1.4.1.14823.2.2.1.2.1.23.0",
-    "system.memory.total.kb": "1.3.6.1.4.1.14823.2.2.1.1.1.11.1.2.1",
+    "system.memory.actual.total.kb": "1.3.6.1.4.1.14823.2.2.1.1.1.11.1.2.1",
     "system.memory.actual.used.kb": "1.3.6.1.4.1.14823.2.2.1.1.1.11.1.3.1",
-    "system.memory.actual.free.kb": "1.3.6.1.4.1.14823.2.2.1.1.1.11.1.4.1"
+    "system.memory.actual.available.kb": "1.3.6.1.4.1.14823.2.2.1.1.1.11.1.4.1"
   },
   "walk": {},
   "table": {
@@ -25,7 +25,7 @@
     "system.filesystem": {
       "columns": {
         "mount_point": "1.3.6.1.4.1.14823.2.2.1.1.1.10.1.5",
-        "total.bytes": "1.3.6.1.4.1.14823.2.2.1.1.1.10.1.3",
+        "total": "1.3.6.1.4.1.14823.2.2.1.1.1.10.1.3",
         "used.bytes": "1.3.6.1.4.1.14823.2.2.1.1.1.10.1.4"
       }
     },
@@ -51,9 +51,42 @@
         "scope": "get"
       },
       "params": {
-        "value1_field": "system.memory.total.kb",
-        "value2_field": "system.memory.actual.free.kb",
+        "value1_field": "system.memory.actual.total.kb",
+        "value2_field": "system.memory.actual.available.kb",
         "complement_ratio_output_field": "system.memory.actual.used.pct"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.actual.total.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.total"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.actual.used.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.actual.used.bytes"
+      }
+    },
+    {
+      "operation": "multiply",
+      "target": {
+        "scope": "get",
+        "field": "system.memory.actual.available.kb"
+      },
+      "params": {
+        "multiply_value": 1024,
+        "output_field": "system.memory.actual.free"
       }
     },
     {
@@ -84,7 +117,7 @@
       "target": {
         "scope": "table",
         "table": "system.filesystem",
-        "field": "system.filesystem.total.bytes"
+        "field": "system.filesystem.total"
       },
       "params": {
         "multiply_value": 1048576
@@ -108,7 +141,7 @@
         "table": "system.filesystem"
       },
       "params": {
-        "value1_field": "system.filesystem.total.bytes",
+        "value1_field": "system.filesystem.total",
         "value2_field": "system.filesystem.used.bytes",
         "divide_output_field": "system.filesystem.used.pct"
       }

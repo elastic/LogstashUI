@@ -8,14 +8,32 @@
   - The embedded key is never sent to an enrolled agent.
 - **No more weak default compose secret.** `docker-compose.yml` no longer defaults `LOGSTASHUI_AGENT_CSR_SECRET` to `logstashui-compose-dev`. `bin/start_logstashui.sh`, `start_logstashui.bat` and `smoke_agent_modes.sh` generate `LOGSTASH_AGENT_API_KEY` and `LOGSTASHUI_AGENT_CSR_SECRET` once per install and keep them in `logstashui_data/.agent_api_key` and `.agent_csr_secret` (mode 600). An exported value takes precedence.
 
+### Added
+
+- **SNMP devices on Kibana's Hosts page.** Devices polled with the official system profiles now appear on Kibana's Infrastructure Hosts and Inventory pages, with CPU, load, memory, disk usage, disk I/O and network RX/TX. Devices that report none of CPU, memory or load, such as UPSes and PDUs, stay off the Hosts page.
+  - Every field the SNMP index template shares with Elastic's System integration is now mapped exactly as Elastic maps it.
+  - New normalizers: `counter_delta`, table `sum` with `exclude_when`, and `share`. `multiply` gains `multiply_field` and `ratio` gains `difference_output_field`.
+
 ### Changed
 
+- **SNMP field renames** (see the [SNMP Field Reference](/docs/docs/logstashui/SNMP/schema.md)):
+  - `system.cpu.num_cpus` is now `system.cpu.cores`.
+  - `system.memory.total`, `system.memory.actual.free` and `system.filesystem.total` are plain byte values instead of `.kb` / `.bytes` objects. Cisco and Aruba total memory in KB moved to `system.memory.actual.total.kb`.
+  - `system.load.*` now comes from `laLoadInt` × 0.01 and is a number. It used to be the `laLoad` string.
+  - `hrStorageTable` rows are split: disks go to `system.filesystem` and RAM, swap and other rows go to `system.storage`. Sizes are in bytes.
+- **Isilon OneFS profiles rewritten against ISILON-MIB.** Cluster and node status, `/ifs` capacity, and CPU are now read from the correct OIDs. CPU is reported as a fraction (0–1) instead of per mil. New tables cover chassis, drives, drive performance, fans, temperature and power sensors, licenses, per-node CPU, and per-protocol statistics (`storage.protocol`). Dashboards built on the old Isilon fields need updating.
 - The Kubernetes examples add `LOGSTASH_AGENT_API_KEY` to `Secret/logstashui` and pass it to the embedded agent Deployment.
 - `bin/smoke_agent_modes.sh` Phase 1 now probes agent auth: no key and wrong key return `401`, the right key returns `200`, a traversal attempt on `/validate` returns `400`, and `/openapi.json` returns `404`. The offline phase also runs the agent's `tests/test_api_auth.py`.
 
 ### Upgrade notes
 
 - If you run `docker compose` directly instead of the start scripts, export the same `LOGSTASH_AGENT_API_KEY` and `LOGSTASHUI_AGENT_CSR_SECRET` for both services.
+- **SNMP:** to pick up the new mappings and profiles:
+  1. Run `logstashui manage sync_snmp_official_data --cleanup`.
+  2. In the SNMP deploy dialog, install the updated index template on each connection and accept the **Rollover Required** prompt.
+  3. Redeploy the SNMP pipelines for each network.
+- **SNMP:** backing indices created before the upgrade keep the old mappings. Until they're gone, Kibana shows the load, memory and filesystem fields as conflicting types, and panels such as Normalized Load and Memory Free fail with "Field ... is of the wrong type". ES|QL queries across the data stream also silently drop those fields. Delete the old backing indices once you no longer need their history and their `index.time_series.end_time` has passed, then refresh the data view's field list. Reindexing old data into the data stream doesn't work, because TSDS rejects documents outside its current time window.
+- **SNMP:** custom profiles copied from the official ones keep the old behavior. To match, poll `laLoadInt` (`1.3.6.1.4.1.2021.10.1.5.x`) × 0.01 instead of `laLoad`, and write the renamed fields above as plain byte values.
 
 ## [0.5.4] - Dissect and grok debuggers, system policies, SSL verification controls - 10/26/2026
 

@@ -9,7 +9,7 @@ LogstashUI provides comprehensive SNMP monitoring capabilities, allowing you to 
 The SNMP module enables you to:
 
 - **Monitor Network Devices**: Collect metrics from switches, routers, firewalls, and other network equipment
-- **Track Server Health**: Monitor servers and infrastructure components via SNMP
+- **Track Server Health**: Monitor servers and infrastructure components via SNMP. Devices polled with the official system profiles appear on Kibana's Infrastructure Hosts and Inventory pages
 - **Auto-Discover Devices**: Scan network ranges to find SNMP devices automatically
 - **Receive Traps**: Listen for device-initiated notifications
 - **Manage Centrally**: Configure everything from one interface and deploy with a reviewable diff
@@ -52,7 +52,6 @@ See **[Deploying Changes](/docs/docs/logstashui/SNMP/deploying_changes.md)** for
 - **[Data Overview](/docs/docs/logstashui/SNMP/data_overview.md)** - Core Network Vitals and monitoring philosophy
 - **[SNMP Field Reference](/docs/docs/logstashui/SNMP/schema.md)** - Canonical field names, MIBs, and OIDs
 - **[TSDS Implementation](/docs/docs/logstashui/SNMP/tsds_implementation.md)** - Time series storage and query performance
-
 ### Tools & Support
 - **[Testing & Validation](/docs/docs/logstashui/SNMP/testing.md)** - Test profiles, walk devices, AI-generate templates
 - **[Device Support](/docs/docs/logstashui/SNMP/device_support.md)** - When your device isn't in the official catalog

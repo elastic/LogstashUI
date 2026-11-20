@@ -10,10 +10,12 @@ You author SNMP **profiles** and **device templates** in LogstashUI 0.5.0 JSON f
 - **Physical sensors / entities (ENTITY-SENSOR-MIB / ENTITY-MIB):** use table `component.sensor` with columns `type`,`scale`,`precision`,`value`,`oper_status`,`units_display`; and table `component` with column `name`. Never `entPhySensor`/`entPhysical`.
 - In a `table`, the **table name carries the group prefix** and the **column key is the leaf path**; they flatten with a dot to form the full field name:
   - table `interface` + columns `status.admin`, `status.oper`, `traffic.in.bytes`, `traffic.out.errors` -> `interface.traffic.in.bytes`
-  - table `system.filesystem` + columns `total.bytes`, `used.bytes`, `mount_point` -> `system.filesystem.used.bytes`
+  - table `system.filesystem` + columns `total`, `used.bytes`, `mount_point` -> `system.filesystem.used.bytes`
   - table `component.cpu` + column `load_pct` -> `component.cpu.load_pct`
-- `get` scalars use the full dotted path directly: `system.cpu.total.norm.pct`, `system.memory.actual.used.bytes`, `host.num_processes`, `system.memory.total.kb`.
+- `get` scalars use the full dotted path directly: `system.cpu.total.norm.pct`, `system.memory.actual.used.bytes`, `host.num_processes`, `system.memory.actual.total.kb`.
 - Keep the unit in the name (`.bytes`, `.kb`, `.pct`, `.norm.pct`) and match the casing/style of the reference examples. Include an `index` column in tables where the standard examples do.
+- **Exception: fields shared with Elastic's System integration** are plain numbers with no unit suffix, in bytes: `system.memory.total`, `system.memory.actual.free`, `system.memory.free`, `system.filesystem.total`, `system.cpu.cores`. Never write a sub-key under them (`system.memory.total.kb`, `system.memory.actual.free.pct`): Elasticsearch rejects the whole document. Write raw KB to `system.memory.actual.total.kb` / `system.memory.actual.available.kb` and multiply by 1024 into the plain field.
+- Load averages come from `laLoadInt` (`1.3.6.1.4.1.2021.10.1.5.1`/`.2`/`.3`) multiplied by 0.01, never the `laLoad` string.
 
 ## get vs walk vs table
 - Scalar single-instance value (CPU%, total memory) -> `get`, OID ends in `.0`.
@@ -36,10 +38,9 @@ Emit a top-level `normalizers` array whenever a raw value is not already in the 
 { "operation": "ratio",
   "target": { "scope": "get" },
   "params": { "value1_field": "system.memory.actual.used.bytes",
-              "value2_field": "system.memory.actual.free.bytes",
-              "total_output_field": "system.memory.total.bytes",
-              "ratio1_output_field": "system.memory.actual.used.pct",
-              "ratio2_output_field": "system.memory.actual.free.pct" } }
+              "value2_field": "system.memory.actual.free",
+              "total_output_field": "system.memory.total",
+              "ratio1_output_field": "system.memory.actual.used.pct" } }
 ```
   Table-scoped ratio: `"target": { "scope": "table", "table": "system.filesystem" }` with `value*_field` using flattened `table.column` paths.
 

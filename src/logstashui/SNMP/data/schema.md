@@ -9,6 +9,7 @@ GET scalar fields have no table prefix. Table fields are written as `<table>.<fi
 - [LogstashUI Enrichment Fields](#logstashui-enrichment-fields)
 - [System Identity](#system-identity)
 - [System Metrics](#system-metrics)
+- [Host Storage and Disk I/O](#host-storage-and-disk-io)
 - [Network Interfaces](#network-interfaces)
 - [RMON (Interface Error Statistics)](#rmon-interface-error-statistics)
 - [IP & Addressing](#ip--addressing)
@@ -43,7 +44,9 @@ These fields are injected by the LogstashUI pipeline generator and are not sourc
 | `host.hostname` | Polling pipeline | DNS hostname of the device. Set when the polled address is not a bare IP (i.e. a hostname was configured on the device record). |
 | `host.sysname` | SNMPv2-MIB `1.3.6.1.2.1.1.5.0` | The system name the device reports for itself via sysName. Set via the System profile. |
 | `host.polled_address` | SNMP input plugin | The exact address or hostname used to reach the device during polling (`%{[@metadata][host_address]}`). Useful for correlating events back to a specific poll target. |
-| `host.ip` | Polling pipeline | IP address of the device. Copied from `host.polled_address` when that value is a bare IPv4 or IPv6 address. |
+| `host.ip` | Polling pipeline | IP address of the device. Copied from `host.polled_address` when that value is a bare IPv4 or IPv6 address, and onto every table-row document. |
+| `metricset.module` | Polling pipeline | `system` (the filter Kibana's Hosts page uses) on rows from `system.*` tables, and on the host metrics document when it has `system.cpu.total.norm.pct`, `system.memory.actual.used.pct`, `system.memory.total` or `system.load.1`. Otherwise `snmp`, so devices such as UPSes and PDUs stay off the Hosts page. |
+| `metricset.period` | Polling pipeline | Network polling interval in milliseconds. |
 
 ---
 
@@ -83,26 +86,71 @@ CPU, memory, and load fields. Standard source is **UCD-SNMP-MIB** (Net-SNMP, Lin
 | `system.cpu.total.norm.pct` | `1.3.6.1.4.1.2021.11.*` | UCD-SNMP-MIB | Normalized CPU utilization (0–1). Derived from raw counters or vendor scalar — divide raw vendor percentages by 100 |
 | `system.cpu.raw.user` | `1.3.6.1.4.1.2021.11.50.0` | UCD-SNMP-MIB | Raw CPU ticks spent in user mode |
 | `system.cpu.raw.nice` | `1.3.6.1.4.1.2021.11.51.0` | UCD-SNMP-MIB | Raw CPU ticks spent in nice (low-priority user) mode |
-| `system.cpu.raw.system` | `1.3.6.1.4.1.2021.11.52.0` | UCD-SNMP-MIB | Raw CPU ticks spent in kernel/system mode |
+| `system.cpu.raw.system` | `1.3.6.1.4.1.2021.11.52.0` | UCD-SNMP-MIB | Raw CPU ticks spent in kernel/system mode. May already include wait and kernel ticks, so do not add it to them when totalling |
 | `system.cpu.raw.idle` | `1.3.6.1.4.1.2021.11.53.0` | UCD-SNMP-MIB | Raw CPU ticks spent idle |
 | `system.cpu.raw.wait` | `1.3.6.1.4.1.2021.11.54.0` | UCD-SNMP-MIB | Raw CPU ticks spent waiting on I/O |
-| `system.cpu.raw.kernel` | `1.3.6.1.4.1.2021.11.55.0` | UCD-SNMP-MIB | Raw CPU ticks spent in kernel interrupt context |
+| `system.cpu.raw.kernel` | `1.3.6.1.4.1.2021.11.55.0` | UCD-SNMP-MIB | Raw CPU ticks spent in kernel mode. Source of `system.cpu.system.pct` |
 | `system.cpu.raw.interrupt` | `1.3.6.1.4.1.2021.11.56.0` | UCD-SNMP-MIB | Raw CPU ticks spent handling hardware interrupts |
-| `system.cpu.num_cpus` | `1.3.6.1.4.1.2021.11.67.0` | UCD-SNMP-MIB | Number of CPU cores |
+| `system.cpu.raw.softirq` | `1.3.6.1.4.1.2021.11.61.0` | UCD-SNMP-MIB | Raw CPU ticks spent handling software interrupts |
+| `system.cpu.raw.steal` | `1.3.6.1.4.1.2021.11.64.0` | UCD-SNMP-MIB | Raw CPU ticks stolen by the hypervisor |
+| `system.cpu.cores` | `1.3.6.1.4.1.2021.11.67.0` | UCD-SNMP-MIB | Number of CPU cores. HOST-RESOURCES devices derive it by counting `hrProcessorTable` rows (`sum_column` in `count` mode) |
+| `system.load.cores` | derived | — | Copy of `system.cpu.cores` (multiply × 1); Kibana's Normalized Load divides by it |
+| `system.cpu.<state>.pct` | derived | — | Per-state CPU (`user`, `nice`, `system`, `idle`, `iowait`, `irq`, `softirq`, `steal`), summed across cores like Elastic's System integration (0 to `cores`). Derived from raw tick deltas with `counter_delta` + `share` × `system.cpu.cores` |
 | `system.cpu.raw.total` | vendor | — | Total CPU tick snapshot (idle + busy combined) for platforms that expose only idle and total counters rather than per-state breakdowns (e.g. Edgecore/UniFi switches via `1.3.6.1.4.1.4413.1.1.1.1.4.2.0`). CPU% must be derived externally as `(total − idle) / total`. |
-| `system.load.1` | `1.3.6.1.4.1.2021.10.1.3.1` | UCD-SNMP-MIB | 1-minute load average |
-| `system.load.5` | `1.3.6.1.4.1.2021.10.1.3.2` | UCD-SNMP-MIB | 5-minute load average |
-| `system.load.15` | `1.3.6.1.4.1.2021.10.1.3.3` | UCD-SNMP-MIB | 15-minute load average |
+| `system.load.1` | `1.3.6.1.4.1.2021.10.1.5.1` | UCD-SNMP-MIB | 1-minute load average (float). Poll `laLoadInt` and multiply by 0.01; `laLoad` (`…10.1.3.x`) is a string and is indexed as keyword, which breaks Kibana's Hosts page |
+| `system.load.5` | `1.3.6.1.4.1.2021.10.1.5.2` | UCD-SNMP-MIB | 5-minute load average (float, `laLoadInt` × 0.01) |
+| `system.load.15` | `1.3.6.1.4.1.2021.10.1.5.3` | UCD-SNMP-MIB | 15-minute load average (float, `laLoadInt` × 0.01) |
 | `system.memory.actual.total.kb` | `1.3.6.1.4.1.2021.4.5.0` | UCD-SNMP-MIB | Total physical RAM in KB |
+| `system.memory.physical.total.kb` | `1.3.6.1.2.1.25.2.2.0` | HOST-RESOURCES-MIB | Physical RAM in KB (`hrMemorySize`); its own key so it does not collide with UCD `memTotalReal` |
 | `system.memory.actual.available.kb` | `1.3.6.1.4.1.2021.4.6.0` | UCD-SNMP-MIB | Available (free + reclaimable) RAM in KB |
-| `system.memory.actual.free.kb` | `1.3.6.1.4.1.2021.4.11.0` | UCD-SNMP-MIB | Truly free (unallocated) RAM in KB |
+| `system.memory.total_free.kb` | `1.3.6.1.4.1.2021.4.11.0` | UCD-SNMP-MIB | Free RAM plus free swap in KB (`memTotalFree`) |
 | `system.memory.actual.cached.kb` | `1.3.6.1.4.1.2021.4.15.0` | UCD-SNMP-MIB | RAM used for disk cache in KB |
 | `system.memory.actual.total.bytes` | vendor | — | Total RAM in bytes (vendor devices) |
-| `system.memory.actual.used.bytes` | vendor | — | Used RAM in bytes (vendor devices) |
-| `system.memory.actual.free.bytes` | vendor | — | Free RAM in bytes (vendor devices) |
+| `system.memory.actual.used.bytes` | vendor / derived | — | Used RAM in bytes, excluding page cache. UCD derives it as (total − available) × 1024 |
+| `system.memory.actual.free` | vendor / derived | — | Available RAM in **bytes** (a number, not an object), as in Elastic's System integration. UCD and Aruba derive it as `actual.available.kb` × 1024 |
 | `system.memory.actual.used.pct` | derived | — | Memory utilization (0–1). Always derived via normalizer |
-| `system.memory.actual.free.pct` | derived | — | Memory free ratio (0–1). Always derived via normalizer |
-| `system.memory.total` | derived | — | Total memory computed from used + free when no direct OID exists |
+| `system.memory.total` | derived | — | Total RAM in **bytes** (a number, not an object). Kibana's Memory Total / Memory Free read it. Do not write `system.memory.total.kb` or `.bytes`; use `system.memory.actual.total.*` |
+| `system.memory.used.bytes` | derived | — | Used RAM in bytes including page cache (`actual.used` + `cached`). Kibana's Memory Cache is `used.bytes − actual.used.bytes` |
+| `system.memory.free` | derived | — | Free RAM in bytes (UCD `memAvailReal` × 1024) |
+
+---
+
+## Host Storage and Disk I/O
+
+Storage and disk I/O in the shape Kibana's Hosts page expects. Rows from tables named `system.*` are stamped `metricset.module: system`.
+
+**Table: `system.filesystem`** (HOST-RESOURCES-MIB `hrStorageTable`, disk rows only: `keep_when` type `hrStorageFixedDisk` `1.3.6.1.2.1.25.2.1.4` or `hrStorageNetworkDisk` `…2.1.10`):
+
+| Field | OID | MIB | Description |
+|---|---|---|---|
+| `system.filesystem.index` | `1.3.6.1.2.1.25.2.3.1.1` | HOST-RESOURCES-MIB | hrStorageIndex |
+| `system.filesystem.type` | `1.3.6.1.2.1.25.2.3.1.2` | HOST-RESOURCES-MIB | hrStorageType OID |
+| `system.filesystem.mount_point` | `1.3.6.1.2.1.25.2.3.1.3` | HOST-RESOURCES-MIB | Mount point / description |
+| `system.filesystem.allocation_units` | `1.3.6.1.2.1.25.2.3.1.4` | HOST-RESOURCES-MIB | Bytes per allocation unit |
+| `system.filesystem.total` | `1.3.6.1.2.1.25.2.3.1.5` | HOST-RESOURCES-MIB | Size in **bytes** (a number, not an object; raw value is in allocation units; multiply with `multiply_field: system.filesystem.allocation_units`) |
+| `system.filesystem.used.bytes` | `1.3.6.1.2.1.25.2.3.1.6` | HOST-RESOURCES-MIB | Used bytes (same scaling as `total`) |
+| `system.filesystem.used.pct` | derived | — | Used fraction (0–1). Kibana's Disk Usage |
+| `system.filesystem.free` | derived | — | Free bytes (`total − used.bytes`) |
+
+**Table: `system.storage`**: the same columns as `system.filesystem` for the remaining `hrStorageTable` rows (RAM, virtual memory, other, removable, RAM disk, flash). Kept out of `system.filesystem` so memory rows at 100% do not count as disk usage.
+
+**Table: `system.diskio`** (UCD-DISKIO-MIB `diskIOTable`). Cumulative counters; Kibana applies `counter_rate`:
+
+| Field | OID | MIB | Description |
+|---|---|---|---|
+| `system.diskio.index` | `1.3.6.1.4.1.2021.13.15.1.1.1` | UCD-DISKIO-MIB | Device index |
+| `system.diskio.name` | `1.3.6.1.4.1.2021.13.15.1.1.2` | UCD-DISKIO-MIB | Device name |
+| `system.diskio.read.count` | `1.3.6.1.4.1.2021.13.15.1.1.5` | UCD-DISKIO-MIB | Read operations |
+| `system.diskio.write.count` | `1.3.6.1.4.1.2021.13.15.1.1.6` | UCD-DISKIO-MIB | Write operations |
+| `system.diskio.read.bytes` | `1.3.6.1.4.1.2021.13.15.1.1.12` | UCD-DISKIO-MIB | Bytes read (64-bit) |
+| `system.diskio.write.bytes` | `1.3.6.1.4.1.2021.13.15.1.1.13` | UCD-DISKIO-MIB | Bytes written (64-bit) |
+
+**Host network totals** (written on the host metrics document by `sum_column` in `delta` mode over the `interface` table, excluding loopback `ifType` 24):
+
+| Field | Source | Description |
+|---|---|---|
+| `host.network.ingress.bytes` | `interface.in_octets` | Bytes received across interfaces since the previous poll |
+| `host.network.egress.bytes` | `interface.out_octets` | Bytes sent across interfaces since the previous poll |
 
 ---
 
