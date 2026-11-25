@@ -10,10 +10,54 @@
   "table": {
     "component.power_supply": {
       "columns": {
-        "index": "1.3.6.1.4.1.674.10892.5.4.600.12.1.1",
-        "location": "1.3.6.1.4.1.674.10892.5.4.600.12.1.7",
+        "index": "1.3.6.1.4.1.674.10892.5.4.600.12.1.2",
+        "type": "1.3.6.1.4.1.674.10892.5.4.600.12.1.7",
+        "location": "1.3.6.1.4.1.674.10892.5.4.600.12.1.8",
         "state": "1.3.6.1.4.1.674.10892.5.4.600.12.1.5"
       }
     }
-  }
+  },
+  "normalizers": [
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "table",
+        "table": "component.power_supply",
+        "field": "component.power_supply.type"
+      },
+      "params": {
+        "mapping": {
+          "1": "OTHER",
+          "2": "UNKNOWN",
+          "3": "LINEAR",
+          "4": "SWITCHING",
+          "5": "BATTERY",
+          "6": "UPS",
+          "7": "CONVERTER",
+          "8": "REGULATOR",
+          "9": "AC",
+          "10": "DC",
+          "11": "VRM"
+        }
+      }
+    },
+    {
+      "operation": "translate",
+      "target": {
+        "scope": "table",
+        "table": "component.power_supply",
+        "field": "component.power_supply.state"
+      },
+      "params": {
+        "mapping": {
+          "1": "OTHER",
+          "2": "UNKNOWN",
+          "3": "OK",
+          "4": "NONCRITICAL",
+          "5": "CRITICAL",
+          "6": "NONRECOVERABLE"
+        }
+      }
+    }
+  ]
 }
